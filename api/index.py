@@ -184,7 +184,37 @@ def home():
         return render_template('home.html')
     except Exception as e:
         print(f"Error in home route: {str(e)}")
-        return render_template('error.html', error="Database connection failed"), 500
+        # Return a simple HTML response instead of trying to render error template
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>UniTest - Error</title></head>
+        <body>
+            <h1>UniTest AI Learning Platform</h1>
+            <p>Error: {str(e)}</p>
+            <p>Please check the logs for more details.</p>
+        </body>
+        </html>
+        """, 500
+
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204  # No content response
+
+@app.route('/favicon.png')
+def favicon_png():
+    return '', 204  # No content response
+
+@app.route('/test')
+def test():
+    """Simple test route"""
+    return jsonify({
+        'message': 'Flask app is working!',
+        'environment': 'production' if os.environ.get('DATABASE_URL') else 'development',
+        'secret_key_set': bool(os.environ.get('SECRET_KEY')),
+        'database_url_set': bool(os.environ.get('DATABASE_URL')),
+        'api_key_set': bool(os.environ.get('GOOGLE_AI_API_KEY'))
+    })
 
 @app.route('/health')
 def health_check():

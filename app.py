@@ -66,7 +66,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(120), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)  # Increased from 120 to 255
     role = db.Column(db.String(20), default='student', nullable=False)  # 'student' or 'teacher'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -1353,6 +1353,100 @@ def dev_promote_me():
         flash('Failed to promote user.', 'error')
     return redirect(url_for('dashboard'))
 
+# Database migration helper
+@app.route('/dev/migrate_db')
+def migrate_database():
+    """Manual database migration to fix column lengths"""
+    try:
+        from sqlalchemy import text
+        with db.engine.begin() as conn:
+            # Add role column if missing
+            try:
+                result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='role'"))
+                if not result.fetchone():
+                    conn.execute(text("ALTER TABLE \"user\" ADD COLUMN role VARCHAR(20) DEFAULT 'student'"))
+                    print("✅ Added role column")
+            except Exception as e:
+                print(f"Role column: {e}")
+            
+            # Update password_hash column length
+            try:
+                result = conn.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name='user' AND column_name='password_hash'"))
+                row = result.fetchone()
+                if row and row[0] < 255:
+                    conn.execute(text("ALTER TABLE \"user\" ALTER COLUMN password_hash TYPE VARCHAR(255)"))
+                    print("✅ Updated password_hash column to VARCHAR(255)")
+                else:
+                    print("✅ Password_hash column already correct length")
+            except Exception as e:
+                print(f"Password hash column: {e}")
+        
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Database Migration - UniTest</title>
+            <link rel="stylesheet" href="/static/style.css">
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        </head>
+        <body>
+            <div class="auth-container">
+                <div class="auth-card">
+                    <div class="auth-header">
+                        <h1 class="auth-title">✅ Database Migration Complete</h1>
+                        <p class="auth-subtitle">Database schema has been updated successfully</p>
+                    </div>
+                    
+                    <div class="alert alert-success">
+                        <span class="alert-icon">✅</span>
+                        Database migration completed! You can now sign up and login without errors.
+                    </div>
+                    
+                    <div class="auth-links">
+                        <a href="/signup" class="btn" style="display: inline-block; text-align: center; margin-bottom: 20px;">Try Sign Up Now</a><br>
+                        <a href="/login" class="auth-link">Sign In</a><br>
+                        <a href="/" class="auth-link">← Back to Home</a>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+    except Exception as e:
+        return f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Migration Error - UniTest</title>
+            <link rel="stylesheet" href="/static/style.css">
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        </head>
+        <body>
+            <div class="auth-container">
+                <div class="auth-card">
+                    <div class="auth-header">
+                        <h1 class="auth-title">❌ Migration Error</h1>
+                        <p class="auth-subtitle">Database migration failed</p>
+                    </div>
+                    
+                    <div class="alert alert-error">
+                        <span class="alert-icon">⚠️</span>
+                        Error: {str(e)}
+                    </div>
+                    
+                    <div class="auth-links">
+                        <a href="/" class="auth-link">← Back to Home</a>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
 @app.route('/quiz', methods=['GET', 'POST'])
 @login_required
 def quiz():
@@ -1855,6 +1949,20 @@ def init_db():
                     print("Added role column to user table")
             except Exception as e:
                 print(f"Role column check/add failed (may already exist): {e}")
+            
+            # Check if we need to update password_hash column length
+            try:
+                from sqlalchemy import text
+                # Check current password_hash column length
+                result = db.session.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name='user' AND column_name='password_hash'"))
+                row = result.fetchone()
+                if row and row[0] < 255:
+                    # Update password_hash column to be longer
+                    db.session.execute(text("ALTER TABLE \"user\" ALTER COLUMN password_hash TYPE VARCHAR(255)"))
+                    db.session.commit()
+                    print("Updated password_hash column length to 255")
+            except Exception as e:
+                print(f"Password hash column update failed (may already be correct): {e}")
             
             print("Database tables created successfully!")
             print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")

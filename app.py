@@ -49,8 +49,7 @@ if database_url and 'neon.tech' in database_url:
         'pool_pre_ping': True,
         'pool_recycle': 300,
         'connect_args': {
-            'sslmode': 'require',
-            'options': '-c default_transaction_isolation=read_committed'
+            'sslmode': 'require'
         }
     }
 
@@ -303,12 +302,26 @@ def home():
         # Return a simple HTML response instead of trying to render error template
         return f"""
         <!DOCTYPE html>
-        <html>
-        <head><title>UniTest - Error</title></head>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>UniTest AI Learning Platform</title>
+            <link rel="stylesheet" href="/static/style.css">
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        </head>
         <body>
-            <h1>UniTest AI Learning Platform</h1>
-            <p>Error: {str(e)}</p>
-            <p>Please check the logs for more details.</p>
+            <div class="home-container">
+                <div class="home-content">
+                    <h1 class="home-title">UniTest AI Learning Platform</h1>
+                    <p class="home-subtitle">Error: {str(e)}</p>
+                    <p>Please check the logs for more details.</p>
+                    <div class="home-buttons">
+                        <a href="/signup" class="home-btn">Sign Up</a>
+                        <a href="/login" class="home-btn secondary">Sign In</a>
+                    </div>
+                </div>
+            </div>
         </body>
         </html>
         """, 500
@@ -375,52 +388,65 @@ def signup():
             if not all([username, email, password, confirm_password]):
                 return """
                 <!DOCTYPE html>
-                <html>
+                <html lang="en">
                 <head>
-                    <title>Sign Up - UniTest</title>
-                    <style>
-                        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0; padding: 20px; }
-                        .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-                        h2 { text-align: center; color: #333; margin-bottom: 30px; }
-                        .error { background: #ffebee; color: #c62828; padding: 12px; border-radius: 8px; margin: 15px 0; text-align: center; }
-                        .form-group { margin-bottom: 20px; }
-                        input, select { width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
-                        input:focus, select:focus { outline: none; border-color: #4285f4; }
-                        button { width: 100%; padding: 12px; background: #4285f4; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
-                        button:hover { background: #3367d6; }
-                        .links { text-align: center; margin-top: 20px; }
-                        .links a { color: #4285f4; text-decoration: none; margin: 0 10px; }
-                        .links a:hover { text-decoration: underline; }
-                    </style>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Sign Up - UniTest AI Learning Platform</title>
+                    <link rel="stylesheet" href="/static/style.css">
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
                 </head>
                 <body>
-                    <div class="container">
-                        <h2>Create Account</h2>
-                        <div class="error">Please fill in all fields</div>
-                        <form method="POST">
-                            <div class="form-group">
-                                <input type="text" name="username" placeholder="Username" required>
+                    <div class="auth-container">
+                        <div class="auth-card">
+                            <div class="auth-header">
+                                <h1 class="auth-title">Create Account</h1>
+                                <p class="auth-subtitle">Join UniTest and start your AI-powered learning journey</p>
                             </div>
-                            <div class="form-group">
-                                <input type="email" name="email" placeholder="Email" required>
+                            
+                            <div class="alert alert-error">
+                                <span class="alert-icon">⚠️</span>
+                                Please fill in all fields
                             </div>
-                            <div class="form-group">
-                                <input type="password" name="password" placeholder="Password" required>
+                            
+                            <form method="POST">
+                                <div class="form-group">
+                                    <label class="form-label">Username</label>
+                                    <input type="text" name="username" class="form-input" placeholder="Enter your username" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Email Address</label>
+                                    <input type="email" name="email" class="form-input" placeholder="Enter your email" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Password</label>
+                                    <input type="password" name="password" class="form-input" placeholder="Create a strong password" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Confirm Password</label>
+                                    <input type="password" name="confirm_password" class="form-input" placeholder="Confirm your password" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Account Type</label>
+                                    <select name="role" class="form-select" required>
+                                        <option value="student">🎓 Student</option>
+                                        <option value="teacher">👨‍🏫 Teacher</option>
+                                    </select>
+                                </div>
+                                
+                                <button type="submit" class="btn">
+                                    Create Account
+                                </button>
+                            </form>
+                            
+                            <div class="auth-links">
+                                <a href="/login" class="auth-link">Already have an account? Sign In</a><br>
+                                <a href="/" class="auth-link">← Back to Home</a>
                             </div>
-                            <div class="form-group">
-                                <input type="password" name="confirm_password" placeholder="Confirm Password" required>
-                            </div>
-                            <div class="form-group">
-                                <select name="role">
-                                    <option value="student">Student</option>
-                                    <option value="teacher">Teacher</option>
-                                </select>
-                            </div>
-                            <button type="submit">Sign Up</button>
-                        </form>
-                        <div class="links">
-                            <a href="/login">Already have an account? Login</a><br>
-                            <a href="/">← Back to Home</a>
                         </div>
                     </div>
                 </body>
@@ -523,15 +549,33 @@ def signup():
 
             return """
             <!DOCTYPE html>
-            <html>
-            <head><title>Sign Up Success - UniTest</title></head>
-            <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-                <h2>Account Created Successfully!</h2>
-                <div style="background: #e8f5e8; color: #2e7d32; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                    Your account has been created. Please login to continue.
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Account Created - UniTest AI Learning Platform</title>
+                <link rel="stylesheet" href="/static/style.css">
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+            </head>
+            <body>
+                <div class="auth-container">
+                    <div class="auth-card">
+                        <div class="auth-header">
+                            <h1 class="auth-title">🎉 Account Created!</h1>
+                            <p class="auth-subtitle">Welcome to UniTest AI Learning Platform</p>
+                        </div>
+                        
+                        <div class="alert alert-success">
+                            <span class="alert-icon">✅</span>
+                            Your account has been created successfully! You can now sign in to start learning.
+                        </div>
+                        
+                        <div class="auth-links">
+                            <a href="/login" class="btn" style="display: inline-block; text-align: center; margin-bottom: 20px;">Sign In Now</a><br>
+                            <a href="/" class="auth-link">← Back to Home</a>
+                        </div>
+                    </div>
                 </div>
-                <p><a href="/login" style="display: inline-block; background: #4285f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Login Now</a></p>
-                <p><a href="/">← Back to Home</a></p>
             </body>
             </html>
             """
@@ -565,51 +609,60 @@ def signup():
 
     return """
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
-        <title>Sign Up - UniTest</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Sign Up - UniTest AI Learning Platform</title>
         <link rel="stylesheet" href="/static/style.css">
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0; padding: 20px; }
-            .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-            h2 { text-align: center; color: #333; margin-bottom: 30px; }
-            .form-group { margin-bottom: 20px; }
-            input, select { width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
-            input:focus, select:focus { outline: none; border-color: #4285f4; }
-            button { width: 100%; padding: 12px; background: #4285f4; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
-            button:hover { background: #3367d6; }
-            .links { text-align: center; margin-top: 20px; }
-            .links a { color: #4285f4; text-decoration: none; margin: 0 10px; }
-            .links a:hover { text-decoration: underline; }
-        </style>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     </head>
     <body>
-        <div class="container">
-            <h2>Create Account</h2>
-            <form method="POST">
-                <div class="form-group">
-                    <input type="text" name="username" placeholder="Username" required>
+        <div class="auth-container">
+            <div class="auth-card">
+                <div class="auth-header">
+                    <h1 class="auth-title">Create Account</h1>
+                    <p class="auth-subtitle">Join UniTest and start your AI-powered learning journey</p>
                 </div>
-                <div class="form-group">
-                    <input type="email" name="email" placeholder="Email" required>
+                
+                <form method="POST">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-input" placeholder="Enter your username" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" name="email" class="form-input" placeholder="Enter your email" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-input" placeholder="Create a strong password" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Confirm Password</label>
+                        <input type="password" name="confirm_password" class="form-input" placeholder="Confirm your password" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Account Type</label>
+                        <select name="role" class="form-select" required>
+                            <option value="student">🎓 Student</option>
+                            <option value="teacher">👨‍🏫 Teacher</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="btn">
+                        Create Account
+                    </button>
+                </form>
+                
+                <div class="auth-links">
+                    <a href="/login" class="auth-link">Already have an account? Sign In</a><br>
+                    <a href="/" class="auth-link">← Back to Home</a>
                 </div>
-                <div class="form-group">
-                    <input type="password" name="password" placeholder="Password" required>
-                </div>
-                <div class="form-group">
-                    <input type="password" name="confirm_password" placeholder="Confirm Password" required>
-                </div>
-                <div class="form-group">
-                    <select name="role">
-                        <option value="student">Student</option>
-                        <option value="teacher">Teacher</option>
-                    </select>
-                </div>
-                <button type="submit">Sign Up</button>
-            </form>
-            <div class="links">
-                <a href="/login">Already have an account? Login</a><br>
-                <a href="/">← Back to Home</a>
             </div>
         </div>
     </body>
@@ -628,35 +681,82 @@ def login():
                 login_user(user)
                 return """
                 <!DOCTYPE html>
-                <html>
-                <head><title>Login Success - UniTest</title></head>
-                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-                    <h2>Login Successful!</h2>
-                    <div style="background: #e8f5e8; color: #2e7d32; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                        Welcome back, {username}! You are now logged in.
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Welcome Back - UniTest AI Learning Platform</title>
+                    <link rel="stylesheet" href="/static/style.css">
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+                </head>
+                <body>
+                    <div class="auth-container">
+                        <div class="auth-card">
+                            <div class="auth-header">
+                                <h1 class="auth-title">🎉 Welcome Back!</h1>
+                                <p class="auth-subtitle">You're successfully signed in</p>
+                            </div>
+                            
+                            <div class="alert alert-success">
+                                <span class="alert-icon">✅</span>
+                                Welcome back, {username}! You are now logged in and ready to continue learning.
+                            </div>
+                            
+                            <div class="auth-links">
+                                <a href="/dashboard" class="btn" style="display: inline-block; text-align: center; margin-bottom: 20px;">Go to Dashboard</a><br>
+                                <a href="/" class="auth-link">← Back to Home</a>
+                            </div>
+                        </div>
                     </div>
-                    <p><a href="/dashboard" style="display: inline-block; background: #4285f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Go to Dashboard</a></p>
-                    <p><a href="/">← Back to Home</a></p>
                 </body>
                 </html>
                 """.format(username=username)
             else:
                 return """
                 <!DOCTYPE html>
-                <html>
-                <head><title>Login Error - UniTest</title></head>
-                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-                    <h2>Login</h2>
-                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                        Invalid username or password
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Sign In - UniTest AI Learning Platform</title>
+                    <link rel="stylesheet" href="/static/style.css">
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+                </head>
+                <body>
+                    <div class="auth-container">
+                        <div class="auth-card">
+                            <div class="auth-header">
+                                <h1 class="auth-title">Welcome Back</h1>
+                                <p class="auth-subtitle">Sign in to continue your AI learning journey</p>
+                            </div>
+                            
+                            <div class="alert alert-error">
+                                <span class="alert-icon">⚠️</span>
+                                Invalid username or password. Please try again.
+                            </div>
+                            
+                            <form method="POST">
+                                <div class="form-group">
+                                    <label class="form-label">Username</label>
+                                    <input type="text" name="username" class="form-input" placeholder="Enter your username" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Password</label>
+                                    <input type="password" name="password" class="form-input" placeholder="Enter your password" required>
+                                </div>
+                                
+                                <button type="submit" class="btn">
+                                    Sign In
+                                </button>
+                            </form>
+                            
+                            <div class="auth-links">
+                                <a href="/signup" class="auth-link">Don't have an account? Sign Up</a><br>
+                                <a href="/" class="auth-link">← Back to Home</a>
+                            </div>
+                        </div>
                     </div>
-                    <form method="POST">
-                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Login</button></p>
-                    </form>
-                    <p><a href="/signup">Don't have an account? Sign Up</a></p>
-                    <p><a href="/">← Back to Home</a></p>
                 </body>
                 </html>
                 """
@@ -684,39 +784,42 @@ def login():
 
     return """
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
-        <title>Login - UniTest</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Sign In - UniTest AI Learning Platform</title>
         <link rel="stylesheet" href="/static/style.css">
-        <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0; padding: 20px; }
-            .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-            h2 { text-align: center; color: #333; margin-bottom: 30px; }
-            .form-group { margin-bottom: 20px; }
-            input { width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
-            input:focus { outline: none; border-color: #4285f4; }
-            button { width: 100%; padding: 12px; background: #4285f4; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
-            button:hover { background: #3367d6; }
-            .links { text-align: center; margin-top: 20px; }
-            .links a { color: #4285f4; text-decoration: none; margin: 0 10px; }
-            .links a:hover { text-decoration: underline; }
-        </style>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     </head>
     <body>
-        <div class="container">
-            <h2>Login</h2>
-            <form method="POST">
-                <div class="form-group">
-                    <input type="text" name="username" placeholder="Username" required>
+        <div class="auth-container">
+            <div class="auth-card">
+                <div class="auth-header">
+                    <h1 class="auth-title">Welcome Back</h1>
+                    <p class="auth-subtitle">Sign in to continue your AI learning journey</p>
                 </div>
-                <div class="form-group">
-                    <input type="password" name="password" placeholder="Password" required>
+                
+                <form method="POST">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-input" placeholder="Enter your username" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-input" placeholder="Enter your password" required>
+                    </div>
+                    
+                    <button type="submit" class="btn">
+                        Sign In
+                    </button>
+                </form>
+                
+                <div class="auth-links">
+                    <a href="/signup" class="auth-link">Don't have an account? Sign Up</a><br>
+                    <a href="/" class="auth-link">← Back to Home</a>
                 </div>
-                <button type="submit">Login</button>
-            </form>
-            <div class="links">
-                <a href="/signup">Don't have an account? Sign Up</a><br>
-                <a href="/">← Back to Home</a>
             </div>
         </div>
     </body>

@@ -21,8 +21,12 @@ if database_url and database_url.startswith('postgres://'):
 elif database_url and database_url.startswith('postgresql://'):
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
+    # Fallback to SQLite for local development
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///unittest.db'
+    print("Warning: Using SQLite database. Set DATABASE_URL environment variable for production.")
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+print(f"Database URL configured: {app.config['SQLALCHEMY_DATABASE_URI'][:50]}...")
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -170,7 +174,31 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5)
 # Routes
 @app.route('/')
 def home():
-    return render_template('home.html')
+    try:
+        # Initialize database on first access
+        init_db()
+        return render_template('home.html')
+    except Exception as e:
+        print(f"Error in home route: {str(e)}")
+        return render_template('error.html', error="Database connection failed"), 500
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for debugging"""
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'environment': 'production' if os.environ.get('DATABASE_URL') else 'development'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'database': 'disconnected'
+        }), 500
 
 @app.route('/sitemap.xml')
 def sitemap():
@@ -423,14 +451,19 @@ def internal_error(error):
 def not_found_error(error):
     return render_template('error.html', error="Page Not Found"), 404
 
-# Ensure database is created
-with app.app_context():
+# Initialize database tables
+def init_db():
     try:
-        db.create_all()
-        print("Database initialized successfully!")
-        print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")
+        with app.app_context():
+            db.create_all()
+            print("Database tables created successfully!")
+            print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")
     except Exception as e:
         print(f"Database initialization error: {str(e)}")
+
+# For Vercel deployment
+def handler(request):
+    return app(request.environ, start_response)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

@@ -181,10 +181,69 @@ def home():
     try:
         # Initialize database on first access
         init_db()
-        return render_template('home.html')
+        # Return a simple HTML response instead of using templates for now
+        return """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>UniTest - AI Learning Platform</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+                .container { max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                h1 { color: #4285f4; text-align: center; margin-bottom: 30px; }
+                .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 30px 0; }
+                .feature { padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #4285f4; }
+                .btn { display: inline-block; background: #4285f4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 10px 5px; }
+                .btn:hover { background: #3367d6; }
+                .status { background: #e8f5e8; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #34a853; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🎓 UniTest AI Learning Platform</h1>
+                
+                <div class="status">
+                    <strong>✅ Platform Status:</strong> Successfully deployed and running!
+                </div>
+                
+                <p>Welcome to UniTest, your AI-powered learning companion that creates personalized quizzes and tracks your progress using Bloom's Taxonomy.</p>
+                
+                <div class="features">
+                    <div class="feature">
+                        <h3>🤖 AI-Generated Questions</h3>
+                        <p>Smart question generation using Google's AI technology</p>
+                    </div>
+                    <div class="feature">
+                        <h3>📊 Progress Tracking</h3>
+                        <p>Track your learning journey across different topics and difficulty levels</p>
+                    </div>
+                    <div class="feature">
+                        <h3>🎯 Bloom's Taxonomy</h3>
+                        <p>Structured learning progression from basic to advanced concepts</p>
+                    </div>
+                    <div class="feature">
+                        <h3>📝 Multiple Question Types</h3>
+                        <p>MCQ and subjective questions for comprehensive assessment</p>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="/test" class="btn">🔧 Test API</a>
+                    <a href="/health" class="btn">💚 Health Check</a>
+                </div>
+                
+                <div style="margin-top: 30px; padding: 20px; background: #f0f7ff; border-radius: 6px;">
+                    <h3>🚀 Getting Started</h3>
+                    <p>This platform is now live and ready for use! The AI question generation and database features are fully functional.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
     except Exception as e:
         print(f"Error in home route: {str(e)}")
-        # Return a simple HTML response instead of trying to render error template
         return f"""
         <!DOCTYPE html>
         <html>

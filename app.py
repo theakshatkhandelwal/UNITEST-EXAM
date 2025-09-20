@@ -43,6 +43,17 @@ else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///unittest.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# Add SSL configuration for NeonDB
+if database_url and 'neon.tech' in database_url:
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+        'connect_args': {
+            'sslmode': 'require',
+            'options': '-c default_transaction_isolation=read_committed'
+        }
+    }
+
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -347,6 +358,10 @@ def sitemap():
 def robots():
     return send_file('static/robots.txt', mimetype='text/plain')
 
+@app.route('/static/<path:filename>')
+def static_files(filename):
+    return send_file(f'static/{filename}')
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
@@ -361,25 +376,53 @@ def signup():
                 return """
                 <!DOCTYPE html>
                 <html>
-                <head><title>Sign Up - UniTest</title></head>
-                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-                    <h2>Create Account</h2>
-                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                        Please fill in all fields
+                <head>
+                    <title>Sign Up - UniTest</title>
+                    <style>
+                        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0; padding: 20px; }
+                        .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+                        h2 { text-align: center; color: #333; margin-bottom: 30px; }
+                        .error { background: #ffebee; color: #c62828; padding: 12px; border-radius: 8px; margin: 15px 0; text-align: center; }
+                        .form-group { margin-bottom: 20px; }
+                        input, select { width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
+                        input:focus, select:focus { outline: none; border-color: #4285f4; }
+                        button { width: 100%; padding: 12px; background: #4285f4; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
+                        button:hover { background: #3367d6; }
+                        .links { text-align: center; margin-top: 20px; }
+                        .links a { color: #4285f4; text-decoration: none; margin: 0 10px; }
+                        .links a:hover { text-decoration: underline; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h2>Create Account</h2>
+                        <div class="error">Please fill in all fields</div>
+                        <form method="POST">
+                            <div class="form-group">
+                                <input type="text" name="username" placeholder="Username" required>
+                            </div>
+                            <div class="form-group">
+                                <input type="email" name="email" placeholder="Email" required>
+                            </div>
+                            <div class="form-group">
+                                <input type="password" name="password" placeholder="Password" required>
+                            </div>
+                            <div class="form-group">
+                                <input type="password" name="confirm_password" placeholder="Confirm Password" required>
+                            </div>
+                            <div class="form-group">
+                                <select name="role">
+                                    <option value="student">Student</option>
+                                    <option value="teacher">Teacher</option>
+                                </select>
+                            </div>
+                            <button type="submit">Sign Up</button>
+                        </form>
+                        <div class="links">
+                            <a href="/login">Already have an account? Login</a><br>
+                            <a href="/">← Back to Home</a>
+                        </div>
                     </div>
-                    <form method="POST">
-                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
-                            <option value="student">Student</option>
-                            <option value="teacher">Teacher</option>
-                        </select></p>
-                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
-                    </form>
-                    <p><a href="/login">Already have an account? Login</a></p>
-                    <p><a href="/">← Back to Home</a></p>
                 </body>
                 </html>
                 """
@@ -523,22 +566,52 @@ def signup():
     return """
     <!DOCTYPE html>
     <html>
-    <head><title>Sign Up - UniTest</title></head>
-    <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-        <h2>Create Account</h2>
-        <form method="POST">
-            <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
-                <option value="student">Student</option>
-                <option value="teacher">Teacher</option>
-            </select></p>
-            <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
-        </form>
-        <p><a href="/login">Already have an account? Login</a></p>
-        <p><a href="/">← Back to Home</a></p>
+    <head>
+        <title>Sign Up - UniTest</title>
+        <link rel="stylesheet" href="/static/style.css">
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0; padding: 20px; }
+            .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+            h2 { text-align: center; color: #333; margin-bottom: 30px; }
+            .form-group { margin-bottom: 20px; }
+            input, select { width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
+            input:focus, select:focus { outline: none; border-color: #4285f4; }
+            button { width: 100%; padding: 12px; background: #4285f4; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
+            button:hover { background: #3367d6; }
+            .links { text-align: center; margin-top: 20px; }
+            .links a { color: #4285f4; text-decoration: none; margin: 0 10px; }
+            .links a:hover { text-decoration: underline; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Create Account</h2>
+            <form method="POST">
+                <div class="form-group">
+                    <input type="text" name="username" placeholder="Username" required>
+                </div>
+                <div class="form-group">
+                    <input type="email" name="email" placeholder="Email" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" name="password" placeholder="Password" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" name="confirm_password" placeholder="Confirm Password" required>
+                </div>
+                <div class="form-group">
+                    <select name="role">
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                    </select>
+                </div>
+                <button type="submit">Sign Up</button>
+            </form>
+            <div class="links">
+                <a href="/login">Already have an account? Login</a><br>
+                <a href="/">← Back to Home</a>
+            </div>
+        </div>
     </body>
     </html>
     """
@@ -612,16 +685,40 @@ def login():
     return """
     <!DOCTYPE html>
     <html>
-    <head><title>Login - UniTest</title></head>
-    <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-        <h2>Login</h2>
-        <form method="POST">
-            <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Login</button></p>
-        </form>
-        <p><a href="/signup">Don't have an account? Sign Up</a></p>
-        <p><a href="/">← Back to Home</a></p>
+    <head>
+        <title>Login - UniTest</title>
+        <link rel="stylesheet" href="/static/style.css">
+        <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0; padding: 20px; }
+            .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+            h2 { text-align: center; color: #333; margin-bottom: 30px; }
+            .form-group { margin-bottom: 20px; }
+            input { width: 100%; padding: 12px; border: 2px solid #e1e5e9; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
+            input:focus { outline: none; border-color: #4285f4; }
+            button { width: 100%; padding: 12px; background: #4285f4; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
+            button:hover { background: #3367d6; }
+            .links { text-align: center; margin-top: 20px; }
+            .links a { color: #4285f4; text-decoration: none; margin: 0 10px; }
+            .links a:hover { text-decoration: underline; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Login</h2>
+            <form method="POST">
+                <div class="form-group">
+                    <input type="text" name="username" placeholder="Username" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" name="password" placeholder="Password" required>
+                </div>
+                <button type="submit">Login</button>
+            </form>
+            <div class="links">
+                <a href="/signup">Don't have an account? Sign Up</a><br>
+                <a href="/">← Back to Home</a>
+            </div>
+        </div>
     </body>
     </html>
     """
@@ -1642,6 +1739,20 @@ def init_db():
     try:
         with app.app_context():
             db.create_all()
+            
+            # Check if we need to add the role column to existing user table
+            try:
+                from sqlalchemy import text
+                # Check if role column exists
+                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='role'"))
+                if not result.fetchone():
+                    # Add role column if it doesn't exist
+                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN role VARCHAR(20) DEFAULT 'student'"))
+                    db.session.commit()
+                    print("Added role column to user table")
+            except Exception as e:
+                print(f"Role column check/add failed (may already exist): {e}")
+            
             print("Database tables created successfully!")
             print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")
     except Exception as e:

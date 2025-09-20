@@ -358,21 +358,117 @@ def signup():
             role = request.form.get('role', 'student')
 
             if not all([username, email, password, confirm_password]):
-                flash('Please fill in all fields', 'error')
-                return redirect(url_for('signup'))
+                return """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Sign Up - UniTest</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+                    <h2>Create Account</h2>
+                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                        Please fill in all fields
+                    </div>
+                    <form method="POST">
+                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
+                            <option value="student">Student</option>
+                            <option value="teacher">Teacher</option>
+                        </select></p>
+                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
+                    </form>
+                    <p><a href="/login">Already have an account? Login</a></p>
+                    <p><a href="/">← Back to Home</a></p>
+                </body>
+                </html>
+                """
 
             if password != confirm_password:
-                flash('Passwords do not match', 'error')
-                return redirect(url_for('signup'))
+                return """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Sign Up - UniTest</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+                    <h2>Create Account</h2>
+                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                        Passwords do not match
+                    </div>
+                    <form method="POST">
+                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
+                            <option value="student">Student</option>
+                            <option value="teacher">Teacher</option>
+                        </select></p>
+                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
+                    </form>
+                    <p><a href="/login">Already have an account? Login</a></p>
+                    <p><a href="/">← Back to Home</a></p>
+                </body>
+                </html>
+                """
 
-            if db.session.query(User).filter_by(username=username).first():
-                flash('Username already exists', 'error')
-                return redirect(url_for('signup'))
+            # Check if user exists
+            existing_user = db.session.query(User).filter_by(username=username).first()
+            if existing_user:
+                return """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Sign Up - UniTest</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+                    <h2>Create Account</h2>
+                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                        Username already exists
+                    </div>
+                    <form method="POST">
+                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
+                            <option value="student">Student</option>
+                            <option value="teacher">Teacher</option>
+                        </select></p>
+                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
+                    </form>
+                    <p><a href="/login">Already have an account? Login</a></p>
+                    <p><a href="/">← Back to Home</a></p>
+                </body>
+                </html>
+                """
 
-            if db.session.query(User).filter_by(email=email).first():
-                flash('Email already exists', 'error')
-                return redirect(url_for('signup'))
+            existing_email = db.session.query(User).filter_by(email=email).first()
+            if existing_email:
+                return """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Sign Up - UniTest</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+                    <h2>Create Account</h2>
+                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                        Email already exists
+                    </div>
+                    <form method="POST">
+                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
+                            <option value="student">Student</option>
+                            <option value="teacher">Teacher</option>
+                        </select></p>
+                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
+                    </form>
+                    <p><a href="/login">Already have an account? Login</a></p>
+                    <p><a href="/">← Back to Home</a></p>
+                </body>
+                </html>
+                """
 
+            # Create new user
             user = User(
                 username=username,
                 email=email,
@@ -382,14 +478,70 @@ def signup():
             db.session.add(user)
             db.session.commit()
 
-            flash('Account created successfully! Please login.', 'success')
-            return redirect(url_for('login'))
+            return """
+            <!DOCTYPE html>
+            <html>
+            <head><title>Sign Up Success - UniTest</title></head>
+            <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+                <h2>Account Created Successfully!</h2>
+                <div style="background: #e8f5e8; color: #2e7d32; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                    Your account has been created. Please login to continue.
+                </div>
+                <p><a href="/login" style="display: inline-block; background: #4285f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Login Now</a></p>
+                <p><a href="/">← Back to Home</a></p>
+            </body>
+            </html>
+            """
         except Exception as e:
             print(f"Error in signup: {str(e)}")
-            flash('An error occurred. Please try again.', 'error')
-            return redirect(url_for('signup'))
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Sign Up Error - UniTest</title></head>
+            <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+                <h2>Create Account</h2>
+                <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                    An error occurred: {str(e)}
+                </div>
+                <form method="POST">
+                    <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                    <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                    <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                    <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                    <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
+                        <option value="student">Student</option>
+                        <option value="teacher">Teacher</option>
+                    </select></p>
+                    <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
+                </form>
+                <p><a href="/login">Already have an account? Login</a></p>
+                <p><a href="/">← Back to Home</a></p>
+            </body>
+            </html>
+            """
 
-    return render_template('signup.html')
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head><title>Sign Up - UniTest</title></head>
+    <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+        <h2>Create Account</h2>
+        <form method="POST">
+            <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+            <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+            <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+            <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+            <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
+                <option value="student">Student</option>
+                <option value="teacher">Teacher</option>
+            </select></p>
+            <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
+        </form>
+        <p><a href="/login">Already have an account? Login</a></p>
+        <p><a href="/">← Back to Home</a></p>
+    </body>
+    </html>
+    """
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -401,14 +553,78 @@ def login():
             user = db.session.query(User).filter_by(username=username).first()
             if user and check_password_hash(user.password_hash, password):
                 login_user(user)
-                return redirect(url_for('dashboard'))
+                return """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Login Success - UniTest</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+                    <h2>Login Successful!</h2>
+                    <div style="background: #e8f5e8; color: #2e7d32; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                        Welcome back, {username}! You are now logged in.
+                    </div>
+                    <p><a href="/dashboard" style="display: inline-block; background: #4285f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Go to Dashboard</a></p>
+                    <p><a href="/">← Back to Home</a></p>
+                </body>
+                </html>
+                """.format(username=username)
             else:
-                flash('Invalid username or password', 'error')
+                return """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Login Error - UniTest</title></head>
+                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+                    <h2>Login</h2>
+                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                        Invalid username or password
+                    </div>
+                    <form method="POST">
+                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Login</button></p>
+                    </form>
+                    <p><a href="/signup">Don't have an account? Sign Up</a></p>
+                    <p><a href="/">← Back to Home</a></p>
+                </body>
+                </html>
+                """
         except Exception as e:
             print(f"Error in login: {str(e)}")
-            flash('An error occurred. Please try again.', 'error')
+            return f"""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Login Error - UniTest</title></head>
+            <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+                <h2>Login</h2>
+                <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                    An error occurred: {str(e)}
+                </div>
+                <form method="POST">
+                    <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                    <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+                    <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Login</button></p>
+                </form>
+                <p><a href="/signup">Don't have an account? Sign Up</a></p>
+                <p><a href="/">← Back to Home</a></p>
+            </body>
+            </html>
+            """
 
-    return render_template('login.html')
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head><title>Login - UniTest</title></head>
+    <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
+        <h2>Login</h2>
+        <form method="POST">
+            <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+            <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
+            <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Login</button></p>
+        </form>
+        <p><a href="/signup">Don't have an account? Sign Up</a></p>
+        <p><a href="/">← Back to Home</a></p>
+    </body>
+    </html>
+    """
 
 @app.route('/logout')
 @login_required

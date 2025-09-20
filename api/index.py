@@ -10,7 +10,7 @@ from collections import Counter
 import io
 from datetime import datetime
 
-app = Flask(__name__)
+app = Flask(__name__, instance_path='/tmp')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 
 # Database configuration
@@ -26,6 +26,10 @@ else:
     print("Warning: Using SQLite database. Set DATABASE_URL environment variable for production.")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+}
 print(f"Database URL configured: {app.config['SQLALCHEMY_DATABASE_URI'][:50]}...")
 
 db = SQLAlchemy(app)
@@ -462,9 +466,9 @@ def init_db():
         print(f"Database initialization error: {str(e)}")
 
 # For Vercel deployment
-def handler(request):
-    return app(request.environ, start_response)
-
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+else:
+    # This is the entry point for Vercel
+    pass

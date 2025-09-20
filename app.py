@@ -28,7 +28,7 @@ def ensure_nltk_data():
         nltk.download('punkt', quiet=True)
         nltk.download('stopwords', quiet=True)
 
-app = Flask(__name__)
+app = Flask(__name__, instance_path='/tmp')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 # Database configuration - use PostgreSQL on Vercel/NeonDB, SQLite locally
 database_url = os.environ.get('DATABASE_URL')
@@ -283,7 +283,61 @@ def process_document(file_path):
 # Routes
 @app.route('/')
 def home():
-    return render_template('home.html')
+    try:
+        # Initialize database on first access
+        init_db()
+        return render_template('home.html')
+    except Exception as e:
+        print(f"Error in home route: {str(e)}")
+        # Return a simple HTML response instead of trying to render error template
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>UniTest - Error</title></head>
+        <body>
+            <h1>UniTest AI Learning Platform</h1>
+            <p>Error: {str(e)}</p>
+            <p>Please check the logs for more details.</p>
+        </body>
+        </html>
+        """, 500
+
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204  # No content response
+
+@app.route('/favicon.png')
+def favicon_png():
+    return '', 204  # No content response
+
+@app.route('/test')
+def test():
+    """Simple test route"""
+    return jsonify({
+        'message': 'Flask app is working!',
+        'environment': 'production' if os.environ.get('DATABASE_URL') else 'development',
+        'secret_key_set': bool(os.environ.get('SECRET_KEY')),
+        'database_url_set': bool(os.environ.get('DATABASE_URL')),
+        'api_key_set': bool(os.environ.get('GOOGLE_AI_API_KEY'))
+    })
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for debugging"""
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'environment': 'production' if os.environ.get('DATABASE_URL') else 'development'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'database': 'disconnected'
+        }), 500
 
 @app.route('/sitemap.xml')
 def sitemap():
@@ -1367,12 +1421,13 @@ def internal_error(error):
 def not_found_error(error):
     return render_template('error.html', error="Page Not Found"), 404
 
-# Ensure database is created
-with app.app_context():
+# Initialize database tables
+def init_db():
     try:
-        db.create_all()
-        print("Database initialized successfully!")
-        print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")
+        with app.app_context():
+            db.create_all()
+            print("Database tables created successfully!")
+            print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")
     except Exception as e:
         print(f"Database initialization error: {str(e)}")
         # Continue running the app even if database fails

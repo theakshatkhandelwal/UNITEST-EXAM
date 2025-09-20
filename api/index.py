@@ -277,46 +277,6 @@ def test():
         'api_key_set': bool(os.environ.get('GOOGLE_AI_API_KEY'))
     })
 
-@app.route('/signup')
-def signup():
-    """User registration page"""
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head><title>Sign Up - UniTest</title></head>
-    <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-        <h2>Create Account</h2>
-        <form method="POST">
-            <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
-        </form>
-        <p><a href="/login">Already have an account? Login</a></p>
-        <p><a href="/">← Back to Home</a></p>
-    </body>
-    </html>
-    """
-
-@app.route('/login')
-def login():
-    """User login page"""
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head><title>Login - UniTest</title></head>
-    <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-        <h2>Login</h2>
-        <form method="POST">
-            <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-            <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Login</button></p>
-        </form>
-        <p><a href="/signup">Don't have an account? Sign Up</a></p>
-        <p><a href="/">← Back to Home</a></p>
-    </body>
-    </html>
-    """
 
 @app.route('/health')
 def health_check():

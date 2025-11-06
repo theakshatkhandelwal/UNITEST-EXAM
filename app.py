@@ -1260,8 +1260,15 @@ def teacher_quiz_finalize():
         return redirect(url_for('dashboard'))
     except Exception as e:
         db.session.rollback()
-        print(f"Finalize error: {e}")
-        flash('Error finalizing quiz.', 'error')
+        import traceback
+        error_details = str(e)
+        traceback.print_exc()
+        print(f"Finalize error: {error_details}")
+        # Check if it's a database column error
+        if 'no column named' in error_details.lower() or 'column' in error_details.lower():
+            flash(f'Database migration needed! Error: {error_details}. Please run: python migrate_new_features.py', 'error')
+        else:
+            flash(f'Error finalizing quiz: {error_details}', 'error')
         return redirect(url_for('teacher_create_quiz_simple'))
 
 # Student: join quiz by code

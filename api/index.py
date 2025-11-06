@@ -178,80 +178,36 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5)
 # Routes
 @app.route('/')
 def home():
+    """Public home route - no login required, accessible to everyone"""
+    # This route must be public for SEO and Google indexing
     try:
-        # Initialize database on first access
-        init_db()
-        # Return a simple HTML response instead of using templates for now
+        # Use the proper home template - no database initialization needed
+        return render_template('home.html')
+    except Exception as e:
+        print(f"Error in home route: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        # Fallback HTML if template fails
         return """
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>UniTest - AI Learning Platform</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-                .container { max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                h1 { color: #4285f4; text-align: center; margin-bottom: 30px; }
-                .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 30px 0; }
-                .feature { padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #4285f4; }
-                .btn { display: inline-block; background: #4285f4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 10px 5px; }
-                .btn:hover { background: #3367d6; }
-                .status { background: #e8f5e8; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #34a853; }
-            </style>
+            <title>UNITEST - AI-Powered Learning Platform</title>
         </head>
-        <body>
-            <div class="container">
-                <h1>🎓 UniTest AI Learning Platform</h1>
-                
-                <div class="status">
-                    <strong>✅ Platform Status:</strong> Successfully deployed and running!
-                </div>
-                
-                <p>Welcome to UniTest, your AI-powered learning companion that creates personalized quizzes and tracks your progress using Bloom's Taxonomy.</p>
-                
-                <div class="features">
-                    <div class="feature">
-                        <h3>🤖 AI-Generated Questions</h3>
-                        <p>Smart question generation using Google's AI technology</p>
-                    </div>
-                    <div class="feature">
-                        <h3>📊 Progress Tracking</h3>
-                        <p>Track your learning journey across different topics and difficulty levels</p>
-                    </div>
-                    <div class="feature">
-                        <h3>🎯 Bloom's Taxonomy</h3>
-                        <p>Structured learning progression from basic to advanced concepts</p>
-                    </div>
-                    <div class="feature">
-                        <h3>📝 Multiple Question Types</h3>
-                        <p>MCQ and subjective questions for comprehensive assessment</p>
-                    </div>
-                </div>
-                
-                <div style="text-align: center; margin-top: 30px;">
-                    <a href="/signup" class="btn">📝 Sign Up</a>
-                    <a href="/login" class="btn">🔑 Login</a>
-                    <a href="/test" class="btn">🔧 Test API</a>
-                    <a href="/health" class="btn">💚 Health Check</a>
-                </div>
-                
-                <div style="margin-top: 30px; padding: 20px; background: #f0f7ff; border-radius: 6px;">
-                    <h3>🚀 Getting Started</h3>
-                    <p>This platform is now live and ready for use! The AI question generation and database features are fully functional.</p>
-                </div>
+        <body style="font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5;">
+            <div style="max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 10px;">
+                <h1 style="color: #4285f4; text-align: center;">🎓 UNITEST AI Learning Platform</h1>
+                <p style="text-align: center; margin: 20px 0;">
+                    <a href="/signup" style="background: #4285f4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px;">Sign Up</a>
+                    <a href="/login" style="background: #34a853; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 5px;">Login</a>
+                </p>
+                <p>Welcome to UNITEST - Search "UNITEST" to find the best AI-powered quiz generator platform.</p>
             </div>
         </body>
         </html>
         """
-    except Exception as e:
-        print(f"Error in home route: {str(e)}")
-        return f"""
-        <!DOCTYPE html>
-        <html>
-        <head><title>UniTest - Error</title></head>
-        <body>
-            <h1>UniTest AI Learning Platform</h1>
             <p>Error: {str(e)}</p>
             <p>Please check the logs for more details.</p>
         </body>

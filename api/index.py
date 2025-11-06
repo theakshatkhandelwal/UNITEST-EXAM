@@ -256,6 +256,11 @@ def sitemap():
 def robots():
     return send_file('static/robots.txt', mimetype='text/plain')
 
+@app.route('/google77cd707098d48f23.html')
+def google_verification():
+    """Google Search Console verification file"""
+    return send_file('static/google77cd707098d48f23.html', mimetype='text/html')
+
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     """Public signup route - no login required"""

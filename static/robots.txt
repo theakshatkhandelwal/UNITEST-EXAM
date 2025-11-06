@@ -2,7 +2,7 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://unittest-ai.vercel.app/sitemap.xml
+Sitemap: https://unitest-ai-exam-platform.vercel.app/sitemap.xml
 
 # Disallow admin areas (if any)
 Disallow: /admin/

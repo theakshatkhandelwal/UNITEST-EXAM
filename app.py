@@ -546,14 +546,61 @@ def health_check():
 @app.route('/sitemap.xml')
 def sitemap():
     """Serve sitemap.xml for Google Search Console"""
+    from flask import Response
+    import os
+    
+    # Try to read the file, if it fails, return inline XML
+    sitemap_path = os.path.join('static', 'sitemap.xml')
+    
     try:
-        response = send_file('static/sitemap.xml', mimetype='application/xml')
+        if os.path.exists(sitemap_path):
+            with open(sitemap_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        else:
+            # Fallback: return inline sitemap
+            content = '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>1.0</priority>
+    </url>
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/login</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/signup</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/dashboard</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.9</priority>
+    </url>
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/quiz</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.9</priority>
+    </url>
+</urlset>'''
+        
+        response = Response(content, mimetype='application/xml')
         response.headers['Content-Type'] = 'application/xml; charset=utf-8'
         response.headers['Cache-Control'] = 'public, max-age=3600'
         return response
     except Exception as e:
         print(f"Error serving sitemap: {e}")
-        # Return a basic sitemap if file read fails
+        import traceback
+        traceback.print_exc()
+        # Return inline sitemap as fallback
         return '''<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
@@ -561,6 +608,30 @@ def sitemap():
         <lastmod>2024-11-07</lastmod>
         <changefreq>weekly</changefreq>
         <priority>1.0</priority>
+    </url>
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/login</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/signup</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/dashboard</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.9</priority>
+    </url>
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/quiz</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.9</priority>
     </url>
 </urlset>''', 200, {'Content-Type': 'application/xml; charset=utf-8'}
 

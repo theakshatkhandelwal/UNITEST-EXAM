@@ -45,7 +45,8 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(120), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)  # Increased from 120 to 255
+    role = db.Column(db.String(20), default='student', nullable=False)  # 'student' or 'teacher'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Progress(db.Model):
@@ -257,12 +258,14 @@ def robots():
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
+    """Public signup route - no login required"""
     if request.method == 'POST':
         try:
-            username = request.form['username']
-            email = request.form['email']
-            password = request.form['password']
-            confirm_password = request.form['confirm_password']
+            username = request.form.get('username', '').strip()
+            email = request.form.get('email', '').strip()
+            password = request.form.get('password', '')
+            confirm_password = request.form.get('confirm_password', '')
+            role = request.form.get('role', 'student')
 
             if not all([username, email, password, confirm_password]):
                 flash('Please fill in all fields', 'error')
@@ -272,18 +275,23 @@ def signup():
                 flash('Passwords do not match', 'error')
                 return redirect(url_for('signup'))
 
-            if db.session.query(User).filter_by(username=username).first():
+            # Check if user exists
+            existing_user = db.session.query(User).filter_by(username=username).first()
+            if existing_user:
                 flash('Username already exists', 'error')
                 return redirect(url_for('signup'))
 
-            if db.session.query(User).filter_by(email=email).first():
+            existing_email = db.session.query(User).filter_by(email=email).first()
+            if existing_email:
                 flash('Email already exists', 'error')
                 return redirect(url_for('signup'))
 
+            # Create new user
             user = User(
                 username=username,
                 email=email,
-                password_hash=generate_password_hash(password)
+                password_hash=generate_password_hash(password),
+                role=role if role in ['student', 'teacher'] else 'student'
             )
             db.session.add(user)
             db.session.commit()
@@ -292,7 +300,10 @@ def signup():
             return redirect(url_for('login'))
         except Exception as e:
             print(f"Error in signup: {str(e)}")
-            flash('An error occurred. Please try again.', 'error')
+            import traceback
+            traceback.print_exc()
+            db.session.rollback()
+            flash(f'Signup failed: {str(e)}', 'error')
             return redirect(url_for('signup'))
 
     return render_template('signup.html')

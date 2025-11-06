@@ -15,7 +15,7 @@
     <meta property="og:title" content="{% block og_title %}UNITEST - AI-Powered Learning Platform | Search UNITEST{% endblock %}">
     <meta property="og:description" content="{% block og_description %}UNITEST - Transform your learning with personalized AI-generated quizzes. Search 'UNITEST' for the best AI quiz platform with Google Gemini AI and Bloom's taxonomy.{% endblock %}">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://unittest-platform.vercel.app{% block canonical_path %}{{ request.path }}{% endblock %}">
+    <meta property="og:url" content="https://unittest-platform.vercel.app{{ request.path }}">
     <meta property="og:image" content="https://unittest-platform.vercel.app/static/og-image.png">
     <meta property="og:site_name" content="UNITEST">
     
@@ -26,7 +26,7 @@
     <meta name="twitter:image" content="https://unittest-platform.vercel.app/static/og-image.png">
     
     <!-- Additional SEO Tags -->
-    <link rel="canonical" href="https://unittest-platform.vercel.app{% block canonical_path %}{{ request.path }}{% endblock %}">
+    <link rel="canonical" href="https://unittest-platform.vercel.app{{ request.path }}">
     <meta name="theme-color" content="#4285f4">
     <meta name="msapplication-TileColor" content="#4285f4">
     

@@ -566,156 +566,23 @@ def signup():
             role = request.form.get('role', 'student')
 
             if not all([username, email, password, confirm_password]):
-                return """
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Sign Up - UniTest AI Learning Platform</title>
-                    <link rel="stylesheet" href="/static/style.css">
-                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-                </head>
-                <body>
-                    <div class="auth-container">
-                        <div class="auth-card">
-                            <div class="auth-header">
-                                <h1 class="auth-title">Create Account</h1>
-                                <p class="auth-subtitle">Join UniTest and start your AI-powered learning journey</p>
-                            </div>
-                            
-                            <div class="alert alert-error">
-                                <span class="alert-icon">⚠️</span>
-                                Please fill in all fields
-                            </div>
-                            
-                            <form method="POST">
-                                <div class="form-group">
-                                    <label class="form-label">Username</label>
-                                    <input type="text" name="username" class="form-input" placeholder="Enter your username" required>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label class="form-label">Email Address</label>
-                                    <input type="email" name="email" class="form-input" placeholder="Enter your email" required>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label class="form-label">Password</label>
-                                    <input type="password" name="password" class="form-input" placeholder="Create a strong password" required>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label class="form-label">Confirm Password</label>
-                                    <input type="password" name="confirm_password" class="form-input" placeholder="Confirm your password" required>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label class="form-label">Account Type</label>
-                                    <select name="role" class="form-select" required>
-                                        <option value="student">🎓 Student</option>
-                                        <option value="teacher">👨‍🏫 Teacher</option>
-                                    </select>
-                                </div>
-                                
-                                <button type="submit" class="btn">
-                                    Create Account
-                                </button>
-                            </form>
-                            
-                            <div class="auth-links">
-                                <a href="/login" class="auth-link">Already have an account? Sign In</a><br>
-                                <a href="/" class="auth-link">← Back to Home</a>
-                            </div>
-                        </div>
-                    </div>
-                </body>
-                </html>
-                """
+                flash('Please fill in all fields', 'error')
+                return redirect(url_for('signup'))
 
             if password != confirm_password:
-                return """
-                <!DOCTYPE html>
-                <html>
-                <head><title>Sign Up - UniTest</title></head>
-                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-                    <h2>Create Account</h2>
-                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                        Passwords do not match
-                    </div>
-                    <form method="POST">
-                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
-                            <option value="student">Student</option>
-                            <option value="teacher">Teacher</option>
-                        </select></p>
-                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
-                    </form>
-                    <p><a href="/login">Already have an account? Login</a></p>
-                    <p><a href="/">← Back to Home</a></p>
-                </body>
-                </html>
-                """
+                flash('Passwords do not match', 'error')
+                return redirect(url_for('signup'))
 
             # Check if user exists
             existing_user = db.session.query(User).filter_by(username=username).first()
             if existing_user:
-                return """
-                <!DOCTYPE html>
-                <html>
-                <head><title>Sign Up - UniTest</title></head>
-                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-                    <h2>Create Account</h2>
-                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                        Username already exists
-                    </div>
-                    <form method="POST">
-                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
-                            <option value="student">Student</option>
-                            <option value="teacher">Teacher</option>
-                        </select></p>
-                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
-                    </form>
-                    <p><a href="/login">Already have an account? Login</a></p>
-                    <p><a href="/">← Back to Home</a></p>
-                </body>
-                </html>
-                """
+                flash('Username already exists', 'error')
+                return redirect(url_for('signup'))
 
             existing_email = db.session.query(User).filter_by(email=email).first()
             if existing_email:
-                return """
-                <!DOCTYPE html>
-                <html>
-                <head><title>Sign Up - UniTest</title></head>
-                <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-                    <h2>Create Account</h2>
-                    <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                        Email already exists
-                    </div>
-                    <form method="POST">
-                        <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                        <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
-                            <option value="student">Student</option>
-                            <option value="teacher">Teacher</option>
-                        </select></p>
-                        <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
-                    </form>
-                    <p><a href="/login">Already have an account? Login</a></p>
-                    <p><a href="/">← Back to Home</a></p>
-                </body>
-                </html>
-                """
+                flash('Email already exists', 'error')
+                return redirect(url_for('signup'))
 
             # Create new user
             user = User(
@@ -727,127 +594,15 @@ def signup():
             db.session.add(user)
             db.session.commit()
 
-            return """
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Account Created - UniTest AI Learning Platform</title>
-                <link rel="stylesheet" href="/static/style.css">
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-            </head>
-            <body>
-                <div class="auth-container">
-                    <div class="auth-card">
-                        <div class="auth-header">
-                            <h1 class="auth-title">🎉 Account Created!</h1>
-                            <p class="auth-subtitle">Welcome to UniTest AI Learning Platform</p>
-                        </div>
-                        
-                        <div class="alert alert-success">
-                            <span class="alert-icon">✅</span>
-                            Your account has been created successfully! You can now sign in to start learning.
-                        </div>
-                        
-                        <div class="auth-links">
-                            <a href="/login" class="btn" style="display: inline-block; text-align: center; margin-bottom: 20px;">Sign In Now</a><br>
-                            <a href="/" class="auth-link">← Back to Home</a>
-                        </div>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
+            flash('Account created successfully! Please login.', 'success')
+            return redirect(url_for('login'))
         except Exception as e:
             print(f"Error in signup: {str(e)}")
-            return f"""
-            <!DOCTYPE html>
-            <html>
-            <head><title>Sign Up Error - UniTest</title></head>
-            <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-                <h2>Create Account</h2>
-                <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                    An error occurred: {str(e)}
-                </div>
-                <form method="POST">
-                    <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                    <p><input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                    <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                    <p><input type="password" name="confirm_password" placeholder="Confirm Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                    <p><select name="role" style="width: 100%; padding: 10px; margin: 5px 0;">
-                        <option value="student">Student</option>
-                        <option value="teacher">Teacher</option>
-                    </select></p>
-                    <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Sign Up</button></p>
-                </form>
-                <p><a href="/login">Already have an account? Login</a></p>
-                <p><a href="/">← Back to Home</a></p>
-            </body>
-            </html>
-            """
+            db.session.rollback()
+            flash(f'Signup failed: {str(e)}', 'error')
+            return redirect(url_for('signup'))
 
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Sign Up - UniTest AI Learning Platform</title>
-        <link rel="stylesheet" href="/static/style.css">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    </head>
-    <body>
-        <div class="auth-container">
-            <div class="auth-card">
-                <div class="auth-header">
-                    <h1 class="auth-title">Create Account</h1>
-                    <p class="auth-subtitle">Join UniTest and start your AI-powered learning journey</p>
-                </div>
-                
-                <form method="POST">
-                    <div class="form-group">
-                        <label class="form-label">Username</label>
-                        <input type="text" name="username" class="form-input" placeholder="Enter your username" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Email Address</label>
-                        <input type="email" name="email" class="form-input" placeholder="Enter your email" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-input" placeholder="Create a strong password" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Confirm Password</label>
-                        <input type="password" name="confirm_password" class="form-input" placeholder="Confirm your password" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Account Type</label>
-                        <select name="role" class="form-select" required>
-                            <option value="student">🎓 Student</option>
-                            <option value="teacher">👨‍🏫 Teacher</option>
-                        </select>
-                    </div>
-                    
-                    <button type="submit" class="btn">
-                        Create Account
-                    </button>
-                </form>
-                
-                <div class="auth-links">
-                    <a href="/login" class="auth-link">Already have an account? Sign In</a><br>
-                    <a href="/" class="auth-link">← Back to Home</a>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    return render_template('signup.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -859,152 +614,16 @@ def login():
             user = db.session.query(User).filter_by(username=username).first()
             if user and check_password_hash(user.password_hash, password):
                 login_user(user)
-                return """
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Welcome Back - UniTest AI Learning Platform</title>
-                    <link rel="stylesheet" href="/static/style.css">
-                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-                </head>
-                <body>
-                    <div class="auth-container">
-                        <div class="auth-card">
-                            <div class="auth-header">
-                                <h1 class="auth-title">🎉 Welcome Back!</h1>
-                                <p class="auth-subtitle">You're successfully signed in</p>
-                            </div>
-                            
-                            <div class="alert alert-success">
-                                <span class="alert-icon">✅</span>
-                                Welcome back, {username}! You are now logged in and ready to continue learning.
-                            </div>
-                            
-                            <div class="auth-links">
-                                <a href="/dashboard" class="btn" style="display: inline-block; text-align: center; margin-bottom: 20px;">Go to Dashboard</a><br>
-                                <a href="/" class="auth-link">← Back to Home</a>
-                            </div>
-                        </div>
-                    </div>
-                </body>
-                </html>
-                """.format(username=username)
+                return redirect(url_for('dashboard'))
             else:
-                return """
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Sign In - UniTest AI Learning Platform</title>
-                    <link rel="stylesheet" href="/static/style.css">
-                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-                </head>
-                <body>
-                    <div class="auth-container">
-                        <div class="auth-card">
-                            <div class="auth-header">
-                                <h1 class="auth-title">Welcome Back</h1>
-                                <p class="auth-subtitle">Sign in to continue your AI learning journey</p>
-                            </div>
-                            
-                            <div class="alert alert-error">
-                                <span class="alert-icon">⚠️</span>
-                                Invalid username or password. Please try again.
-                            </div>
-                            
-                            <form method="POST">
-                                <div class="form-group">
-                                    <label class="form-label">Username</label>
-                                    <input type="text" name="username" class="form-input" placeholder="Enter your username" required>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label class="form-label">Password</label>
-                                    <input type="password" name="password" class="form-input" placeholder="Enter your password" required>
-                                </div>
-                                
-                                <button type="submit" class="btn">
-                                    Sign In
-                                </button>
-                            </form>
-                            
-                            <div class="auth-links">
-                                <a href="/signup" class="auth-link">Don't have an account? Sign Up</a><br>
-                                <a href="/" class="auth-link">← Back to Home</a>
-                            </div>
-                        </div>
-                    </div>
-                </body>
-                </html>
-                """
+                flash('Invalid username or password', 'error')
+                return redirect(url_for('login'))
         except Exception as e:
             print(f"Error in login: {str(e)}")
-            return f"""
-            <!DOCTYPE html>
-            <html>
-            <head><title>Login Error - UniTest</title></head>
-            <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px;">
-                <h2>Login</h2>
-                <div style="background: #ffebee; color: #c62828; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                    An error occurred: {str(e)}
-                </div>
-                <form method="POST">
-                    <p><input type="text" name="username" placeholder="Username" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                    <p><input type="password" name="password" placeholder="Password" required style="width: 100%; padding: 10px; margin: 5px 0;"></p>
-                    <p><button type="submit" style="width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px;">Login</button></p>
-                </form>
-                <p><a href="/signup">Don't have an account? Sign Up</a></p>
-                <p><a href="/">← Back to Home</a></p>
-            </body>
-            </html>
-            """
+            flash(f'Login error: {str(e)}', 'error')
+            return redirect(url_for('login'))
 
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Sign In - UniTest AI Learning Platform</title>
-        <link rel="stylesheet" href="/static/style.css">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    </head>
-    <body>
-        <div class="auth-container">
-            <div class="auth-card">
-                <div class="auth-header">
-                    <h1 class="auth-title">Welcome Back</h1>
-                    <p class="auth-subtitle">Sign in to continue your AI learning journey</p>
-                </div>
-                
-                <form method="POST">
-                    <div class="form-group">
-                        <label class="form-label">Username</label>
-                        <input type="text" name="username" class="form-input" placeholder="Enter your username" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Password</label>
-                        <input type="password" name="password" class="form-input" placeholder="Enter your password" required>
-                    </div>
-                    
-                    <button type="submit" class="btn">
-                        Sign In
-                    </button>
-                </form>
-                
-                <div class="auth-links">
-                    <a href="/signup" class="auth-link">Don't have an account? Sign Up</a><br>
-                    <a href="/" class="auth-link">← Back to Home</a>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    return render_template('login.html')
 
 @app.route('/logout')
 @login_required

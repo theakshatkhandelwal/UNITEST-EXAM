@@ -208,11 +208,6 @@ def home():
         </body>
         </html>
         """
-            <p>Error: {str(e)}</p>
-            <p>Please check the logs for more details.</p>
-        </body>
-        </html>
-        """, 500
 
 @app.route('/favicon.ico')
 def favicon():

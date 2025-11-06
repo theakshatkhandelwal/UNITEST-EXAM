@@ -1708,6 +1708,85 @@ def api_run_test_cases():
     result = run_test_cases(code, language, test_cases, time_limit, memory_limit)
     return jsonify(result)
 
+# Migration route - run once to add new columns
+@app.route('/run-migration')
+@login_required
+def run_migration_route():
+    """Run database migration for new features"""
+    try:
+        from migrate_new_features import migrate_database
+        migrate_database()
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Migration Complete</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+                .success { background: #d4edda; color: #155724; padding: 15px; border-radius: 5px; margin: 20px 0; }
+                .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; }
+            </style>
+        </head>
+        <body>
+            <h1>✅ Migration Complete!</h1>
+            <div class="success">
+                Database migration has been completed successfully. All new columns have been added.
+            </div>
+            <p>You can now:</p>
+            <ul>
+                <li>Create quizzes with coding questions</li>
+                <li>Use the 15-minute review unlock feature</li>
+                <li>Enable one attempt per student</li>
+                <li>Allow students to retake quizzes (teacher feature)</li>
+            </ul>
+            <a href="/dashboard" class="btn">Go to Dashboard</a>
+            <a href="/teacher/quiz/new_simple" class="btn">Create Quiz</a>
+        </body>
+        </html>
+        """
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        traceback.print_exc()
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Migration Error</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }}
+                .error {{ background: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+                .btn {{ display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 10px 5px; }}
+                pre {{ background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }}
+            </style>
+        </head>
+        <body>
+            <h1>❌ Migration Error</h1>
+            <div class="error">
+                <strong>Error:</strong> {error_msg}
+            </div>
+            <p>If you see a "column already exists" error, that's okay - the migration may have partially completed.</p>
+            <p>Try creating a quiz now. If it still fails, run the SQL commands directly in NeonDB (see instructions below).</p>
+            <h3>Alternative: Run SQL in NeonDB</h3>
+            <p>Go to your NeonDB dashboard → SQL Editor → Run these commands:</p>
+            <pre>
+ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS test_cases_json TEXT;
+ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS language_constraints TEXT;
+ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS time_limit_seconds INTEGER;
+ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS memory_limit_mb INTEGER;
+ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS sample_input TEXT;
+ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS sample_output TEXT;
+ALTER TABLE quiz_question ADD COLUMN IF NOT EXISTS starter_code TEXT;
+ALTER TABLE quiz_answer ADD COLUMN IF NOT EXISTS code_language VARCHAR(20);
+ALTER TABLE quiz_answer ADD COLUMN IF NOT EXISTS test_results_json TEXT;
+ALTER TABLE quiz_answer ADD COLUMN IF NOT EXISTS passed_test_cases INTEGER DEFAULT 0;
+ALTER TABLE quiz_answer ADD COLUMN IF NOT EXISTS total_test_cases INTEGER DEFAULT 0;
+            </pre>
+            <a href="/dashboard" class="btn">Go to Dashboard</a>
+        </body>
+        </html>
+        """
+
 # Temporary helper: run lightweight migration for SQLite (adds missing columns/tables)
 @app.route('/dev/migrate')
 def dev_migrate():

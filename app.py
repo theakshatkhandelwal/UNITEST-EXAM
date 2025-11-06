@@ -17,7 +17,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
+import requests
 
 # Download NLTK data only when needed
 def ensure_nltk_data():
@@ -59,7 +60,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # Configure Google AI
-genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyDUPxvPmawZHRJf2KD6GAGvhY8uVkTh-u4'))
+genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyBKYJLje8mR0VP5XxmrpG3PfXAleNXU_-c'))
 
 # Database Models
 class User(UserMixin, db.Model):
@@ -93,8 +94,16 @@ class QuizQuestion(db.Model):
     question = db.Column(db.Text, nullable=False)
     options_json = db.Column(db.Text)  # JSON array for MCQ options like ["A. ...","B. ...","C. ...","D. ..."]
     answer = db.Column(db.String(10))  # For MCQ store letter like 'A'; for subjective can store sample answer
-    qtype = db.Column(db.String(20), default='mcq')  # 'mcq' or 'subjective'
+    qtype = db.Column(db.String(20), default='mcq')  # 'mcq', 'subjective', or 'coding'
     marks = db.Column(db.Integer, default=1)
+    # For coding questions
+    test_cases_json = db.Column(db.Text)  # JSON array of test cases: [{"input": "...", "expected_output": "...", "is_hidden": false}]
+    language_constraints = db.Column(db.Text)  # JSON array of allowed languages: ["python", "java", "cpp", "c"]
+    time_limit_seconds = db.Column(db.Integer)  # Time limit per test case
+    memory_limit_mb = db.Column(db.Integer)  # Memory limit in MB
+    sample_input = db.Column(db.Text)  # Sample input for display
+    sample_output = db.Column(db.Text)  # Sample output for display
+    starter_code = db.Column(db.Text)  # JSON object with starter code per language
 
 class QuizSubmission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -124,6 +133,11 @@ class QuizAnswer(db.Model):
     is_correct = db.Column(db.Boolean)
     ai_score = db.Column(db.Float)  # 0..1 for subjective
     scored_marks = db.Column(db.Float, default=0.0)
+    # For coding questions
+    code_language = db.Column(db.String(20))  # Language used: python, java, cpp, c
+    test_results_json = db.Column(db.Text)  # JSON array of test case results
+    passed_test_cases = db.Column(db.Integer, default=0)
+    total_test_cases = db.Column(db.Integer, default=0)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -165,6 +179,106 @@ def evaluate_subjective_answer(question, student_answer, model_answer):
     except Exception as e:
         print(f"Error in evaluate_subjective_answer: {str(e)}")
         return 0.5  # Default on error
+
+def execute_code(code, language, test_input, time_limit=2, memory_limit=256):
+    """Execute code using Piston API (free, no API key needed)"""
+    piston_url = "https://emkc.org/api/v2/piston/execute"
+    
+    piston_languages = {
+        'python': 'python3',
+        'python3': 'python3',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c': 'c'
+    }
+    
+    piston_lang = piston_languages.get(language.lower(), 'python3')
+    
+    try:
+        payload = {
+            "language": piston_lang,
+            "version": "*",
+            "files": [{"content": code}],
+            "stdin": test_input,
+            "args": [],
+            "compile_timeout": 10000,
+            "run_timeout": time_limit * 1000,
+            "compile_memory_limit": memory_limit * 1024 * 1024,
+            "run_memory_limit": memory_limit * 1024 * 1024
+        }
+        
+        response = requests.post(piston_url, json=payload, timeout=15)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('run'):
+                run_result = result['run']
+                if run_result.get('code') == 0:
+                    return {
+                        'status': 'success',
+                        'output': run_result.get('stdout', '').strip(),
+                        'stderr': run_result.get('stderr', '').strip()
+                    }
+                else:
+                    return {
+                        'status': 'error',
+                        'message': 'Runtime Error',
+                        'output': run_result.get('stdout', '').strip(),
+                        'stderr': run_result.get('stderr', '').strip() or run_result.get('stdout', '')
+                    }
+    except requests.exceptions.RequestException as e:
+        return {
+            'status': 'error',
+            'message': f'Network error: {str(e)}',
+            'output': '',
+            'stderr': ''
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'message': f'Execution error: {str(e)}',
+            'output': '',
+            'stderr': ''
+        }
+
+def run_test_cases(code, language, test_cases, time_limit=2, memory_limit=256):
+    """Run multiple test cases and return results"""
+    results = []
+    passed = 0
+    
+    for test_case in test_cases:
+        test_input = test_case.get('input', '')
+        expected_output = test_case.get('expected_output', '').strip()
+        is_hidden = test_case.get('is_hidden', False)
+        
+        exec_result = execute_code(code, language, test_input, time_limit, memory_limit)
+        
+        if exec_result['status'] == 'success':
+            actual_output = exec_result['output'].strip()
+            is_correct = actual_output == expected_output
+            if is_correct:
+                passed += 1
+        else:
+            actual_output = exec_result.get('stderr', exec_result.get('message', 'Error'))
+            is_correct = False
+        
+        results.append({
+            'input': test_input,
+            'expected_output': expected_output,
+            'actual_output': actual_output,
+            'is_correct': is_correct,
+            'is_hidden': is_hidden
+        })
+    
+    total = len(test_cases)
+    percentage = (passed / total * 100) if total > 0 else 0
+    
+    return {
+        'results': results,
+        'passed': passed,
+        'total': total,
+        'percentage': percentage
+    }
 
 def get_difficulty_from_bloom_level(bloom_level):
     """Map Bloom's taxonomy level to difficulty level"""
@@ -220,6 +334,60 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5)
                     ...
                 ]
             """
+        elif question_type == "coding":
+            prompt = f"""
+CRITICAL: You MUST generate exactly {num_questions} coding programming problems on the topic: {topic}
+
+Difficulty Level: {difficulty_level.upper()} ({level_description})
+
+IMPORTANT REQUIREMENTS:
+1. Generate EXACTLY {num_questions} coding problems (not MCQ, not subjective, but actual programming problems)
+2. Each problem MUST have the following structure:
+   - "question": A clear problem statement describing what the student needs to code
+   - "type": MUST be exactly "coding" (not "mcq" or anything else)
+   - "sample_input": Sample input that demonstrates the problem
+   - "sample_output": Expected output for the sample input
+   - "test_cases": An array with at least 3-5 test cases, each with:
+     * "input": The test input as a string
+     * "expected_output": The expected output as a string
+     * "is_hidden": boolean (false for visible test cases, true for hidden ones)
+   - "time_limit_seconds": 2 (default)
+   - "memory_limit_mb": 256 (default)
+   - "starter_code": An object with starter code templates for each language:
+     * "python": Python starter code
+     * "java": Java starter code  
+     * "cpp": C++ starter code
+     * "c": C starter code
+
+3. Problems should be diverse and test different programming concepts related to {topic}
+4. Use randomization seed {random_seed} to ensure variety
+
+EXAMPLE FORMAT (follow this EXACT structure):
+[
+    {{
+        "question": "Write a function to find the maximum element in an array. The function should take an array of integers and return the maximum value.",
+        "type": "coding",
+        "sample_input": "5\\n1 3 5 2 4",
+        "sample_output": "5",
+        "test_cases": [
+            {{"input": "3\\n1 2 3", "expected_output": "3", "is_hidden": false}},
+            {{"input": "4\\n10 5 8 12", "expected_output": "12", "is_hidden": false}},
+            {{"input": "5\\n-1 -5 -3 -2 -4", "expected_output": "-1", "is_hidden": true}},
+            {{"input": "1\\n42", "expected_output": "42", "is_hidden": true}}
+        ],
+        "time_limit_seconds": 2,
+        "memory_limit_mb": 256,
+        "starter_code": {{
+            "python": "def find_max(arr):\\n    # Your code here\\n    pass",
+            "java": "public class Solution {{\\n    public static int findMax(int[] arr) {{\\n        // Your code here\\n        return 0;\\n    }}\\n}}",
+            "cpp": "#include <iostream>\\n#include <vector>\\nusing namespace std;\\n\\nint findMax(vector<int>& arr) {{\\n    // Your code here\\n    return 0;\\n}}",
+            "c": "#include <stdio.h>\\n\\nint findMax(int arr[], int n) {{\\n    // Your code here\\n    return 0;\\n}}"
+        }}
+    }}
+]
+
+Return ONLY valid JSON array. Do NOT include any markdown code blocks, explanations, or text outside the JSON array.
+            """
         else:  # subjective
             prompt = f"""
                 Generate subjective questions on {topic} at {difficulty_level.upper()} level ({level_description}).
@@ -249,6 +417,18 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5)
                 questions = json.loads(response.text)
             except:
                 raise ValueError("Invalid response format from AI")
+
+        # Validate that questions match the requested type
+        if questions:
+            # Ensure all questions have the correct type
+            for q in questions:
+                if 'type' not in q:
+                    q['type'] = question_type
+                elif q.get('type') != question_type:
+                    print(f"WARNING: Question type mismatch. Expected {question_type}, got {q.get('type')}")
+                    q['type'] = question_type  # Force correct type
+            
+            print(f"DEBUG: Validated {len(questions)} questions, all have type: {question_type}")
 
         return questions
 
@@ -844,7 +1024,8 @@ def dashboard():
     my_submissions = []
     if getattr(current_user, 'role', 'student') == 'student':
         my_submissions = db.session.query(QuizSubmission).filter_by(student_id=current_user.id).order_by(QuizSubmission.submitted_at.desc()).all()
-    return render_template('dashboard.html', progress_records=progress_records, my_quizzes=my_quizzes, my_submissions=my_submissions)
+    current_time = datetime.utcnow()  # For 15-minute review unlock
+    return render_template('dashboard.html', progress_records=progress_records, my_quizzes=my_quizzes, my_submissions=my_submissions, current_time=current_time)
 
 def generate_quiz_code(length=6):
     import random, string
@@ -924,6 +1105,7 @@ def teacher_create_quiz_simple():
             marks = int(request.form.get('marks', '1') or 1)
             duration = request.form.get('duration', '').strip()
             duration_minutes = int(duration) if duration else None
+            question_type = request.form.get('question_type', 'mcq').strip()  # Get question type
 
             if not topic or count <= 0:
                 flash('Please provide topic and number of questions (>0).', 'error')
@@ -944,7 +1126,7 @@ def teacher_create_quiz_simple():
                     if extracted:
                         topic = f"{topic} - {extracted}"
 
-            questions = generate_quiz(topic, difficulty if difficulty in ['beginner','intermediate','advanced'] else 'beginner', 'mcq', count) or []
+            questions = generate_quiz(topic, difficulty if difficulty in ['beginner','intermediate','advanced'] else 'beginner', question_type, count) or []
             if not questions:
                 flash('Failed to generate questions. Try again.', 'error')
                 return redirect(url_for('teacher_create_quiz_simple'))
@@ -962,6 +1144,7 @@ def teacher_create_quiz_simple():
                 'topic': topic,
                 'difficulty': difficulty,
                 'duration_minutes': duration_minutes,
+                'question_type': question_type,
                 'questions': questions
             }
             return render_template('preview_quiz.html', data=session['preview_quiz'])
@@ -1047,15 +1230,28 @@ def teacher_quiz_finalize():
         db.session.flush()
 
         for q in q_overrides:
+            qtype = q.get('type', data.get('question_type', 'mcq'))
             opts = q.get('options', [])
+            
             qq = QuizQuestion(
                 quiz_id=quiz.id,
                 question=q.get('question', ''),
                 options_json=json.dumps(opts) if opts else None,
                 answer=q.get('answer', ''),
-                qtype='mcq',
+                qtype=qtype,
                 marks=int(q.get('marks', 1))
             )
+            
+            # Handle coding questions
+            if qtype == 'coding':
+                qq.test_cases_json = json.dumps(q.get('test_cases', []))
+                qq.language_constraints = json.dumps(q.get('language_constraints', ['python', 'java', 'cpp', 'c']))
+                qq.time_limit_seconds = q.get('time_limit_seconds', 2)
+                qq.memory_limit_mb = q.get('memory_limit_mb', 256)
+                qq.sample_input = q.get('sample_input', '')
+                qq.sample_output = q.get('sample_output', '')
+                qq.starter_code = json.dumps(q.get('starter_code', {}))
+            
             db.session.add(qq)
 
         db.session.commit()
@@ -1089,6 +1285,18 @@ def take_shared_quiz(code):
     if not quiz:
         flash('Quiz not found', 'error')
         return redirect(url_for('join_quiz'))
+    
+    # Check if student has already completed this quiz
+    existing_completed = db.session.query(QuizSubmission).filter_by(
+        quiz_id=quiz.id, 
+        student_id=current_user.id, 
+        completed=True
+    ).first()
+    
+    if existing_completed:
+        flash('You have already attempted this quiz. You can only take it once.', 'error')
+        return redirect(url_for('dashboard'))
+    
     q_rows = db.session.query(QuizQuestion).filter_by(quiz_id=quiz.id).all()
     # Parse options JSON server-side to avoid template errors
     parsed_questions = []
@@ -1097,13 +1305,32 @@ def take_shared_quiz(code):
             options = json.loads(q.options_json) if q.options_json else []
         except Exception:
             options = []
-        parsed_questions.append({
+        
+        question_data = {
             'id': q.id,
             'question': q.question,
             'qtype': q.qtype,
             'marks': q.marks,
             'options': options,
-        })
+        }
+        
+        # Add coding question data
+        if q.qtype == 'coding':
+            try:
+                question_data['test_cases'] = json.loads(q.test_cases_json) if q.test_cases_json else []
+                question_data['language_constraints'] = json.loads(q.language_constraints) if q.language_constraints else ['python', 'java', 'cpp', 'c']
+                question_data['time_limit_seconds'] = q.time_limit_seconds or 2
+                question_data['memory_limit_mb'] = q.memory_limit_mb or 256
+                question_data['sample_input'] = q.sample_input or ''
+                question_data['sample_output'] = q.sample_output or ''
+                question_data['starter_code'] = json.loads(q.starter_code) if q.starter_code else {}
+            except Exception as e:
+                print(f"Error parsing coding question data: {e}")
+                question_data['test_cases'] = []
+                question_data['language_constraints'] = ['python', 'java', 'cpp', 'c']
+        
+        parsed_questions.append(question_data)
+    
     # Ensure a started submission exists (one per student/quiz if not completed)
     existing = db.session.query(QuizSubmission).filter_by(quiz_id=quiz.id, student_id=current_user.id, completed=False).first()
     if not existing:
@@ -1120,11 +1347,22 @@ def submit_shared_quiz(code):
     if not quiz:
         flash('Quiz not found', 'error')
         return redirect(url_for('join_quiz'))
+    
+    # Check if student has already completed this quiz
+    existing_completed = db.session.query(QuizSubmission).filter_by(
+        quiz_id=quiz.id, 
+        student_id=current_user.id, 
+        completed=True
+    ).first()
+    
+    if existing_completed:
+        flash('You have already attempted this quiz. You can only take it once.', 'error')
+        return redirect(url_for('dashboard'))
+    
     questions = db.session.query(QuizQuestion).filter_by(quiz_id=quiz.id).all()
 
     total_marks = 0.0
     scored_marks = 0.0
-    from datetime import timedelta
     submission = db.session.query(QuizSubmission).filter_by(quiz_id=quiz.id, student_id=current_user.id, completed=False).first()
     if not submission:
         submission = QuizSubmission(quiz_id=quiz.id, student_id=current_user.id)
@@ -1139,10 +1377,43 @@ def submit_shared_quiz(code):
         is_correct = None
         ai_score = None
         gained = 0.0
+        code_language = None
+        test_results_json = None
+        passed_test_cases = 0
+        total_test_cases = 0
 
         if q.qtype == 'mcq':
             is_correct = (user_ans.split('. ')[0] == (q.answer or '')) if user_ans else False
             gained = float(q.marks or 1) if is_correct else 0.0
+        elif q.qtype == 'coding':
+            # Handle coding question submission
+            code_data = request.form.get(f'code_{q.id}', '').strip()
+            language = request.form.get(f'language_{q.id}', 'python')
+            
+            if code_data:
+                try:
+                    test_cases = json.loads(q.test_cases_json) if q.test_cases_json else []
+                    time_limit = q.time_limit_seconds or 2
+                    memory_limit = q.memory_limit_mb or 256
+                    
+                    test_results = run_test_cases(code_data, language, test_cases, time_limit, memory_limit)
+                    
+                    passed_test_cases = test_results['passed']
+                    total_test_cases = test_results['total']
+                    percentage_passed = test_results['percentage'] / 100.0
+                    
+                    gained = float(q.marks or 1) * percentage_passed
+                    is_correct = percentage_passed == 1.0
+                    code_language = language
+                    test_results_json = json.dumps(test_results['results'])
+                    user_ans = code_data
+                except Exception as e:
+                    print(f"Error evaluating coding question: {e}")
+                    gained = 0.0
+                    is_correct = False
+                    code_language = language
+                    test_results_json = json.dumps([])
+                    user_ans = code_data
         else:
             # subjective via AI
             if user_ans:
@@ -1160,7 +1431,11 @@ def submit_shared_quiz(code):
             user_answer=user_ans,
             is_correct=is_correct,
             ai_score=ai_score,
-            scored_marks=gained
+            scored_marks=gained,
+            code_language=code_language,
+            test_results_json=test_results_json,
+            passed_test_cases=passed_test_cases,
+            total_test_cases=total_test_cases
         )
         db.session.add(ans)
         if user_ans:
@@ -1274,6 +1549,157 @@ def teacher_quiz_results(code):
     # Join with users
     student_map = {u.id: u for u in db.session.query(User).filter(User.id.in_([s.student_id for s in submissions])).all()}
     return render_template('teacher_results.html', quiz=quiz, submissions=submissions, student_map=student_map)
+
+# Student: view quiz result (after 15 minutes)
+@app.route('/quiz/result/<int:submission_id>')
+@login_required
+def view_quiz_result(submission_id):
+    submission = db.session.query(QuizSubmission).filter_by(
+        id=submission_id, 
+        student_id=current_user.id
+    ).first()
+    if not submission:
+        flash('Submission not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Check if 15 minutes have passed
+    current_time = datetime.utcnow()
+    if submission.review_unlocked_at and submission.review_unlocked_at > current_time:
+        flash('Results will be available 15 minutes after submission', 'info')
+        return redirect(url_for('dashboard'))
+    
+    # Get quiz and questions
+    quiz = db.session.query(Quiz).filter_by(id=submission.quiz_id).first()
+    if not quiz:
+        flash('Quiz not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    questions = db.session.query(QuizQuestion).filter_by(quiz_id=quiz.id).order_by(QuizQuestion.id).all()
+    answers = db.session.query(QuizAnswer).filter_by(submission_id=submission.id).all()
+    
+    answer_map = {ans.question_id: ans for ans in answers}
+    
+    # Format results for template
+    results = []
+    for q in questions:
+        ans = answer_map.get(q.id)
+        if q.qtype == 'mcq':
+            options = json.loads(q.options_json) if q.options_json else []
+            user_answer = ans.user_answer if ans else ''
+            correct_option = next((opt for opt in options if opt.startswith(f"{q.answer}.")), '') if q.answer else ''
+            
+            results.append({
+                'question': q.question,
+                'user_answer': user_answer,
+                'correct_answer': correct_option,
+                'is_correct': ans.is_correct if ans else False,
+                'type': 'mcq',
+                'marks': q.marks
+            })
+        elif q.qtype == 'subjective':
+            results.append({
+                'question': q.question,
+                'user_answer': ans.user_answer if ans else '',
+                'sample_answer': q.answer or 'N/A',
+                'ai_score': ans.ai_score if ans else 0.0,
+                'scored_marks': ans.scored_marks if ans else 0.0,
+                'marks': q.marks,
+                'type': 'subjective'
+            })
+        elif q.qtype == 'coding':
+            test_results = json.loads(ans.test_results_json) if ans and ans.test_results_json else []
+            results.append({
+                'question': q.question,
+                'user_answer': ans.user_answer if ans else '',
+                'code_language': ans.code_language if ans else '',
+                'passed_test_cases': ans.passed_test_cases if ans else 0,
+                'total_test_cases': ans.total_test_cases if ans else 0,
+                'test_results': test_results,
+                'scored_marks': ans.scored_marks if ans else 0.0,
+                'marks': q.marks,
+                'type': 'coding',
+                'sample_input': q.sample_input,
+                'sample_output': q.sample_output
+            })
+    
+    final_score = f"{submission.score:.1f}/{submission.total:.1f}"
+    percentage = submission.percentage
+    passed = submission.passed
+    
+    return render_template('shared_quiz_results.html', 
+                         quiz=quiz,
+                         submission=submission,
+                         results=results,
+                         final_score=final_score,
+                         percentage=percentage,
+                         passed=passed)
+
+# Teacher: allow student to retake quiz
+@app.route('/teacher/quiz/<code>/allow-retake/<int:submission_id>', methods=['POST'])
+@login_required
+def allow_student_retake(code, submission_id):
+    guard = require_teacher()
+    if guard:
+        return guard
+    
+    # Verify quiz ownership
+    quiz = db.session.query(Quiz).filter_by(code=code.upper(), created_by=current_user.id).first()
+    if not quiz:
+        flash('Quiz not found or you do not have permission', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Get the submission and verify it belongs to this quiz
+    submission = db.session.query(QuizSubmission).filter_by(
+        id=submission_id,
+        quiz_id=quiz.id
+    ).first()
+    
+    if not submission:
+        flash('Submission not found', 'error')
+        return redirect(url_for('teacher_quiz_results', code=code))
+    
+    # Get student name
+    student = db.session.query(User).filter_by(id=submission.student_id).first()
+    student_name = student.username if student else f"Student {submission.student_id}"
+    
+    # Delete all answers
+    db.session.query(QuizAnswer).filter_by(submission_id=submission.id).delete()
+    
+    # Delete submission
+    db.session.delete(submission)
+    db.session.commit()
+    
+    flash(f'Successfully allowed {student_name} to retake the quiz. Their previous submission has been reset.', 'success')
+    return redirect(url_for('teacher_quiz_results', code=code))
+
+# API endpoints for code testing
+@app.route('/api/test_code', methods=['POST'])
+@login_required
+def test_code():
+    """Test code execution for coding questions"""
+    data = request.get_json()
+    code = data.get('code', '')
+    language = data.get('language', 'python')
+    test_input = data.get('test_input', '')
+    time_limit = data.get('time_limit', 2)
+    memory_limit = data.get('memory_limit', 256)
+    
+    result = execute_code(code, language, test_input, time_limit, memory_limit)
+    return jsonify(result)
+
+@app.route('/api/run_test_cases', methods=['POST'])
+@login_required
+def api_run_test_cases():
+    """Run test cases for coding questions"""
+    data = request.get_json()
+    code = data.get('code', '')
+    language = data.get('language', 'python')
+    test_cases = data.get('test_cases', [])
+    time_limit = data.get('time_limit', 2)
+    memory_limit = data.get('memory_limit', 256)
+    
+    result = run_test_cases(code, language, test_cases, time_limit, memory_limit)
+    return jsonify(result)
 
 # Temporary helper: run lightweight migration for SQLite (adds missing columns/tables)
 @app.route('/dev/migrate')

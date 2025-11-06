@@ -125,10 +125,17 @@
                                     <td>{{ '%.1f'|format(s.score) }}/{{ '%.1f'|format(s.total) }} ({{ '%.0f'|format(s.percentage) }}%)</td>
                                     <td>{{ s.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
                                     <td>
-                                        {% if s.review_unlocked_at and (s.review_unlocked_at <= (now() if false else s.submitted_at)) %}
-                                            <a class="btn btn-sm btn-outline-primary disabled">Open</a>
+                                        {% if s.review_unlocked_at %}
+                                            {% set remaining_seconds = (s.review_unlocked_at - current_time).total_seconds() %}
+                                            {% if remaining_seconds > 0 %}
+                                                {% set remaining_mins = (remaining_seconds / 60)|round(0, 'ceil')|int %}
+                                                <small class="text-muted">Available in {{ remaining_mins }} min</small>
+                                            {% else %}
+                                                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('view_quiz_result', submission_id=s.id) }}">
+                                                    <i class="fas fa-eye me-1"></i>View Results
+                                                </a>
+                                            {% endif %}
                                         {% else %}
-                                            {% set remaining = ((s.review_unlocked_at or s.submitted_at) - s.submitted_at).total_seconds() if s.review_unlocked_at else 900 %}
                                             <small class="text-muted">Available after 15 min</small>
                                         {% endif %}
                                     </td>

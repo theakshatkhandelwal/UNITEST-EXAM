@@ -24,6 +24,15 @@
           <div class="form-text">Used to refine question context.</div>
         </div>
         <div class="mb-3">
+          <label class="form-label">Question Type</label>
+          <select class="form-select" name="question_type" id="question_type" required>
+            <option value="mcq" selected>Multiple Choice (MCQ)</option>
+            <option value="subjective">Subjective</option>
+            <option value="coding">Coding Problems</option>
+          </select>
+          <div class="form-text">Select coding problems to create programming questions with test cases.</div>
+        </div>
+        <div class="mb-3">
           <label class="form-label">Difficulty</label>
           <select class="form-select" name="difficulty">
             <option value="beginner" selected>Beginner</option>

@@ -25,6 +25,7 @@
               <th>Status</th>
               <th>Integrity</th>
               <th>Submitted At</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -50,6 +51,17 @@
                 {% endif %}
               </td>
               <td>{{ s.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td>
+                {% if s.completed %}
+                  <form method="POST" action="{{ url_for('allow_student_retake', code=quiz.code, submission_id=s.id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to allow this student to retake the quiz? This will reset their submission.');">
+                    <button type="submit" class="btn btn-sm btn-warning" title="Allow student to retake the quiz">
+                      <i class="fas fa-redo me-1"></i>Allow Retake
+                    </button>
+                  </form>
+                {% else %}
+                  <span class="text-muted">In Progress</span>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>

@@ -250,7 +250,24 @@ def health_check():
 
 @app.route('/sitemap.xml')
 def sitemap():
-    return send_file('static/sitemap.xml', mimetype='application/xml')
+    """Serve sitemap.xml for Google Search Console"""
+    try:
+        response = send_file('static/sitemap.xml', mimetype='application/xml')
+        response.headers['Content-Type'] = 'application/xml; charset=utf-8'
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        return response
+    except Exception as e:
+        print(f"Error serving sitemap: {e}")
+        # Return a basic sitemap if file read fails
+        return '''<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://unitest-ai-exam-platform.vercel.app/</loc>
+        <lastmod>2024-11-07</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>1.0</priority>
+    </url>
+</urlset>''', 200, {'Content-Type': 'application/xml; charset=utf-8'}
 
 @app.route('/robots.txt')
 def robots():

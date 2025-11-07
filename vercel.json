@@ -9,7 +9,7 @@
   "routes": [
     {
       "src": "/sitemap.xml",
-      "dest": "/static/sitemap.xml"
+      "dest": "/public/sitemap.xml"
     },
     {
       "src": "/robots.txt",

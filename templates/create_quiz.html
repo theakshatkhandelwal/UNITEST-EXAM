@@ -1,36 +1,320 @@
 {% extends "base.html" %}
 
-{% block title %}Create Shared Quiz - UniTest{% endblock %}
+{% block title %}Create Quiz - UniTest{% endblock %}
+
+{% block extra_css %}
+<style>
+    .question-item {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .question-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+    .remove-question-btn {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 5px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .option-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .option-item input[type="radio"] {
+        margin: 0;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container py-4">
-  <h2 class="mb-3">Create Shared Quiz</h2>
-  <p class="text-muted">Only teachers can create shared quizzes. Provide a title and paste questions JSON.</p>
+  <h2 class="mb-3">Create Quiz (Form-Based)</h2>
+  <p class="text-muted">Create a quiz by adding questions one by one. No JSON required!</p>
 
   <div class="card">
     <div class="card-body">
-      <form method="POST">
+      <form method="POST" id="quizForm">
         <div class="mb-3">
           <label class="form-label">Quiz Title</label>
           <input name="title" class="form-control" placeholder="e.g., Algebra Basics Quiz" required>
         </div>
+        
         <div class="mb-3">
-          <label class="form-label">Questions JSON</label>
-          <textarea name="questions_json" class="form-control" rows="10" placeholder='[
-  {"question":"2+2?","type":"mcq","options":["A. 3","B. 4","C. 5","D. 6"],"answer":"B","marks":1},
-  {"question":"Explain Pythagoras theorem","type":"subjective","answer":"a^2 + b^2 = c^2","marks":10}
-]'
-          required></textarea>
-          <div class="form-text">Supported types: "mcq" with options and answer letter; "subjective" with sample answer and marks.</div>
+          <label class="form-label">Duration (minutes, optional)</label>
+          <input name="duration" type="number" min="1" max="300" class="form-control" placeholder="e.g., 30">
         </div>
-        <div class="d-flex gap-2">
+
+        <hr class="my-4">
+        
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4>Questions</h4>
+          <button type="button" class="btn btn-primary" id="addQuestionBtn">
+            <i class="fas fa-plus me-2"></i>Add Question
+          </button>
+        </div>
+
+        <div id="questionsContainer">
+          <!-- Questions will be added here dynamically -->
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
           <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
-          <button class="btn btn-primary" type="submit">Create Quiz</button>
+          <button class="btn btn-success" type="submit">
+            <i class="fas fa-save me-2"></i>Create Quiz
+          </button>
         </div>
       </form>
     </div>
   </div>
 </div>
+
+<script>
+let questionCount = 0;
+
+document.getElementById('addQuestionBtn').addEventListener('click', function() {
+  questionCount++;
+  addQuestion(questionCount);
+});
+
+function addQuestion(index) {
+  const container = document.getElementById('questionsContainer');
+  const questionDiv = document.createElement('div');
+  questionDiv.className = 'question-item';
+  questionDiv.id = `question-${index}`;
+  
+  questionDiv.innerHTML = `
+    <div class="question-header">
+      <h5>Question ${index}</h5>
+      <button type="button" class="remove-question-btn" onclick="removeQuestion(${index})">
+        <i class="fas fa-trash"></i> Remove
+      </button>
+    </div>
+    
+    <div class="mb-3">
+      <label class="form-label">Question Type</label>
+      <select class="form-select question-type" name="question_${index}_type" onchange="updateQuestionType(${index})">
+        <option value="mcq">Multiple Choice (MCQ)</option>
+        <option value="subjective">Subjective</option>
+        <option value="coding">Coding Problem</option>
+      </select>
+    </div>
+    
+    <div class="mb-3">
+      <label class="form-label">Question Text</label>
+      <textarea class="form-control" name="question_${index}_text" rows="3" placeholder="Enter your question here..." required></textarea>
+    </div>
+    
+    <div class="mb-3">
+      <label class="form-label">Marks</label>
+      <input type="number" class="form-control" name="question_${index}_marks" min="1" value="1" required>
+    </div>
+    
+    <!-- MCQ Options -->
+    <div class="mcq-options" id="mcq-options-${index}">
+      <label class="form-label">Options (Select correct answer)</label>
+      <div class="option-item">
+        <input type="radio" name="question_${index}_correct" value="A" required>
+        <input type="text" class="form-control" name="question_${index}_option_A" placeholder="Option A" required>
+      </div>
+      <div class="option-item">
+        <input type="radio" name="question_${index}_correct" value="B" required>
+        <input type="text" class="form-control" name="question_${index}_option_B" placeholder="Option B" required>
+      </div>
+      <div class="option-item">
+        <input type="radio" name="question_${index}_correct" value="C" required>
+        <input type="text" class="form-control" name="question_${index}_option_C" placeholder="Option C" required>
+      </div>
+      <div class="option-item">
+        <input type="radio" name="question_${index}_correct" value="D" required>
+        <input type="text" class="form-control" name="question_${index}_option_D" placeholder="Option D" required>
+      </div>
+    </div>
+    
+    <!-- Subjective Answer -->
+    <div class="subjective-answer" id="subjective-answer-${index}" style="display: none;">
+      <label class="form-label">Sample Answer (for AI evaluation)</label>
+      <textarea class="form-control" name="question_${index}_answer" rows="3" placeholder="Enter the expected answer..."></textarea>
+    </div>
+    
+    <!-- Coding Question Fields -->
+    <div class="coding-fields" id="coding-fields-${index}" style="display: none;">
+      <div class="mb-3">
+        <label class="form-label">Sample Input</label>
+        <textarea class="form-control" name="question_${index}_sample_input" rows="2" placeholder="Enter sample input..."></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Sample Output</label>
+        <textarea class="form-control" name="question_${index}_sample_output" rows="2" placeholder="Enter expected output..."></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Test Cases (one per line, format: input|expected_output)</label>
+        <textarea class="form-control" name="question_${index}_test_cases" rows="4" placeholder="1|1&#10;2|4&#10;3|9"></textarea>
+        <small class="form-text text-muted">Each line: input|expected_output (e.g., "5|25" for input 5 expecting output 25)</small>
+      </div>
+    </div>
+  `;
+  
+  container.appendChild(questionDiv);
+}
+
+function updateQuestionType(index) {
+  const select = document.querySelector(`#question-${index} .question-type`);
+  const type = select.value;
+  const mcqDiv = document.getElementById(`mcq-options-${index}`);
+  const subjectiveDiv = document.getElementById(`subjective-answer-${index}`);
+  const codingDiv = document.getElementById(`coding-fields-${index}`);
+  
+  // Hide all
+  if (mcqDiv) mcqDiv.style.display = 'none';
+  if (subjectiveDiv) subjectiveDiv.style.display = 'none';
+  if (codingDiv) codingDiv.style.display = 'none';
+  
+  // Show relevant
+  if (type === 'mcq' && mcqDiv) {
+    mcqDiv.style.display = 'block';
+    // Make radio buttons required
+    document.querySelectorAll(`#question-${index} input[type="radio"]`).forEach(r => r.required = true);
+  } else if (type === 'subjective' && subjectiveDiv) {
+    subjectiveDiv.style.display = 'block';
+    document.querySelectorAll(`#question-${index} input[type="radio"]`).forEach(r => r.required = false);
+  } else if (type === 'coding' && codingDiv) {
+    codingDiv.style.display = 'block';
+    document.querySelectorAll(`#question-${index} input[type="radio"]`).forEach(r => r.required = false);
+  }
+}
+
+function removeQuestion(index) {
+  const questionDiv = document.getElementById(`question-${index}`);
+  if (questionDiv) {
+    questionDiv.remove();
+    // Renumber remaining questions
+    renumberQuestions();
+  }
+}
+
+function renumberQuestions() {
+  const questions = document.querySelectorAll('.question-item');
+  questions.forEach((q, index) => {
+    const header = q.querySelector('.question-header h5');
+    if (header) header.textContent = `Question ${index + 1}`;
+  });
+}
+
+// Convert form data to JSON before submission
+document.getElementById('quizForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  
+  const formData = new FormData(this);
+  const title = formData.get('title');
+  const duration = formData.get('duration');
+  
+  const questions = [];
+  const questionIndices = new Set();
+  
+  // Get all question indices
+  document.querySelectorAll('.question-item').forEach(item => {
+    const id = item.id;
+    const match = id.match(/question-(\d+)/);
+    if (match) {
+      questionIndices.add(parseInt(match[1]));
+    }
+  });
+  
+  // Build questions array
+  questionIndices.forEach(index => {
+    const type = formData.get(`question_${index}_type`);
+    const text = formData.get(`question_${index}_text`);
+    const marks = parseInt(formData.get(`question_${index}_marks`)) || 1;
+    
+    if (!text) return; // Skip empty questions
+    
+    const question = {
+      question: text,
+      type: type,
+      marks: marks
+    };
+    
+    if (type === 'mcq') {
+      const options = [
+        formData.get(`question_${index}_option_A`),
+        formData.get(`question_${index}_option_B`),
+        formData.get(`question_${index}_option_C`),
+        formData.get(`question_${index}_option_D`)
+      ].filter(opt => opt);
+      
+      const correct = formData.get(`question_${index}_correct`);
+      question.options = options.map((opt, i) => `${String.fromCharCode(65 + i)}. ${opt}`);
+      question.answer = correct;
+    } else if (type === 'subjective') {
+      question.answer = formData.get(`question_${index}_answer`) || '';
+    } else if (type === 'coding') {
+      question.sample_input = formData.get(`question_${index}_sample_input`) || '';
+      question.sample_output = formData.get(`question_${index}_sample_output`) || '';
+      
+      // Parse test cases
+      const testCasesText = formData.get(`question_${index}_test_cases`) || '';
+      const testCases = [];
+      testCasesText.split('\n').forEach(line => {
+        line = line.trim();
+        if (line && line.includes('|')) {
+          const [input, output] = line.split('|').map(s => s.trim());
+          if (input && output) {
+            testCases.push({
+              input: input,
+              expected_output: output,
+              is_hidden: false
+            });
+          }
+        }
+      });
+      question.test_cases = testCases;
+      question.language_constraints = ['python', 'java', 'cpp', 'c'];
+      question.time_limit_seconds = 2;
+      question.memory_limit_mb = 256;
+    }
+    
+    questions.push(question);
+  });
+  
+  if (questions.length === 0) {
+    alert('Please add at least one question!');
+    return;
+  }
+  
+  // Create hidden input with JSON
+  const jsonInput = document.createElement('input');
+  jsonInput.type = 'hidden';
+  jsonInput.name = 'questions_json';
+  jsonInput.value = JSON.stringify(questions);
+  this.appendChild(jsonInput);
+  
+  // Add duration if provided
+  if (duration) {
+    const durationInput = document.createElement('input');
+    durationInput.type = 'hidden';
+    durationInput.name = 'duration';
+    durationInput.value = duration;
+    this.appendChild(durationInput);
+  }
+  
+  // Submit form
+  this.submit();
+});
+
+// Add first question on page load
+document.addEventListener('DOMContentLoaded', function() {
+  addQuestion(1);
+});
+</script>
 {% endblock %}
-
-

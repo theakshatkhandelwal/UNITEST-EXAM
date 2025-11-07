@@ -1396,29 +1396,61 @@ def allow_student_retake(code, submission_id):
 @login_required
 def test_code():
     """Test code execution for coding questions"""
-    data = request.get_json()
-    code = data.get('code', '')
-    language = data.get('language', 'python')
-    test_input = data.get('test_input', '')
-    time_limit = data.get('time_limit', 2)
-    memory_limit = data.get('memory_limit', 256)
-    
-    result = execute_code(code, language, test_input, time_limit, memory_limit)
-    return jsonify(result)
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+        code = data.get('code', '')
+        language = data.get('language', 'python')
+        test_input = data.get('test_input', '')
+        time_limit = int(data.get('time_limit', 2))
+        memory_limit = int(data.get('memory_limit', 256))
+        
+        if not code:
+            return jsonify({'success': False, 'error': 'No code provided'}), 400
+        
+        result = execute_code(code, language, test_input, time_limit, memory_limit)
+        return jsonify({'success': True, 'result': result})
+        
+    except json.JSONDecodeError as e:
+        return jsonify({'success': False, 'error': f'Invalid JSON: {str(e)}'}), 400
+    except Exception as e:
+        print(f"Error in test_code API: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/run_test_cases', methods=['POST'])
 @login_required
 def api_run_test_cases():
     """Run test cases for coding questions"""
-    data = request.get_json()
-    code = data.get('code', '')
-    language = data.get('language', 'python')
-    test_cases = data.get('test_cases', [])
-    time_limit = data.get('time_limit', 2)
-    memory_limit = data.get('memory_limit', 256)
-    
-    result = run_test_cases(code, language, test_cases, time_limit, memory_limit)
-    return jsonify(result)
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+        code = data.get('code', '')
+        language = data.get('language', 'python')
+        test_cases = data.get('test_cases', [])
+        time_limit = int(data.get('time_limit', 2))
+        memory_limit = int(data.get('memory_limit', 256))
+        
+        if not code:
+            return jsonify({'success': False, 'error': 'Code is required'}), 400
+        if not test_cases or not isinstance(test_cases, list):
+            return jsonify({'success': False, 'error': 'Test cases must be a non-empty list'}), 400
+        
+        result = run_test_cases(code, language, test_cases, time_limit, memory_limit)
+        return jsonify({'success': True, 'result': result})
+        
+    except json.JSONDecodeError as e:
+        return jsonify({'success': False, 'error': f'Invalid JSON: {str(e)}'}), 400
+    except Exception as e:
+        print(f"Error in run_test_cases API: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # Migration route - run once to add new columns
 @app.route('/run-migration')

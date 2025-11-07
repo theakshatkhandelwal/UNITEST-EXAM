@@ -210,22 +210,61 @@ def execute_code(code, language, test_input, time_limit=2, memory_limit=256):
         response = requests.post(piston_url, json=payload, timeout=15)
         
         if response.status_code == 200:
-            result = response.json()
-            if result.get('run'):
-                run_result = result['run']
-                if run_result.get('code') == 0:
-                    return {
-                        'status': 'success',
-                        'output': run_result.get('stdout', '').strip(),
-                        'stderr': run_result.get('stderr', '').strip()
-                    }
-                else:
+            try:
+                result = response.json()
+                if not result:
                     return {
                         'status': 'error',
-                        'message': 'Runtime Error',
-                        'output': run_result.get('stdout', '').strip(),
-                        'stderr': run_result.get('stderr', '').strip() or run_result.get('stdout', '')
+                        'message': 'Empty response from execution API',
+                        'output': '',
+                        'stderr': ''
                     }
+                
+                if result.get('run'):
+                    run_result = result['run']
+                    if not run_result:
+                        return {
+                            'status': 'error',
+                            'message': 'Invalid run result from API',
+                            'output': '',
+                            'stderr': ''
+                        }
+                    
+                    if run_result.get('code') == 0:
+                        return {
+                            'status': 'success',
+                            'output': run_result.get('stdout', '').strip(),
+                            'stderr': run_result.get('stderr', '').strip()
+                        }
+                    else:
+                        return {
+                            'status': 'error',
+                            'message': 'Runtime Error',
+                            'output': run_result.get('stdout', '').strip(),
+                            'stderr': run_result.get('stderr', '').strip() or run_result.get('stdout', '')
+                        }
+                else:
+                    # No 'run' key in response - return error
+                    return {
+                        'status': 'error',
+                        'message': 'Unexpected API response format',
+                        'output': '',
+                        'stderr': str(result) if result else 'No response data'
+                    }
+            except (ValueError, KeyError) as e:
+                return {
+                    'status': 'error',
+                    'message': f'Failed to parse API response: {str(e)}',
+                    'output': '',
+                    'stderr': ''
+                }
+        else:
+            return {
+                'status': 'error',
+                'message': f'API returned status {response.status_code}',
+                'output': '',
+                'stderr': response.text[:200] if hasattr(response, 'text') else ''
+            }
     except requests.exceptions.RequestException as e:
         return {
             'status': 'error',
@@ -247,19 +286,28 @@ def run_test_cases(code, language, test_cases, time_limit=2, memory_limit=256):
     passed = 0
     
     for test_case in test_cases:
-        test_input = test_case.get('input', '')
-        expected_output = test_case.get('expected_output', '').strip()
-        is_hidden = test_case.get('is_hidden', False)
+        test_input = test_case.get('input', '') if isinstance(test_case, dict) else ''
+        expected_output = test_case.get('expected_output', '').strip() if isinstance(test_case, dict) else ''
+        is_hidden = test_case.get('is_hidden', False) if isinstance(test_case, dict) else False
         
         exec_result = execute_code(code, language, test_input, time_limit, memory_limit)
         
-        if exec_result['status'] == 'success':
-            actual_output = exec_result['output'].strip()
+        # Ensure exec_result is not None and is a dict
+        if not exec_result or not isinstance(exec_result, dict):
+            exec_result = {
+                'status': 'error',
+                'message': 'Execution returned invalid result',
+                'output': '',
+                'stderr': ''
+            }
+        
+        if exec_result.get('status') == 'success':
+            actual_output = exec_result.get('output', '').strip()
             is_correct = actual_output == expected_output
             if is_correct:
                 passed += 1
         else:
-            actual_output = exec_result.get('stderr', exec_result.get('message', 'Error'))
+            actual_output = exec_result.get('stderr', '') or exec_result.get('message', 'Error')
             is_correct = False
         
         results.append({

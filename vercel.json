@@ -9,11 +9,11 @@
   "routes": [
     {
       "src": "/sitemap.xml",
-      "dest": "/public/sitemap.xml"
+      "dest": "/sitemap.xml"
     },
     {
       "src": "/robots.txt",
-      "dest": "/static/robots.txt"
+      "dest": "/robots.txt"
     },
     {
       "src": "/(.*)",

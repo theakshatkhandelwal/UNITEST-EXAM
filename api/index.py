@@ -248,34 +248,16 @@ def health_check():
             'database': 'disconnected'
         }), 500
 
-@app.route('/sitemap.xml')
+@app.route('/sitemap.xml', methods=['GET'])
 def sitemap():
     """Serve sitemap.xml for Google Search Console - PUBLIC ROUTE (no auth required)"""
-    from flask import Response, send_file
+    from flask import Response
     from datetime import datetime, timezone
-    import os
     
     # Get current date in UTC to avoid timezone issues - format: YYYY-MM-DD
     current_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     
-    # Try to serve static file first (more reliable for Vercel)
-    sitemap_path = os.path.join(os.path.dirname(__file__), '..', 'static', 'sitemap.xml')
-    if os.path.exists(sitemap_path):
-        try:
-            # Read and update the date in the static file
-            with open(sitemap_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            # Replace old dates with current date
-            import re
-            content = re.sub(r'<lastmod>\d{4}-\d{2}-\d{2}</lastmod>', f'<lastmod>{current_date}</lastmod>', content)
-            response = Response(content, mimetype='application/xml')
-            response.headers['Content-Type'] = 'application/xml; charset=utf-8'
-            response.headers['Cache-Control'] = 'public, max-age=3600'
-            return response
-        except Exception as e:
-            print(f"Error reading static sitemap: {e}")
-    
-    # Fallback: return inline sitemap with current date
+    # Always return inline sitemap - most reliable for Vercel serverless
     sitemap_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>

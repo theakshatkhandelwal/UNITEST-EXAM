@@ -248,7 +248,7 @@ def health_check():
             'database': 'disconnected'
         }), 500
 
-@app.route('/sitemap.xml', methods=['GET'])
+@app.route('/sitemap.xml', methods=['GET', 'HEAD'])
 def sitemap():
     """Serve sitemap.xml for Google Search Console - PUBLIC ROUTE (no auth required)"""
     from flask import Response
@@ -294,7 +294,10 @@ def sitemap():
     
     response = Response(sitemap_content, mimetype='application/xml')
     response.headers['Content-Type'] = 'application/xml; charset=utf-8'
-    response.headers['Cache-Control'] = 'public, max-age=3600'
+    response.headers['Cache-Control'] = 'public, max-age=86400, s-maxage=86400'
+    response.headers['X-Robots-Tag'] = 'noindex'
+    # Allow all user agents including Googlebot
+    response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
 @app.route('/robots.txt')

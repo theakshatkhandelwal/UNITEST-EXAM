@@ -86,15 +86,15 @@
             --text-color: #212529;
             --card-bg: #ffffff;
             --border-color: #e9ecef;
-            --navbar-bg: linear-gradient(135deg, var(--gradient-bg), var(--gradient-fg));
+            --navbar-bg: linear-gradient(135deg, #0f172a, #1e293b);
         }
         
         [data-theme="dark"] {
-            --bg-color: #1a1a1a;
+            --bg-color: #0f172a;
             --text-color: #ffffff;
-            --card-bg: #2d2d2d;
-            --border-color: #404040;
-            --navbar-bg: linear-gradient(135deg, #0d47a1, #1565c0);
+            --card-bg: #1e293b;
+            --border-color: #334155;
+            --navbar-bg: linear-gradient(135deg, #0f172a, #1e293b);
         }
         
         body {
@@ -239,8 +239,27 @@
         }
         
         /* Dark mode specific styles */
-        [data-theme="dark"] .navbar {
+        .navbar {
             background: var(--navbar-bg) !important;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+            color: white !important;
+        }
+        
+        .nav-link {
+            color: rgba(255, 255, 255, 0.9) !important;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-link:hover {
+            color: white !important;
+            transform: translateY(-2px);
         }
         
         [data-theme="dark"] .bg-light {
@@ -346,10 +365,10 @@
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="bg-dark text-light py-4 mt-5">
+    <footer class="text-light py-4 mt-5" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
         <div class="container text-center">
-            <p>&copy; 2024 UniTest. All rights reserved.</p>
-            <p class="mb-0">AI-Powered Learning Platform</p>
+            <p class="mb-2">&copy; 2024 Unitest. All rights reserved.</p>
+            <p class="mb-0 text-muted">AI-Powered Learning Platform - Search "Unitest" for Smart Quiz Generation</p>
         </div>
     </footer>
 

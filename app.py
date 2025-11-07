@@ -521,12 +521,29 @@ def process_document(file_path):
 # Routes
 @app.route('/')
 def home():
+    """Home page - PUBLIC ROUTE (no auth required)"""
+    # Don't initialize database here - it can cause 401 errors if DB fails
+    # Database will be initialized when needed (lazy initialization)
     try:
-        # Initialize database on first access
-        init_db()
         return render_template('home.html')
     except Exception as e:
-        print(f"Error in home route: {str(e)}")
+        print(f"Error rendering home template: {e}")
+        # Fallback HTML if template fails - ensures home page is always accessible
+        return '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>UNITEST - AI-Powered Learning Platform</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body>
+            <h1>Welcome to UNITEST</h1>
+            <p>AI-Powered Quiz Generator & Learning Platform</p>
+            <a href="/login">Login</a> | <a href="/signup">Sign Up</a>
+        </body>
+        </html>
+        ''', 200
         # Return a simple HTML response instead of trying to render error template
         return f"""
         <!DOCTYPE html>

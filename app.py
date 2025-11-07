@@ -591,6 +591,22 @@ def health_check():
             'database': 'disconnected'
         }), 500
 
+@app.route('/test-sitemap')
+def test_sitemap():
+    """Test endpoint to verify sitemap is accessible"""
+    try:
+        from flask import Response
+        from datetime import datetime, timezone
+        current_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        return jsonify({
+            'status': 'success',
+            'sitemap_url': 'https://unitest-ai-exam-platform.vercel.app/sitemap.xml',
+            'current_date': current_date,
+            'message': 'Sitemap should be accessible at /sitemap.xml'
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
 @app.route('/sitemap.xml')
 def sitemap():
     """Serve sitemap.xml for Google Search Console - PUBLIC ROUTE (no auth required)"""

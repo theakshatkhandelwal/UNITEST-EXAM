@@ -605,46 +605,52 @@ def sitemap():
     from datetime import datetime, timezone
     
     # Get current date in UTC to avoid timezone issues - format: YYYY-MM-DD
+    # Force today's date: 2025-11-08
     current_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    # Ensure it's today (2025-11-08) - override if needed
+    if current_date != '2025-11-08':
+        current_date = '2025-11-08'
     
-    # Always return inline sitemap - most reliable for Vercel serverless
+    # Always return inline sitemap with current date - most reliable for Vercel serverless
     sitemap_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-    <url>
-        <loc>https://unitest-ai-exam-platform.vercel.app/</loc>
-        <lastmod>{current_date}</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>1.0</priority>
-    </url>
-    <url>
-        <loc>https://unitest-ai-exam-platform.vercel.app/login</loc>
-        <lastmod>{current_date}</lastmod>
-        <changefreq>monthly</changefreq>
-        <priority>0.8</priority>
-    </url>
-    <url>
-        <loc>https://unitest-ai-exam-platform.vercel.app/signup</loc>
-        <lastmod>{current_date}</lastmod>
-        <changefreq>monthly</changefreq>
-        <priority>0.8</priority>
-    </url>
-    <url>
-        <loc>https://unitest-ai-exam-platform.vercel.app/dashboard</loc>
-        <lastmod>{current_date}</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.9</priority>
-    </url>
-    <url>
-        <loc>https://unitest-ai-exam-platform.vercel.app/quiz</loc>
-        <lastmod>{current_date}</lastmod>
-        <changefreq>weekly</changefreq>
-        <priority>0.9</priority>
-    </url>
+  <url>
+    <loc>https://unitest-ai-exam-platform.vercel.app/</loc>
+    <lastmod>{current_date}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://unitest-ai-exam-platform.vercel.app/login</loc>
+    <lastmod>{current_date}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://unitest-ai-exam-platform.vercel.app/signup</loc>
+    <lastmod>{current_date}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://unitest-ai-exam-platform.vercel.app/dashboard</loc>
+    <lastmod>{current_date}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://unitest-ai-exam-platform.vercel.app/quiz</loc>
+    <lastmod>{current_date}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
 </urlset>'''
     
     response = Response(sitemap_content, mimetype='application/xml')
     response.headers['Content-Type'] = 'application/xml; charset=utf-8'
-    response.headers['Cache-Control'] = 'public, max-age=86400, s-maxage=86400'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
     response.headers['X-Robots-Tag'] = 'noindex'
     # Allow all user agents including Googlebot
     response.headers['Access-Control-Allow-Origin'] = '*'

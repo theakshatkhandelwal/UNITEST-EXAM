@@ -595,10 +595,10 @@ def health_check():
 def sitemap():
     """Serve sitemap.xml for Google Search Console - PUBLIC ROUTE (no auth required)"""
     from flask import Response
-    from datetime import datetime
+    from datetime import datetime, timezone
     
-    # Get current date in YYYY-MM-DD format
-    current_date = datetime.now().strftime('%Y-%m-%d')
+    # Get current date in UTC to avoid timezone issues - format: YYYY-MM-DD
+    current_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     
     # Always return inline sitemap with current date to ensure it's always valid
     sitemap_content = f'''<?xml version="1.0" encoding="UTF-8"?>
@@ -637,7 +637,9 @@ def sitemap():
     
     response = Response(sitemap_content, mimetype='application/xml')
     response.headers['Content-Type'] = 'application/xml; charset=utf-8'
-    response.headers['Cache-Control'] = 'public, max-age=3600'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
     return response
 
 @app.route('/robots.txt')

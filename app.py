@@ -543,33 +543,7 @@ def home():
             <a href="/login">Login</a> | <a href="/signup">Sign Up</a>
         </body>
         </html>
-        ''', 200
-        # Return a simple HTML response instead of trying to render error template
-        return f"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>UniTest AI Learning Platform</title>
-            <link rel="stylesheet" href="/static/style.css">
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-        </head>
-        <body>
-            <div class="home-container">
-                <div class="home-content">
-                    <h1 class="home-title">UniTest AI Learning Platform</h1>
-                    <p class="home-subtitle">Error: {str(e)}</p>
-                    <p>Please check the logs for more details.</p>
-                    <div class="home-buttons">
-                        <a href="/signup" class="home-btn">Sign Up</a>
-                        <a href="/login" class="home-btn secondary">Sign In</a>
-                    </div>
-                </div>
-            </div>
-        </body>
-        </html>
-        """, 500
+        ''', 200, 500
 
 @app.route('/favicon.ico')
 def favicon():

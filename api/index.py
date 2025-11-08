@@ -301,7 +301,6 @@ def sitemap():
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
-    response.headers['X-Robots-Tag'] = 'noindex'
     # Allow all user agents including Googlebot
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response

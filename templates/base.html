@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}UNITEST - AI-Powered Quiz Generator & Learning Platform | Search UNITEST{% endblock %}</title>
+    <title>{% block title %}UNITEST - #1 AI Quiz Generator & AI Learning Platform | AI-Based Quiz Maker{% endblock %}</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/jpeg" href="{{ url_for('static', filename='favicon.jpg') }}">
@@ -11,14 +11,14 @@
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon.jpg') }}">
     
     <!-- SEO Meta Tags -->
-    <meta name="description" content="{% block description %}UNITEST - The #1 AI-powered learning platform for generating personalized quizzes and assessments. Search 'UNITEST' to find the best quiz generator with Google Gemini AI, Bloom's taxonomy, and intelligent learning progression.{% endblock %}">
-    <meta name="keywords" content="{% block keywords %}UNITEST, unitest, unitest quiz, unitest platform, unitest AI, unitest learning, unitest quiz generator, unitest education, AI learning, quiz generator, education technology, personalized learning, Bloom's taxonomy, AI assessment, online education, study platform, learning management system, AI quiz maker, automated testing, educational AI, smart learning, quiz platform, assessment tool, learning analytics{% endblock %}">
+    <meta name="description" content="{% block description %}UNITEST - The #1 AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes, coding questions, and assessments with Google Gemini AI. Best AI quiz generator for students and teachers.{% endblock %}">
+    <meta name="keywords" content="{% block keywords %}unitest, UNITEST, AI quiz generator, AI based quiz generator, AI learning platform, AI learning, AI quiz maker, AI assessment tool, AI-powered quiz, AI quiz platform, unitest quiz, AI educational platform, AI learning system, AI quiz creator, AI test generator, AI exam platform, AI study tool, AI learning app, AI quiz builder, AI assessment platform, AI learning technology, AI quiz software, AI learning solution, AI quiz tool, AI learning management, AI quiz application, AI learning platform for students, AI quiz generator free, AI learning platform online, AI quiz generator for teachers, AI learning platform for education{% endblock %}">
     <meta name="author" content="Akshat Khandelwal">
     <meta name="robots" content="index, follow">
     
     <!-- Open Graph Meta Tags -->
-    <meta property="og:title" content="{% block og_title %}UNITEST - AI-Powered Learning Platform | Search UNITEST{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}UNITEST - Transform your learning with personalized AI-generated quizzes. Search 'UNITEST' for the best AI quiz platform with Google Gemini AI and Bloom's taxonomy.{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}UNITEST - #1 AI Quiz Generator & AI Learning Platform{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}UNITEST - The best AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes, coding questions, and assessments with Google Gemini AI.{% endblock %}">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://unitest.in{{ request.path }}">
     <meta property="og:image" content="https://unitest.in/static/style.css">
@@ -26,8 +26,8 @@
     
     <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="{% block twitter_title %}UNITEST - AI-Powered Learning Platform | Search UNITEST{% endblock %}">
-    <meta name="twitter:description" content="{% block twitter_description %}UNITEST - Transform your learning with personalized AI-generated quizzes. Search 'UNITEST' for the best AI quiz platform.{% endblock %}">
+    <meta name="twitter:title" content="{% block twitter_title %}UNITEST - #1 AI Quiz Generator & AI Learning Platform{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}UNITEST - The best AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes and assessments.{% endblock %}">
     <meta name="twitter:image" content="https://unitest.in/static/style.css">
     
     <!-- Additional SEO Tags -->
@@ -41,8 +41,8 @@
         "@context": "https://schema.org",
         "@type": "WebApplication",
         "name": "UNITEST",
-        "alternateName": "UNITEST AI Learning Platform",
-        "description": "UNITEST - AI-powered learning platform with personalized quiz generation and intelligent assessment. Search 'UNITEST' for the best quiz generator platform.",
+        "alternateName": "UNITEST AI Quiz Generator & AI Learning Platform",
+        "description": "UNITEST - The #1 AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes, coding questions, and assessments with Google Gemini AI. Best AI quiz generator for students and teachers.",
         "url": "https://unitest.in",
         "applicationCategory": "EducationalApplication",
         "operatingSystem": "Web Browser",
@@ -56,16 +56,20 @@
             "name": "Akshat Khandelwal"
         },
         "featureList": [
+            "AI Quiz Generator",
+            "AI-Based Quiz Creation",
+            "AI Learning Platform",
             "AI-Generated Questions",
+            "AI Assessment Tool",
             "Bloom's Taxonomy Integration",
-            "Personalized Learning Paths",
+            "Personalized AI Learning",
             "PDF Document Processing",
             "Progress Tracking",
             "Multiple Question Types",
             "Coding Question Support",
             "Real-time Code Execution"
         ],
-        "keywords": "UNITEST, unitest, unitest quiz, unitest platform, AI quiz generator, educational technology",
+        "keywords": "unitest, UNITEST, AI quiz generator, AI based quiz generator, AI learning platform, AI learning, AI quiz maker, AI assessment tool, AI-powered quiz, AI quiz platform",
         "aggregateRating": {
             "@type": "AggregateRating",
             "ratingValue": "4.8",
@@ -73,6 +77,67 @@
         }
     }
     </script>
+    
+    <!-- Organization Schema -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "UNITEST",
+        "alternateName": "UNITEST AI Quiz Generator",
+        "url": "https://unitest.in",
+        "logo": "https://unitest.in/static/favicon.jpg",
+        "description": "UNITEST - The #1 AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes and assessments.",
+        "sameAs": [],
+        "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "Customer Service"
+        }
+    }
+    </script>
+    
+    <!-- FAQ Schema -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "What is UNITEST?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "UNITEST is the #1 AI-based quiz generator and AI learning platform. It uses Google Gemini AI to create personalized quizzes, coding questions, and assessments for students and teachers."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "How does the AI quiz generator work?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "UNITEST's AI quiz generator uses Google Gemini AI to automatically create personalized quizzes based on topics, difficulty levels, and Bloom's taxonomy. It generates multiple-choice questions, subjective questions, and coding questions."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Is UNITEST free?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "Yes, UNITEST is a free AI learning platform and AI quiz generator. Students and teachers can create unlimited AI-generated quizzes and assessments."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "What makes UNITEST the best AI learning platform?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "UNITEST is the best AI learning platform because it offers AI-based quiz generation, personalized learning paths, coding question support with real-time execution, Bloom's taxonomy integration, and intelligent assessment powered by Google Gemini AI."
+                }
+            }
+        ]
+    }
+    </script>
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- CodeMirror CSS -->

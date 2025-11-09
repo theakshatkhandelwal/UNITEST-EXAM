@@ -577,11 +577,10 @@ def init_db():
     except Exception as e:
         print(f"Database initialization error: {str(e)}")
 
-# For Vercel deployment - export the app
-# Vercel expects 'app' or 'application' to be exported
-handler = app
-application = app
-
+# For Vercel deployment
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+else:
+    # This is the entry point for Vercel
+    pass

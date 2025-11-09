@@ -116,16 +116,22 @@
                 <div class="code-panel" style="display: flex; flex-direction: column; background: #1e1e1e; border-radius: 8px; overflow: hidden;">
                   <!-- Header with Language Selector -->
                   <div style="background: #252526; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #3e3e42;">
-                    <select class="form-select language-select" id="language_{{ q.id }}" name="language_{{ q.id }}" style="background: #1e1e1e; color: #d4d4d4; border: 1px solid #3e3e42; padding: 5px 10px; border-radius: 4px; max-width: 150px; font-size: 14px;">
-                      {% for lang in q.language_constraints %}
-                      <option value="{{ lang }}" {% if loop.index == 1 %}selected{% endif %} style="background: #1e1e1e; color: #d4d4d4;">{{ lang|upper }}</option>
-                      {% endfor %}
-                    </select>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                      <select class="form-select language-select" id="language_{{ q.id }}" name="language_{{ q.id }}" style="background: #1e1e1e; color: #d4d4d4; border: 1px solid #3e3e42; padding: 5px 10px; border-radius: 4px; max-width: 150px; font-size: 14px;">
+                        {% for lang in q.language_constraints %}
+                        <option value="{{ lang }}" {% if loop.index == 1 %}selected{% endif %} style="background: #1e1e1e; color: #d4d4d4;">{{ lang|upper }}</option>
+                        {% endfor %}
+                      </select>
+                      <span style="color: #858585; font-size: 12px; display: flex; align-items: center; gap: 5px;">
+                        <i class="fas fa-keyboard"></i>
+                        <span>Ctrl+Enter to run</span>
+                      </span>
+                    </div>
                     <div>
-                      <button type="button" class="btn btn-sm test-code-btn" data-question-id="{{ q.id }}" data-time-limit="{{ q.time_limit_seconds }}" data-memory-limit="{{ q.memory_limit_mb }}" style="background: #0078d4; color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                      <button type="button" class="btn btn-sm test-code-btn run-code-btn" data-question-id="{{ q.id }}" data-time-limit="{{ q.time_limit_seconds }}" data-memory-limit="{{ q.memory_limit_mb }}" style="background: #0078d4; color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; margin-right: 10px; transition: all 0.2s;" title="Run code (Ctrl+Enter)" onmouseover="this.style.background='#0066b3'" onmouseout="this.style.background='#0078d4'">
                         <i class="fas fa-play"></i> Run
                       </button>
-                      <button type="button" class="btn btn-sm reset-code-btn" data-question-id="{{ q.id }}" style="background: #3e3e42; color: #d4d4d4; border: 1px solid #555; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
+                      <button type="button" class="btn btn-sm reset-code-btn" data-question-id="{{ q.id }}" style="background: #3e3e42; color: #d4d4d4; border: 1px solid #555; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s;" title="Reset code to starter template" onmouseover="this.style.background='#4e4e52'" onmouseout="this.style.background='#3e3e42'">
                         Reset
                       </button>
                     </div>
@@ -371,7 +377,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const initialLang = languageSelect ? languageSelect.value : 'python';
         const initialCode = textarea.value || (q.starter_code && q.starter_code[initialLang] ? q.starter_code[initialLang] : '');
         
-        // Initialize CodeMirror
+        // Initialize CodeMirror with enhanced features
         const editor = CodeMirror(editorDiv, {
           value: initialCode,
           mode: languageModes[initialLang] || 'python',
@@ -384,6 +390,9 @@ document.addEventListener('DOMContentLoaded', function() {
           matchBrackets: true,
           lineWrapping: true,
           styleActiveLine: true,
+          foldGutter: true,
+          gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
+          scrollbarStyle: 'simple',
           extraKeys: {
             'Tab': function(cm) {
               if (cm.somethingSelected()) {
@@ -394,6 +403,18 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             'Shift-Tab': function(cm) {
               cm.indentSelection('subtract');
+            },
+            'Ctrl-/': function(cm) {
+              // Toggle comment
+              cm.toggleComment();
+            },
+            'Ctrl-S': function(cm) {
+              // Prevent default save, but allow custom handling
+              return false;
+            },
+            'Ctrl-F': function(cm) {
+              // Find functionality
+              return false; // Let browser handle it
             },
             'Enter': function(cm) {
               // Smart auto-indent on Enter - like modern IDEs
@@ -414,9 +435,19 @@ document.addEventListener('DOMContentLoaded', function() {
               
               // Move cursor to end of inserted text
               cm.setCursor(cursor.line + 1, indent.length);
+            },
+            'Ctrl-Enter': function(cm) {
+              // Quick run shortcut
+              const runBtn = editorDiv.closest('.code-panel').querySelector('.run-code-btn');
+              if (runBtn) runBtn.click();
             }
           }
         });
+        
+        // Refresh editor to fix any rendering issues
+        setTimeout(() => {
+          editor.refresh();
+        }, 100);
         
         // Store editor reference
         window.codeMirrorEditors[questionId] = editor;
@@ -807,36 +838,74 @@ body {
 .CodeMirror {
   height: 100% !important;
   min-height: 400px;
-  font-size: 14px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 15px;
+  line-height: 1.6;
+  font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace;
   background: #1e1e1e !important;
   color: #d4d4d4 !important;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .CodeMirror-scroll {
   min-height: 400px;
+  padding: 0 !important;
+}
+
+.CodeMirror-wrap .CodeMirror-scroll {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
 }
 
 .CodeMirror-gutters {
   background: #252526 !important;
   border-right: 1px solid #3e3e42 !important;
-  width: 50px !important;
+  width: 60px !important;
+  padding-right: 10px !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  z-index: 3 !important;
 }
 
 .CodeMirror-linenumber {
   color: #858585 !important;
-  padding: 0 8px 0 8px !important;
-  min-width: 34px !important;
+  padding: 0 10px 0 0 !important;
+  min-width: 50px !important;
+  width: 50px !important;
   text-align: right !important;
   cursor: default !important;
+  display: inline-block !important;
+  box-sizing: border-box !important;
 }
 
 .CodeMirror-lines {
-  padding-left: 8px !important;
+  padding-left: 70px !important;
+  padding-right: 10px !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.CodeMirror-sizer {
+  padding-left: 70px !important;
+  margin-left: 0 !important;
 }
 
 .CodeMirror-cursor {
-  border-left: 1px solid #fff !important;
+  border-left: 2px solid #fff !important;
+  border-left-width: 2px !important;
+}
+
+.CodeMirror-selected {
+  background: rgba(0, 120, 212, 0.3) !important;
+}
+
+.CodeMirror-focused .CodeMirror-selected {
+  background: rgba(0, 120, 212, 0.4) !important;
+}
+
+.CodeMirror-activeline-background {
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 
 /* Code editor styling */
@@ -848,6 +917,15 @@ body {
 .code-editor:focus {
   outline: none;
   box-shadow: inset 0 0 0 1px #0078d4;
+}
+
+/* Improve code panel responsiveness */
+.code-panel {
+  transition: all 0.3s ease;
+}
+
+.code-panel:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 </style>
 {% endblock %}

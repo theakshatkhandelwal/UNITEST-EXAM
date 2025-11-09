@@ -265,31 +265,31 @@ def sitemap():
     sitemap_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://unitest.in/</loc>
+    <loc>https://unitest-ai-exam-platform.vercel.app/</loc>
     <lastmod>{current_date}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://unitest.in/login</loc>
+    <loc>https://unitest-ai-exam-platform.vercel.app/login</loc>
     <lastmod>{current_date}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://unitest.in/signup</loc>
+    <loc>https://unitest-ai-exam-platform.vercel.app/signup</loc>
     <lastmod>{current_date}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://unitest.in/dashboard</loc>
+    <loc>https://unitest-ai-exam-platform.vercel.app/dashboard</loc>
     <lastmod>{current_date}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://unitest.in/quiz</loc>
+    <loc>https://unitest-ai-exam-platform.vercel.app/quiz</loc>
     <lastmod>{current_date}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>

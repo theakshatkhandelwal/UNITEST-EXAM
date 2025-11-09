@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}UNITEST - AI-Powered Quiz Generator & Learning Platform | Search UNITEST{% endblock %}</title>
     
+    <!-- Favicon -->
+    <link rel="icon" type="image/jpeg" href="{{ url_for('static', filename='favicon.jpg') }}">
+    <link rel="shortcut icon" type="image/jpeg" href="{{ url_for('static', filename='favicon.jpg') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon.jpg') }}">
+    
     <!-- SEO Meta Tags -->
     <meta name="description" content="{% block description %}UNITEST - The #1 AI-powered learning platform for generating personalized quizzes and assessments. Search 'UNITEST' to find the best quiz generator with Google Gemini AI, Bloom's taxonomy, and intelligent learning progression.{% endblock %}">
     <meta name="keywords" content="{% block keywords %}UNITEST, unitest, unitest quiz, unitest platform, unitest AI, unitest learning, unitest quiz generator, unitest education, AI learning, quiz generator, education technology, personalized learning, Bloom's taxonomy, AI assessment, online education, study platform, learning management system, AI quiz maker, automated testing, educational AI, smart learning, quiz platform, assessment tool, learning analytics{% endblock %}">

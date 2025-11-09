@@ -97,3 +97,6 @@ This will run the migration automatically (after I push the route update).
 
 **Need Help?** Check the error message in your app - it will tell you exactly which column is missing.
 
+
+
+

@@ -38,3 +38,6 @@ You submitted `/` (root URL) as a sitemap, but Google expects XML, not HTML. Tha
 
 **Remember:** Always submit `/sitemap.xml` (the XML file), not `/` (the HTML homepage)!
 
+
+
+

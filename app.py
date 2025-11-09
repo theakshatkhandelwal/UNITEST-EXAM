@@ -605,11 +605,7 @@ def sitemap():
     from datetime import datetime, timezone
     
     # Get current date in UTC to avoid timezone issues - format: YYYY-MM-DD
-    # Force today's date: 2025-11-08
     current_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    # Ensure it's today (2025-11-08) - override if needed
-    if current_date != '2025-11-08':
-        current_date = '2025-11-08'
     
     # Always return inline sitemap with current date - most reliable for Vercel serverless
     sitemap_content = f'''<?xml version="1.0" encoding="UTF-8"?>

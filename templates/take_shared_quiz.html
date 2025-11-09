@@ -405,8 +405,20 @@ document.addEventListener('DOMContentLoaded', function() {
               cm.indentSelection('subtract');
             },
             'Ctrl-/': function(cm) {
-              // Toggle comment
-              cm.toggleComment();
+              // Toggle comment (simple implementation)
+              const selection = cm.getSelection();
+              const lines = selection.split('\n');
+              const allCommented = lines.every(line => line.trim().startsWith('#') || line.trim() === '');
+              const newLines = lines.map(line => {
+                if (line.trim() === '') return line;
+                if (allCommented) {
+                  return line.replace(/^(\s*)#\s?/, '$1');
+                } else {
+                  const match = line.match(/^(\s*)/);
+                  return (match ? match[1] : '') + '# ' + line.trim();
+                }
+              });
+              cm.replaceSelection(newLines.join('\n'));
             },
             'Ctrl-S': function(cm) {
               // Prevent default save, but allow custom handling

@@ -9,7 +9,7 @@
   "routes": [
     {
       "src": "/sitemap.xml",
-      "dest": "/static/sitemap.xml",
+      "dest": "/public/sitemap.xml",
       "headers": {
         "Content-Type": "application/xml; charset=utf-8",
         "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0"

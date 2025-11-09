@@ -19,12 +19,12 @@
   {% endif %}
 
   <!-- Fullscreen Gate - Always Visible -->
-  <div id="fs-gate" style="position:fixed;inset:0;background:rgba(0,0,0,0.9);color:#fff;z-index:9999;display:flex;align-items:center;justify-content:center;pointer-events:auto;">
-    <div style="text-align:center;max-width:520px;padding:16px;pointer-events:auto;">
+  <div id="fs-gate" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);color:#fff;z-index:99999;display:flex;align-items:center;justify-content:center;">
+    <div style="text-align:center;max-width:520px;padding:16px;position:relative;z-index:100000;">
       <h3 class="mb-3">🔒 Enter Fullscreen to Start Quiz</h3>
       <p class="mb-3">You must be in fullscreen mode to take this test.</p>
       <p class="mb-3">Exiting fullscreen will end your session.</p>
-      <button class="btn btn-primary btn-lg" onclick="startQuiz()" style="pointer-events:auto;cursor:pointer;">
+      <button id="startQuizBtn" class="btn btn-primary btn-lg" style="cursor:pointer;pointer-events:auto;position:relative;z-index:100001;min-width:200px;padding:12px 24px;font-size:1.1rem;">
         Enter Fullscreen & Start
       </button>
     </div>
@@ -218,6 +218,42 @@ function startQuiz() {
     console.log('No fullscreen support');
     showQuiz();
   }
+}
+
+// Ensure button is clickable - attach event listener
+function attachStartButtonListener() {
+  const startBtn = document.getElementById('startQuizBtn');
+  if (startBtn) {
+    // Remove any existing listeners and add fresh one
+    const newBtn = startBtn.cloneNode(true);
+    startBtn.parentNode.replaceChild(newBtn, startBtn);
+    
+    newBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('Start button clicked');
+      startQuiz();
+      return false;
+    });
+    
+    // Also ensure it's visible and clickable
+    newBtn.style.pointerEvents = 'auto';
+    newBtn.style.cursor = 'pointer';
+    newBtn.style.zIndex = '100001';
+    newBtn.style.position = 'relative';
+    
+    console.log('Start button listener attached');
+  } else {
+    console.warn('Start button not found');
+  }
+}
+
+// Try immediately (in case DOM is already loaded)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', attachStartButtonListener);
+} else {
+  // DOM is already loaded
+  attachStartButtonListener();
 }
 
 function showQuiz() {
@@ -885,6 +921,36 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 body { 
   -webkit-touch-callout: none; 
+}
+
+/* Ensure fullscreen gate and button are always clickable */
+#fs-gate {
+  pointer-events: auto !important;
+  z-index: 99999 !important;
+}
+
+#fs-gate * {
+  pointer-events: auto !important;
+}
+
+#startQuizBtn {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 100001 !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -ms-user-select: none !important;
+  position: relative !important;
+}
+
+#startQuizBtn:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+  transition: all 0.2s ease;
+}
+
+#startQuizBtn:active {
+  transform: scale(0.98);
 }
 
 /* Responsive design for coding questions */

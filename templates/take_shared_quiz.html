@@ -19,12 +19,12 @@
   {% endif %}
 
   <!-- Fullscreen Gate - Always Visible -->
-  <div id="fs-gate" style="position:fixed;inset:0;background:rgba(0,0,0,0.9);color:#fff;z-index:9999;display:flex;align-items:center;justify-content:center;">
-    <div style="text-align:center;max-width:520px;padding:16px;">
+  <div id="fs-gate" style="position:fixed;inset:0;background:rgba(0,0,0,0.9);color:#fff;z-index:9999;display:flex;align-items:center;justify-content:center;pointer-events:auto;">
+    <div style="text-align:center;max-width:520px;padding:16px;pointer-events:auto;">
       <h3 class="mb-3">🔒 Enter Fullscreen to Start Quiz</h3>
       <p class="mb-3">You must be in fullscreen mode to take this test.</p>
       <p class="mb-3">Exiting fullscreen will end your session.</p>
-      <button class="btn btn-primary btn-lg" onclick="startQuiz()">
+      <button class="btn btn-primary btn-lg" onclick="startQuiz()" style="pointer-events:auto;cursor:pointer;">
         Enter Fullscreen & Start
       </button>
     </div>
@@ -140,7 +140,7 @@
                   <!-- Code Editor -->
                   <div style="flex: 1; position: relative; min-height: 400px;">
                     <textarea class="form-control code-editor" name="code_{{ q.id }}" id="code_{{ q.id }}" style="position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0;">{{ q.starter_code.get(q.language_constraints[0] if q.language_constraints else 'python', '') if q.starter_code else '' }}</textarea>
-                    <div id="codeeditor_{{ q.id }}" style="height: 100%; min-height: 400px;"></div>
+                    <div id="codeeditor_{{ q.id }}" style="height: 100%; min-height: 400px; position: relative; z-index: 1; pointer-events: auto;"></div>
                   </div>
                   
                   <!-- Test Results Panel -->
@@ -375,7 +375,29 @@ document.addEventListener('DOMContentLoaded', function() {
       if (textarea && editorDiv) {
         // Get initial language
         const initialLang = languageSelect ? languageSelect.value : 'python';
-        const initialCode = textarea.value || (q.starter_code && q.starter_code[initialLang] ? q.starter_code[initialLang] : '');
+        
+        // Parse starter_code if it's a JSON string
+        let starterCodeObj = q.starter_code;
+        if (typeof starterCodeObj === 'string') {
+          try {
+            starterCodeObj = JSON.parse(starterCodeObj);
+          } catch (e) {
+            console.warn('Failed to parse starter_code JSON:', e);
+            starterCodeObj = {};
+          }
+        }
+        
+        // Get initial code from textarea or starter_code
+        let initialCode = textarea.value;
+        if (!initialCode || initialCode.trim() === '') {
+          if (starterCodeObj && starterCodeObj[initialLang]) {
+            initialCode = starterCodeObj[initialLang];
+          } else if (starterCodeObj && Object.keys(starterCodeObj).length > 0) {
+            // Use first available language's code
+            const firstLang = Object.keys(starterCodeObj)[0];
+            initialCode = starterCodeObj[firstLang];
+          }
+        }
         
         // Initialize CodeMirror with enhanced features
         const editor = CodeMirror(editorDiv, {
@@ -456,18 +478,40 @@ document.addEventListener('DOMContentLoaded', function() {
           }
         });
         
-        // Refresh editor to fix any rendering issues
-        setTimeout(() => {
-          editor.refresh();
-        }, 100);
-        
         // Store editor reference
         window.codeMirrorEditors[questionId] = editor;
+        
+        // Set initial value - ensure code is always visible
+        if (!initialCode || initialCode.trim() === '') {
+          // Set default starter code based on language
+          const defaultCode = {
+            'python': '# Write your code here\n',
+            'java': '// Write your code here\n',
+            'cpp': '// Write your code here\n',
+            'c': '// Write your code here\n',
+            'javascript': '// Write your code here\n'
+          };
+          initialCode = defaultCode[initialLang] || defaultCode['python'];
+        }
+        
+        // Set the code in editor and textarea
+        editor.setValue(initialCode);
+        textarea.value = initialCode;
+        
+        // Ensure editor is focusable and clickable
+        editorDiv.style.pointerEvents = 'auto';
+        editorDiv.style.cursor = 'text';
         
         // Sync CodeMirror to textarea on change
         editor.on('change', function() {
           textarea.value = editor.getValue();
         });
+        
+        // Refresh editor to fix any rendering issues
+        setTimeout(() => {
+          editor.refresh();
+          editor.focus();
+        }, 200);
         
         // Update mode when language changes
         if (languageSelect) {
@@ -479,9 +523,21 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update code if switching languages
             const codingQ = codingQuestions.find(q => q.id == questionId && q.qtype === 'coding');
             if (codingQ && codingQ.starter_code) {
-              const starterCode = codingQ.starter_code[newLang] || '';
-              if (editor.getValue().trim() === '' || editor.getValue() === (codingQ.starter_code[Object.keys(codingQ.starter_code)[0]] || '')) {
-                editor.setValue(starterCode);
+              // Parse starter_code if it's a JSON string
+              let starterCodeObj = codingQ.starter_code;
+              if (typeof starterCodeObj === 'string') {
+                try {
+                  starterCodeObj = JSON.parse(starterCodeObj);
+                } catch (e) {
+                  starterCodeObj = {};
+                }
+              }
+              
+              const starterCode = starterCodeObj[newLang] || '';
+              const currentCode = editor.getValue();
+              // Only update if editor is empty or has default/old starter code
+              if (currentCode.trim() === '' || (starterCode && currentCode === starterCodeObj[Object.keys(starterCodeObj)[0]])) {
+                editor.setValue(starterCode || '');
               }
             }
             // Hide test results when language changes
@@ -857,6 +913,10 @@ body {
   color: #d4d4d4 !important;
   border-radius: 8px;
   overflow: hidden;
+  position: relative !important;
+  z-index: 1 !important;
+  pointer-events: auto !important;
+  cursor: text !important;
 }
 
 .CodeMirror-scroll {

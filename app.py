@@ -69,7 +69,10 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)  # Increased from 120 to 255
     role = db.Column(db.String(20), default='student', nullable=False)  # 'student' or 'teacher'
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)  # Admin access flag
+    last_login = db.Column(db.DateTime)  # Last login timestamp
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    login_history = db.relationship('LoginHistory', backref='user', lazy=True, cascade='all, delete-orphan')
 
 class Progress(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -138,6 +141,13 @@ class QuizAnswer(db.Model):
     test_results_json = db.Column(db.Text)  # JSON array of test case results
     passed_test_cases = db.Column(db.Integer, default=0)
     total_test_cases = db.Column(db.Integer, default=0)
+
+class LoginHistory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    login_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    ip_address = db.Column(db.String(45))  # IPv6 can be up to 45 characters
+    user_agent = db.Column(db.String(255))  # Browser/user agent string
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -722,13 +732,29 @@ def login():
 
             user = db.session.query(User).filter_by(username=username).first()
             if user and check_password_hash(user.password_hash, password):
+                # Track login
+                login_time = datetime.utcnow()
+                user.last_login = login_time
+                
+                # Record login history
+                login_history = LoginHistory(
+                    user_id=user.id,
+                    login_time=login_time,
+                    ip_address=request.remote_addr,
+                    user_agent=request.headers.get('User-Agent', 'Unknown')
+                )
+                db.session.add(login_history)
+                db.session.commit()
+                
                 login_user(user)
+                flash('Logged in successfully!', 'success')
                 return redirect(url_for('dashboard'))
             else:
                 flash('Invalid username or password', 'error')
                 return redirect(url_for('login'))
         except Exception as e:
             print(f"Error in login: {str(e)}")
+            db.session.rollback()
             flash(f'Login error: {str(e)}', 'error')
             return redirect(url_for('login'))
 
@@ -2196,7 +2222,12 @@ def download_pdf():
 @app.route('/admin/users')
 @login_required
 def admin_users():
-    """Admin route to view user statistics"""
+    """Admin route to view user statistics - ADMIN ONLY"""
+    # Check if user is admin
+    if not current_user.is_admin:
+        flash('Access denied: Administrator privileges required.', 'error')
+        return redirect(url_for('dashboard'))
+    
     try:
         from sqlalchemy import text, func
         from datetime import datetime, timedelta
@@ -2247,6 +2278,61 @@ def admin_users():
             func.date(User.created_at).desc()
         ).all()
         
+        # === LOGIN STATISTICS ===
+        # Total logins (all time)
+        total_logins = db.session.query(func.count(LoginHistory.id)).scalar() or 0
+        
+        # Unique users who have logged in
+        unique_logged_in_users = db.session.query(func.count(func.distinct(LoginHistory.user_id))).scalar() or 0
+        
+        # Logins today
+        logins_today = db.session.query(func.count(LoginHistory.id)).filter(
+            LoginHistory.login_time >= today_start
+        ).scalar() or 0
+        
+        # Logins this week
+        logins_this_week = db.session.query(func.count(LoginHistory.id)).filter(
+            LoginHistory.login_time >= this_week_start
+        ).scalar() or 0
+        
+        # Logins this month
+        logins_this_month = db.session.query(func.count(LoginHistory.id)).filter(
+            LoginHistory.login_time >= this_month_start
+        ).scalar() or 0
+        
+        # Logins by date (last 30 days)
+        logins_by_date = db.session.query(
+            func.date(LoginHistory.login_time).label('date'),
+            func.count(LoginHistory.id).label('count')
+        ).filter(
+            LoginHistory.login_time >= thirty_days_ago
+        ).group_by(
+            func.date(LoginHistory.login_time)
+        ).order_by(
+            func.date(LoginHistory.login_time).desc()
+        ).all()
+        
+        # Recent logins (last 20)
+        recent_logins = db.session.query(LoginHistory).join(User).order_by(
+            LoginHistory.login_time.desc()
+        ).limit(20).all()
+        
+        # Most active users (by login count)
+        most_active_users = db.session.query(
+            User.username,
+            User.email,
+            func.count(LoginHistory.id).label('login_count'),
+            func.max(LoginHistory.login_time).label('last_login')
+        ).outerjoin(
+            LoginHistory, User.id == LoginHistory.user_id
+        ).group_by(
+            User.id, User.username, User.email
+        ).having(
+            func.count(LoginHistory.id) > 0
+        ).order_by(
+            func.count(LoginHistory.id).desc()
+        ).limit(10).all()
+        
         # Convert users_by_role to dictionary
         users_by_role_dict = {role: count for role, count in users_by_role} if users_by_role else {}
         
@@ -2257,7 +2343,16 @@ def admin_users():
             users_this_week=users_this_week or 0,
             users_today=users_today or 0,
             recent_users=recent_users,
-            signups_by_date=signups_by_date
+            signups_by_date=signups_by_date,
+            # Login statistics
+            total_logins=total_logins,
+            unique_logged_in_users=unique_logged_in_users,
+            logins_today=logins_today,
+            logins_this_week=logins_this_week,
+            logins_this_month=logins_this_month,
+            logins_by_date=logins_by_date,
+            recent_logins=recent_logins,
+            most_active_users=most_active_users
         )
     except Exception as e:
         print(f"Error in admin_users: {str(e)}")
@@ -2308,6 +2403,35 @@ def init_db():
                     print("Updated password_hash column length to 255")
             except Exception as e:
                 print(f"Password hash column update failed (may already be correct): {e}")
+            
+            # Check if is_admin column exists, if not add it
+            try:
+                from sqlalchemy import text
+                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='is_admin'"))
+                if not result.fetchone():
+                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
+                    db.session.commit()
+                    print("Added is_admin column to user table")
+            except Exception as e:
+                print(f"is_admin column check/add failed (may already exist): {e}")
+            
+            # Check if last_login column exists, if not add it
+            try:
+                from sqlalchemy import text
+                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='last_login'"))
+                if not result.fetchone():
+                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN last_login TIMESTAMP"))
+                    db.session.commit()
+                    print("Added last_login column to user table")
+            except Exception as e:
+                print(f"last_login column check/add failed (may already exist): {e}")
+            
+            # Create login_history table if it doesn't exist
+            try:
+                db.create_all()
+                print("Created login_history table if it didn't exist")
+            except Exception as e:
+                print(f"Login history table creation failed (may already exist): {e}")
             
             print("Database tables created successfully!")
             print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")

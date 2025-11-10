@@ -11,8 +11,11 @@
         </a>
     </div>
 
-    <!-- Summary Cards -->
+    <!-- Summary Cards - Signups -->
     <div class="row mb-4">
+        <div class="col-md-12 mb-3">
+            <h4><i class="fas fa-user-plus me-2"></i>User Signups</h4>
+        </div>
         <div class="col-md-3">
             <div class="card text-center">
                 <div class="card-body">
@@ -42,6 +45,46 @@
                 <div class="card-body">
                     <h5 class="card-title text-muted">Today</h5>
                     <h2 class="text-warning">{{ users_today }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards - Logins -->
+    <div class="row mb-4">
+        <div class="col-md-12 mb-3">
+            <h4><i class="fas fa-sign-in-alt me-2"></i>Login Activity (All Time)</h4>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-primary">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">Total Logins</h5>
+                    <h2 class="text-primary">{{ total_logins }}</h2>
+                    <small class="text-muted">{{ unique_logged_in_users }} unique users</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-success">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">This Month</h5>
+                    <h2 class="text-success">{{ logins_this_month }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-info">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">This Week</h5>
+                    <h2 class="text-info">{{ logins_this_week }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-warning">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">Today</h5>
+                    <h2 class="text-warning">{{ logins_today }}</h2>
                 </div>
             </div>
         </div>
@@ -136,8 +179,133 @@
         </div>
     </div>
 
+    <!-- Login Statistics Row -->
+    <div class="row mb-4">
+        <!-- Logins by Date -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Logins (Last 30 Days)</h5>
+                </div>
+                <div class="card-body">
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Logins</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in logins_by_date %}
+                                <tr>
+                                    <td>
+                                        {% if item.date %}
+                                            {% if item.date is string %}
+                                                {{ item.date }}
+                                            {% else %}
+                                                {{ item.date.strftime('%Y-%m-%d') }}
+                                            {% endif %}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                    <td><strong>{{ item.count }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                                {% if not logins_by_date %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted">No logins in the last 30 days</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Most Active Users -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-fire me-2"></i>Most Active Users (Top 10)</h5>
+                </div>
+                <div class="card-body">
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Logins</th>
+                                    <th>Last Login</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in most_active_users %}
+                                <tr>
+                                    <td><strong>{{ user.username }}</strong></td>
+                                    <td><span class="badge bg-primary">{{ user.login_count }}</span></td>
+                                    <td>
+                                        {% if user.last_login %}
+                                            {{ user.last_login.strftime('%Y-%m-%d %H:%M') if user.last_login else 'N/A' }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if not most_active_users %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No login data available</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Logins -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-history me-2"></i>Recent Logins (Last 20)</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Login Time</th>
+                            <th>IP Address</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for login in recent_logins %}
+                        <tr>
+                            <td><strong>{{ login.user.username }}</strong></td>
+                            <td>{{ login.user.email }}</td>
+                            <td>{{ login.login_time.strftime('%Y-%m-%d %H:%M:%S') if login.login_time else 'N/A' }}</td>
+                            <td><small class="text-muted">{{ login.ip_address or 'N/A' }}</small></td>
+                        </tr>
+                        {% endfor %}
+                        {% if not recent_logins %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">No login history available</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- Recent Signups -->
-    <div class="card">
+    <div class="card mb-4">
         <div class="card-header">
             <h5 class="mb-0"><i class="fas fa-user-plus me-2"></i>Recent Signups (Last 10)</h5>
         </div>

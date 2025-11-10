@@ -2193,6 +2193,79 @@ def download_pdf():
         mimetype='application/pdf'
     )
 
+@app.route('/admin/users')
+@login_required
+def admin_users():
+    """Admin route to view user statistics"""
+    try:
+        from sqlalchemy import text, func
+        from datetime import datetime, timedelta
+        
+        # Get total users
+        total_users = db.session.query(func.count(User.id)).scalar()
+        
+        # Get users by role
+        users_by_role = db.session.query(
+            User.role,
+            func.count(User.id).label('count')
+        ).group_by(User.role).all()
+        
+        # Get users this month
+        this_month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        users_this_month = db.session.query(func.count(User.id)).filter(
+            User.created_at >= this_month_start
+        ).scalar()
+        
+        # Get users this week
+        this_week_start = datetime.utcnow() - timedelta(days=datetime.utcnow().weekday())
+        this_week_start = this_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        users_this_week = db.session.query(func.count(User.id)).filter(
+            User.created_at >= this_week_start
+        ).scalar()
+        
+        # Get users today
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        users_today = db.session.query(func.count(User.id)).filter(
+            User.created_at >= today_start
+        ).scalar()
+        
+        # Get recent signups (last 10)
+        recent_users = db.session.query(User).order_by(
+            User.created_at.desc()
+        ).limit(10).all()
+        
+        # Get signups by date (last 30 days)
+        thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+        signups_by_date = db.session.query(
+            func.date(User.created_at).label('date'),
+            func.count(User.id).label('count')
+        ).filter(
+            User.created_at >= thirty_days_ago
+        ).group_by(
+            func.date(User.created_at)
+        ).order_by(
+            func.date(User.created_at).desc()
+        ).all()
+        
+        # Convert users_by_role to dictionary
+        users_by_role_dict = {role: count for role, count in users_by_role} if users_by_role else {}
+        
+        return render_template('admin_users.html',
+            total_users=total_users or 0,
+            users_by_role=users_by_role_dict,
+            users_this_month=users_this_month or 0,
+            users_this_week=users_this_week or 0,
+            users_today=users_today or 0,
+            recent_users=recent_users,
+            signups_by_date=signups_by_date
+        )
+    except Exception as e:
+        print(f"Error in admin_users: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Error loading user statistics: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
+
 # Error handlers
 @app.errorhandler(500)
 def internal_error(error):

@@ -495,38 +495,209 @@ Return ONLY valid JSON array. Do NOT include any markdown code blocks, explanati
         return None
 
 def process_document(file_path):
-    """Process uploaded document to extract content"""
+    """Process uploaded document to extract content and topic"""
     try:
         # Ensure NLTK data is available
         ensure_nltk_data()
         
         content = ""
         if file_path.lower().endswith('.pdf'):
-            with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                for page in pdf_reader.pages:
-                    content += page.extract_text()
+            try:
+                with open(file_path, 'rb') as pdf_file:
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+                    
+                    # Check if PDF is encrypted
+                    if pdf_reader.is_encrypted:
+                        print("PDF is encrypted, attempting to decrypt...")
+                        try:
+                            pdf_reader.decrypt('')
+                        except Exception as decrypt_error:
+                            print(f"Could not decrypt PDF: {decrypt_error}")
+                            # Try using AI to extract topic from filename or metadata
+                            return extract_topic_from_pdf_metadata(file_path)
+                    
+                    # Extract text from all pages
+                    num_pages = len(pdf_reader.pages)
+                    print(f"Processing PDF with {num_pages} pages...")
+                    
+                    for i, page in enumerate(pdf_reader.pages):
+                        try:
+                            page_text = page.extract_text()
+                            if page_text:
+                                content += page_text + " "
+                        except Exception as page_error:
+                            print(f"Error extracting text from page {i+1}: {page_error}")
+                            continue
+                    
+                    # If no content extracted, try metadata
+                    if not content.strip():
+                        print("No text extracted from PDF pages, trying metadata...")
+                        metadata_topic = extract_topic_from_pdf_metadata(file_path)
+                        if metadata_topic:
+                            return metadata_topic
+                        
+                        # If still no content, try using AI with filename
+                        print("Attempting AI-based topic extraction from filename...")
+                        return extract_topic_from_filename(file_path)
+                        
+            except Exception as pdf_error:
+                print(f"Error reading PDF file: {pdf_error}")
+                # Fallback to filename-based extraction
+                return extract_topic_from_filename(file_path)
         else:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                content = file.read()
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as text_file:
+                content = text_file.read()
 
-        if not content.strip():
-            return None
+        # If still no content, return None
+        if not content or not content.strip():
+            print("No content extracted from document")
+            return extract_topic_from_filename(file_path)
 
-        tokens = word_tokenize(content.lower())
-        stop_words = set(stopwords.words('english'))
-        meaningful_words = [word for word in tokens if word.isalnum() and word not in stop_words]
+        # Extract topic using word frequency analysis
+        try:
+            tokens = word_tokenize(content.lower())
+            stop_words = set(stopwords.words('english'))
+            meaningful_words = [word for word in tokens if word.isalnum() and len(word) > 2 and word not in stop_words]
 
-        if not meaningful_words:
-            return None
+            if not meaningful_words:
+                print("No meaningful words found after filtering")
+                return extract_topic_from_filename(file_path)
 
-        word_freq = Counter(meaningful_words)
-        main_topic = word_freq.most_common(1)[0][0].capitalize()
-        return main_topic
+            word_freq = Counter(meaningful_words)
+            # Get top 3 most common words to better identify topic
+            top_words = word_freq.most_common(5)
+            print(f"Top words found: {top_words}")
+            
+            # Filter out common generic words
+            generic_words = {'chapter', 'page', 'section', 'question', 'answer', 'example', 'figure', 'table'}
+            for word, count in top_words:
+                if word not in generic_words and len(word) > 3:
+                    main_topic = word.capitalize()
+                    print(f"Extracted topic: {main_topic}")
+                    return main_topic
+            
+            # If all top words are generic, use the first one
+            if top_words:
+                main_topic = top_words[0][0].capitalize()
+                print(f"Extracted topic (fallback): {main_topic}")
+                return main_topic
+                
+        except Exception as token_error:
+            print(f"Error in tokenization: {token_error}")
+            return extract_topic_from_filename(file_path)
+
+        return None
 
     except Exception as e:
         print(f"Error processing document: {str(e)}")
-        return None
+        import traceback
+        traceback.print_exc()
+        # Final fallback: try to extract from filename
+        return extract_topic_from_filename(file_path)
+
+def extract_topic_from_pdf_metadata(file_path):
+    """Extract topic from PDF metadata"""
+    try:
+        with open(file_path, 'rb') as pdf_file:
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            metadata = pdf_reader.metadata
+            
+            if metadata:
+                # Try to extract topic from title or subject
+                title = metadata.get('/Title', '')
+                subject = metadata.get('/Subject', '')
+                
+                if title:
+                    # Extract first meaningful word from title
+                    words = title.split()
+                    for word in words:
+                        if len(word) > 3 and word.isalnum():
+                            return word.capitalize()
+                
+                if subject:
+                    words = subject.split()
+                    for word in words:
+                        if len(word) > 3 and word.isalnum():
+                            return word.capitalize()
+    except Exception as e:
+        print(f"Error extracting from metadata: {e}")
+    
+    return None
+
+def extract_topic_from_filename(file_path):
+    """Extract topic from filename as last resort"""
+    try:
+        import os
+        # Get filename from path
+        filename = os.path.basename(file_path)
+        # Remove extension
+        filename_without_ext = os.path.splitext(filename)[0]
+        
+        print(f"Attempting to extract topic from filename: {filename_without_ext}")
+        
+        # Try to extract meaningful words from filename
+        # Remove common prefixes/suffixes and clean up
+        filename_clean = filename_without_ext.replace('_', ' ').replace('-', ' ').replace('.', ' ')
+        # Remove multiple spaces
+        filename_clean = ' '.join(filename_clean.split())
+        words = filename_clean.split()
+        
+        print(f"Words extracted from filename: {words}")
+        
+        # Filter out common words (expanded list)
+        common_words = {'pdf', 'document', 'file', 'quiz', 'question', 'bank', 'qb', 'notes', 'paper', 'exam', 'test', 'assignment', 'hw', 'homework'}
+        
+        # First pass: look for meaningful words (longer than 3 chars, not common)
+        for word in words:
+            word_clean = word.lower().strip('.,!?()[]{}')
+            # Remove any non-alphanumeric characters except numbers
+            word_clean = ''.join(c for c in word_clean if c.isalnum() or c.isdigit())
+            if len(word_clean) > 3 and word_clean not in common_words:
+                topic = word_clean.capitalize()
+                print(f"Extracted topic from filename (first pass): {topic}")
+                return topic
+        
+        # Second pass: look for any word longer than 2 characters (includes codes like "BCS702")
+        for word in words:
+            word_clean = word.upper().strip('.,!?()[]{}')
+            # Keep alphanumeric characters (including numbers)
+            word_clean = ''.join(c for c in word_clean if c.isalnum() or c.isdigit())
+            if len(word_clean) >= 3 and word_clean not in common_words:
+                # Check if it looks like a course code (e.g., BCS702, CS101)
+                if any(c.isdigit() for c in word_clean) and any(c.isalpha() for c in word_clean):
+                    topic = word_clean
+                    print(f"Extracted topic from filename (course code): {topic}")
+                    return topic
+                elif len(word_clean) > 3:
+                    topic = word_clean.capitalize()
+                    print(f"Extracted topic from filename (second pass): {topic}")
+                    return topic
+        
+        # Third pass: use first meaningful word (minimum 2 chars)
+        for word in words:
+            word_clean = word.upper().strip('.,!?()[]{}')
+            word_clean = ''.join(c for c in word_clean if c.isalnum() or c.isdigit())
+            if len(word_clean) >= 2 and word_clean not in common_words:
+                topic = word_clean
+                print(f"Extracted topic from filename (third pass): {topic}")
+                return topic
+        
+        # Last resort: use first 10 characters of filename (cleaned)
+        if filename_without_ext:
+            # Remove special characters
+            topic_clean = ''.join(c for c in filename_without_ext[:15] if c.isalnum() or c.isspace())
+            topic_clean = topic_clean.strip()
+            if topic_clean:
+                topic = topic_clean.capitalize()
+                print(f"Using filename as topic (fallback): {topic}")
+                return topic
+            
+    except Exception as e:
+        print(f"Error extracting from filename: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return None
 
 # Routes
 @app.route('/')
@@ -2077,25 +2248,55 @@ def upload_pdf():
             import tempfile
             import os
             
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            # Ensure temp directory exists
+            temp_dir = tempfile.gettempdir()
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', dir=temp_dir) as tmp_file:
                 file.save(tmp_file.name)
                 tmp_path = tmp_file.name
+            
+            original_filename = file.filename
+            print(f"Processing PDF: {original_filename} (saved to {tmp_path})")
             
             # Process the PDF to extract topic
             topic = process_document(tmp_path)
             
+            # If no topic extracted, try filename extraction using original filename
+            if not topic:
+                print("No topic extracted from PDF content, trying filename extraction...")
+                # Create a mock path with original filename for extraction
+                import os
+                temp_dir = os.path.dirname(tmp_path)
+                mock_path = os.path.join(temp_dir, original_filename)
+                topic = extract_topic_from_filename(mock_path)
+            
             # Clean up temporary file
-            os.unlink(tmp_path)
+            try:
+                os.unlink(tmp_path)
+            except Exception as cleanup_error:
+                print(f"Warning: Could not delete temp file: {cleanup_error}")
             
             if topic:
-                return jsonify({'success': True, 'topic': topic})
+                print(f"Successfully extracted topic: {topic}")
+                return jsonify({'success': True, 'topic': topic, 'message': f'Topic extracted: {topic}'})
             else:
-                return jsonify({'success': False, 'error': 'Could not extract topic from PDF'})
+                # Provide helpful error message
+                error_msg = (
+                    'Could not extract topic from PDF. This might happen if:\n'
+                    '- The PDF is scanned (image-based)\n'
+                    '- The PDF is encrypted or protected\n'
+                    '- The PDF contains no text\n'
+                    'Please enter the topic manually.'
+                )
+                return jsonify({'success': False, 'error': error_msg})
                 
         except Exception as e:
-            return jsonify({'success': False, 'error': f'Error processing PDF: {str(e)}'})
+            print(f"Error processing PDF: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            error_msg = f'Error processing PDF: {str(e)}. Please try again or enter topic manually.'
+            return jsonify({'success': False, 'error': error_msg})
     
-    return jsonify({'success': False, 'error': 'Invalid file format. Please upload a PDF.'})
+    return jsonify({'success': False, 'error': 'Invalid file format. Please upload a PDF file.'})
 
 @app.route('/ai_learn', methods=['POST'])
 @login_required

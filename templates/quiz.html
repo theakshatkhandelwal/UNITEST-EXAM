@@ -28,17 +28,17 @@
                                         <i class="fas fa-lightbulb me-1"></i>Enter any subject or topic you want to learn about
                                     </div>
                                     <div class="form-text text-muted">
-                                        <i class="fas fa-info-circle me-1"></i><strong>OR</strong> upload a PDF below
+                                        <i class="fas fa-info-circle me-1"></i><strong>OR</strong> upload PDF file(s) below to generate questions from PDF content
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <label for="file_upload" class="form-label fw-bold fs-5">
-                                        <i class="fas fa-file-upload me-2"></i>Upload PDF File
+                                        <i class="fas fa-file-upload me-2"></i>Upload PDF File(s)
                                     </label>
                                     <input type="file" class="form-control" id="file_upload" name="file_upload" 
-                                           accept=".pdf" onchange="handleFileUpload(this)">
+                                           accept=".pdf" multiple onchange="handleFileUpload(this)">
                                     <div class="form-text">
-                                        <i class="fas fa-info-circle me-1"></i>Upload PDF to extract topic automatically
+                                        <i class="fas fa-info-circle me-1"></i>Upload one or multiple PDFs to generate questions from PDF content
                                     </div>
                                 </div>
                             </div>
@@ -180,11 +180,6 @@
                             </button>
                         </div>
                     </form>
-                    
-                    <!-- Hidden form for file uploads -->
-                    <form id="fileUploadForm" method="POST" enctype="multipart/form-data" style="display: none;">
-                        <input type="hidden" name="file_upload" id="hiddenFileUpload">
-                    </form>
                 </div>
             </div>
 
@@ -270,59 +265,42 @@ document.addEventListener('DOMContentLoaded', function() {
     
     form.addEventListener('submit', function(e) {
         const topic = document.getElementById('topic').value.trim();
-        const fileUpload = document.getElementById('file_upload').files[0];
+        const fileUploads = document.getElementById('file_upload').files;
+        const fileCount = fileUploads.length;
         
-        if (!topic && !fileUpload) {
+        if (!topic && fileCount === 0) {
             e.preventDefault();
-            showAlert('danger', 'Please either enter a topic OR upload a PDF file.');
+            showAlert('danger', 'Please either enter a topic OR upload PDF file(s) to generate questions from.');
             return false;
         }
         
-        // If both are provided, prioritize PDF
-        if (topic && fileUpload) {
-            document.getElementById('topic').value = '';
-            showAlert('info', 'PDF uploaded - topic field cleared. Using PDF content.');
+        // Show info if PDFs are uploaded
+        if (fileCount > 0) {
+            const fileNames = Array.from(fileUploads).map(f => f.name).join(', ');
+            if (fileCount === 1) {
+                showAlert('info', `PDF "${fileNames}" will be used to generate questions.`);
+            } else {
+                showAlert('info', `${fileCount} PDFs will be used to generate questions: ${fileNames}`);
+            }
         }
     });
 });
 
-// File upload handling
+// File upload handling - just show file info
 function handleFileUpload(input) {
-    const file = input.files[0];
-    if (file) {
-        const formData = new FormData();
-        formData.append('file_upload', file);
+    const files = input.files;
+    const fileCount = files.length;
+    
+    if (fileCount > 0) {
+        const fileNames = Array.from(files).map(f => f.name).join(', ');
+        if (fileCount === 1) {
+            showAlert('info', `PDF selected: ${fileNames}. Questions will be generated from this PDF.`);
+        } else {
+            showAlert('info', `${fileCount} PDFs selected. Questions will be generated from all PDFs.`);
+        }
         
-        // Show loading state
-        const submitBtn = document.querySelector('button[type="submit"]');
-        const originalText = submitBtn.innerHTML;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing PDF...';
-        submitBtn.disabled = true;
-        
-        // Upload file to extract topic
-        fetch('/upload_pdf', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('topic').value = data.topic;
-                // Show success message
-                showAlert('success', `Topic extracted from PDF: ${data.topic}`);
-            } else {
-                showAlert('danger', 'Failed to extract topic from PDF. Please enter manually.');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showAlert('danger', 'Error processing PDF. Please try again.');
-        })
-        .finally(() => {
-            // Reset button
-            submitBtn.innerHTML = originalText;
-            submitBtn.disabled = false;
-        });
+        // Clear topic field if PDFs are uploaded (optional - user can still enter topic)
+        // document.getElementById('topic').value = '';
     }
 }
 

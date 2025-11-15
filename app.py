@@ -347,7 +347,46 @@ def get_difficulty_from_bloom_level(bloom_level):
     else:
         return "difficult"
 
-def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5):
+def extract_pdf_content(file_paths):
+    """Extract text content from one or multiple PDF files"""
+    all_content = []
+    
+    for file_path in file_paths:
+        try:
+            content = ""
+            if file_path.lower().endswith('.pdf'):
+                with open(file_path, 'rb') as pdf_file:
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+                    
+                    # Check if PDF is encrypted
+                    if pdf_reader.is_encrypted:
+                        try:
+                            pdf_reader.decrypt('')
+                        except Exception:
+                            print(f"Could not decrypt PDF: {file_path}")
+                            continue
+                    
+                    # Extract text from all pages
+                    for page in pdf_reader.pages:
+                        try:
+                            page_text = page.extract_text()
+                            if page_text:
+                                content += page_text + "\n"
+                        except Exception as page_error:
+                            print(f"Error extracting text from page: {page_error}")
+                            continue
+            
+            if content.strip():
+                all_content.append(content)
+        except Exception as e:
+            print(f"Error processing PDF {file_path}: {e}")
+            continue
+    
+    # Combine all content
+    combined_content = "\n\n".join(all_content)
+    return combined_content if combined_content.strip() else None
+
+def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
     if not genai:
         return None
 
@@ -378,9 +417,28 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5)
         import random
         random_seed = random.randint(1000, 9999)
 
+        # Build prompt with PDF content if provided
+        pdf_context = ""
+        if pdf_content:
+            # Truncate PDF content if too long (keep last 15000 characters to stay within token limits)
+            # For multiple PDFs, we want to preserve as much content as possible
+            if len(pdf_content) > 15000:
+                # Keep first 5000 and last 10000 to preserve both intro and conclusion
+                pdf_content = pdf_content[:5000] + "\n\n[... content truncated ...]\n\n" + pdf_content[-10000:]
+            pdf_context = f"""
+            
+IMPORTANT: Use the following PDF content as the PRIMARY SOURCE for generating questions. All questions MUST be based on this content:
+
+PDF CONTENT:
+{pdf_content}
+
+Generate questions based ONLY on the information provided in the PDF content above. If the topic "{topic}" is mentioned, use it as context, but prioritize the PDF content.
+"""
+        
         if question_type == "mcq":
             prompt = f"""
-                Generate a multiple-choice quiz on {topic} at {difficulty_level.upper()} level ({level_description}).
+                Generate a multiple-choice quiz{f' based on the provided PDF content' if pdf_content else f' on {topic}'} at {difficulty_level.upper()} level ({level_description}).
+                {pdf_context if pdf_content else ''}
                 - Include exactly {num_questions} questions.
                 - Each question should have 4 answer choices.
                 - Make questions diverse and varied - avoid repetitive patterns.
@@ -394,9 +452,10 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5)
             """
         elif question_type == "coding":
             prompt = f"""
-CRITICAL: You MUST generate exactly {num_questions} coding programming problems on the topic: {topic}
+CRITICAL: You MUST generate exactly {num_questions} coding programming problems{f' based on the provided PDF content' if pdf_content else f' on the topic: {topic}'}
 
 Difficulty Level: {difficulty_level.upper()} ({level_description})
+{pdf_context if pdf_content else ''}
 
 IMPORTANT REQUIREMENTS:
 1. Generate EXACTLY {num_questions} coding problems (not MCQ, not subjective, but actual programming problems)
@@ -448,7 +507,8 @@ Return ONLY valid JSON array. Do NOT include any markdown code blocks, explanati
             """
         else:  # subjective
             prompt = f"""
-                Generate subjective questions on {topic} at {difficulty_level.upper()} level ({level_description}).
+                Generate subjective questions{f' based on the provided PDF content' if pdf_content else f' on {topic}'} at {difficulty_level.upper()} level ({level_description}).
+                {pdf_context if pdf_content else ''}
                 - Include exactly {num_questions} questions.
                 - Questions should be open-ended and require detailed answers.
                 - Make questions diverse and varied - avoid repetitive patterns.
@@ -1938,55 +1998,88 @@ def quiz():
         subj_count = int(request.form.get('subj_count', 2))
         difficulty_level = request.form.get('difficulty_level', 'beginner')
         
-        # Check if PDF file was uploaded
-        if 'file_upload' in request.files and request.files['file_upload'].filename:
-            file = request.files['file_upload']
-            if file and file.filename.lower().endswith('.pdf'):
-                try:
-                    # Save file temporarily
-                    import tempfile
-                    import os
-                    
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                        file.save(tmp_file.name)
-                        tmp_path = tmp_file.name
-                    
-                    # Process the PDF to extract topic
-                    extracted_topic = process_document(tmp_path)
-                    
-                    # Clean up temporary file
-                    os.unlink(tmp_path)
-                    
-                    if extracted_topic:
-                        topic = extracted_topic
-                        flash(f'Topic extracted from PDF: {topic}', 'success')
-                    else:
-                        flash('Could not extract topic from PDF. Please enter a topic manually.', 'error')
-                        return redirect(url_for('quiz'))
-                        
-                except Exception as e:
-                    flash(f'Error processing PDF: {str(e)}', 'error')
-                    return redirect(url_for('quiz'))
+        # Handle PDF file uploads (single or multiple)
+        pdf_content = None
+        pdf_file_paths = []
         
-        # Ensure we have a topic
-        if not topic:
-            flash('Please either enter a topic OR upload a PDF file.', 'error')
+        # Check for PDF file uploads (supports multiple files)
+        if 'file_upload' in request.files:
+            files = request.files.getlist('file_upload')
+            for file in files:
+                if file and file.filename and file.filename.lower().endswith('.pdf'):
+                    try:
+                        import tempfile
+                        import os
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                            file.save(tmp_file.name)
+                            pdf_file_paths.append(tmp_file.name)
+                            print(f'Saved PDF: {file.filename} to {tmp_file.name}')
+                    except Exception as e:
+                        print(f'Error saving PDF {file.filename}: {str(e)}')
+                        continue
+        
+        # Extract content from PDFs
+        if pdf_file_paths:
+            try:
+                pdf_content = extract_pdf_content(pdf_file_paths)
+                if pdf_content:
+                    # Extract a topic from PDF for tracking purposes (optional)
+                    if not topic:
+                        # Try to extract topic from first PDF filename
+                        import os
+                        first_pdf_name = os.path.basename(pdf_file_paths[0])
+                        topic = extract_topic_from_filename(pdf_file_paths[0]) or "PDF Content"
+                    
+                    flash(f'Successfully processed {len(pdf_file_paths)} PDF file(s). Questions will be generated from PDF content.', 'success')
+                else:
+                    flash('Could not extract content from PDF(s). Please try again or enter a topic manually.', 'error')
+                    # Clean up temp files
+                    import os
+                    for path in pdf_file_paths:
+                        try:
+                            os.unlink(path)
+                        except:
+                            pass
+                    return redirect(url_for('quiz'))
+            except Exception as e:
+                flash(f'Error processing PDF(s): {str(e)}', 'error')
+                # Clean up temp files
+                import os
+                for path in pdf_file_paths:
+                    try:
+                        os.unlink(path)
+                    except:
+                        pass
+                return redirect(url_for('quiz'))
+        
+        # If no PDFs and no topic, require topic
+        if not pdf_content and not topic:
+            flash('Please either enter a topic OR upload PDF file(s) to generate questions from.', 'error')
             return redirect(url_for('quiz'))
 
         # Get user's current bloom level for this topic (for progress tracking)
         progress = db.session.query(Progress).filter_by(user_id=current_user.id, topic=topic).first()
         bloom_level = progress.bloom_level if progress else 1
 
-        # Generate questions using difficulty level
+        # Generate questions using difficulty level (with PDF content if available)
         questions = []
         if question_type == "both":
-            mcq_questions = generate_quiz(topic, difficulty_level, "mcq", mcq_count)
-            subj_questions = generate_quiz(topic, difficulty_level, "subjective", subj_count)
+            mcq_questions = generate_quiz(topic or "PDF Content", difficulty_level, "mcq", mcq_count, pdf_content)
+            subj_questions = generate_quiz(topic or "PDF Content", difficulty_level, "subjective", subj_count, pdf_content)
             if mcq_questions and subj_questions:
                 questions = mcq_questions + subj_questions
         else:
             num_q = mcq_count if question_type == "mcq" else subj_count
-            questions = generate_quiz(topic, difficulty_level, question_type, num_q)
+            questions = generate_quiz(topic or "PDF Content", difficulty_level, question_type, num_q, pdf_content)
+        
+        # Clean up temporary PDF files after question generation
+        if pdf_file_paths:
+            import os
+            for path in pdf_file_paths:
+                try:
+                    os.unlink(path)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not delete temp file {path}: {cleanup_error}")
 
         if questions:
             session['current_quiz'] = {

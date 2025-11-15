@@ -66,17 +66,27 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                     
                     # Check for OCR.space API key (optional, improves rate limits)
                     ocr_api_key = os.environ.get('OCR_SPACE_API_KEY', '')
+                    headers = {}
+                    
                     if ocr_api_key:
+                        # Try multiple methods: form data, header, and query parameter
                         payload['apikey'] = ocr_api_key
-                        print(f"Using OCR.space API key (length: {len(ocr_api_key)})")
+                        headers['apikey'] = ocr_api_key
+                        print(f"Using OCR.space API key (length: {len(ocr_api_key)}, first 5 chars: {ocr_api_key[:5]}...)")
                     else:
                         print("WARNING: OCR_SPACE_API_KEY not found in environment variables")
                         print("Available env vars starting with OCR: " + str([k for k in os.environ.keys() if 'OCR' in k.upper()]))
                     
+                    # Build URL with API key as query parameter (alternative method)
+                    api_url = "https://api.ocr.space/parse/pdf"
+                    if ocr_api_key:
+                        api_url += f"?apikey={ocr_api_key}"
+                    
                     print(f"Uploading PDF to OCR.space API (size: {file_size} bytes)...")
+                    print(f"API URL: {api_url.split('?')[0]}")  # Don't log full URL with key
                     try:
-                        # Try the /parse/pdf endpoint
-                        response = requests.post("https://api.ocr.space/parse/pdf", files=files, data=payload, timeout=120)
+                        # Try the /parse/pdf endpoint with API key in multiple places
+                        response = requests.post(api_url, files=files, data=payload, headers=headers, timeout=120)
                         print(f"OCR.space API response status: {response.status_code}")
                         print(f"OCR.space API response headers: {dict(response.headers)}")
                         
@@ -141,7 +151,49 @@ def extract_pdf_content_with_cloud_ocr(file_path):
             import traceback
             traceback.print_exc()
         
-        # Method 2: Convert PDF to images and process page by page (if pdf2image is available)
+        # Method 2: Try PDF as base64 to image endpoint (works without pdf2image)
+        # This is a fallback if direct PDF upload failed
+        try:
+            print("Trying PDF as base64 to OCR.space image endpoint...")
+            with open(file_path, 'rb') as pdf_file:
+                pdf_data = pdf_file.read()
+                pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
+            
+            # Try sending PDF as base64 to image endpoint
+            ocr_api_url = "https://api.ocr.space/parse/image"
+            payload_img = {
+                'base64Image': f"data:application/pdf;base64,{pdf_base64}",
+                'language': 'eng',
+                'isOverlayRequired': False,
+                'OCREngine': 2
+            }
+            
+            if ocr_api_key:
+                payload_img['apikey'] = ocr_api_key
+                ocr_api_url += f"?apikey={ocr_api_key}"
+            
+            print("Sending PDF as base64 to image endpoint...")
+            response = requests.post(ocr_api_url, data=payload_img, timeout=120)
+            
+            if response.status_code == 200:
+                try:
+                    result = response.json()
+                    if result.get('ParsedResults') and len(result['ParsedResults']) > 0:
+                        ocr_text = ""
+                        for parsed_result in result['ParsedResults']:
+                            page_text = parsed_result.get('ParsedText', '')
+                            if page_text and page_text.strip():
+                                ocr_text += page_text + "\n\n"
+                        
+                        if ocr_text.strip():
+                            print(f"Cloud OCR (PDF base64) extracted {len(ocr_text)} characters")
+                            return ocr_text.strip()
+                except Exception as e:
+                    print(f"Error processing base64 PDF response: {e}")
+        except Exception as base64_error:
+            print(f"Error with PDF base64 method: {base64_error}")
+        
+        # Method 3: Convert PDF to images and process page by page (if pdf2image is available)
         images = []
         if OCR_AVAILABLE:
             try:
@@ -175,14 +227,19 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                         'OCREngine': 2  # Use OCR Engine 2 for better accuracy
                     }
                     
-                    # Add API key if available
+                    # Add API key if available (multiple methods)
                     ocr_api_key = os.environ.get('OCR_SPACE_API_KEY', '')
+                    headers_img = {}
                     if ocr_api_key:
                         payload['apikey'] = ocr_api_key
+                        headers_img['apikey'] = ocr_api_key
+                        ocr_api_url_with_key = f"{ocr_api_url}?apikey={ocr_api_key}"
+                    else:
+                        ocr_api_url_with_key = ocr_api_url
                     
                     # Make API request
                     print(f"Processing page {i+1}/{len(images)} with OCR.space...")
-                    response = requests.post(ocr_api_url, data=payload, timeout=60)
+                    response = requests.post(ocr_api_url_with_key, data=payload, headers=headers_img, timeout=60)
                     
                     if response.status_code == 200:
                         try:

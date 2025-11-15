@@ -68,18 +68,24 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                     ocr_api_key = os.environ.get('OCR_SPACE_API_KEY', '')
                     if ocr_api_key:
                         payload['apikey'] = ocr_api_key
-                        print(f"Using OCR.space API key for better rate limits")
+                        print(f"Using OCR.space API key (length: {len(ocr_api_key)})")
+                    else:
+                        print("WARNING: OCR_SPACE_API_KEY not found in environment variables")
+                        print("Available env vars starting with OCR: " + str([k for k in os.environ.keys() if 'OCR' in k.upper()]))
                     
                     print(f"Uploading PDF to OCR.space API (size: {file_size} bytes)...")
                     try:
+                        # Try the /parse/pdf endpoint
                         response = requests.post("https://api.ocr.space/parse/pdf", files=files, data=payload, timeout=120)
                         print(f"OCR.space API response status: {response.status_code}")
+                        print(f"OCR.space API response headers: {dict(response.headers)}")
                         
                         if response.status_code == 200:
                             try:
                                 result = response.json()
-                                print(f"OCR.space API response: {result}")
+                                print(f"OCR.space API response keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
                                 
+                                # Check for ParsedResults regardless of OCRExitCode (sometimes it works even with non-1 exit code)
                                 if result.get('ParsedResults') and len(result['ParsedResults']) > 0:
                                     ocr_text = ""
                                     for parsed_result in result['ParsedResults']:
@@ -88,32 +94,48 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                                             ocr_text += page_text + "\n\n"
                                     
                                     if ocr_text.strip():
-                                        print(f"Cloud OCR (PDF direct) extracted {len(ocr_text)} characters")
+                                        exit_code = result.get('OCRExitCode', 'Unknown')
+                                        print(f"Cloud OCR (PDF direct) extracted {len(ocr_text)} characters (Exit Code: {exit_code})")
                                         return ocr_text.strip()
+                                    else:
+                                        print(f"ParsedResults found but no text extracted. Exit Code: {result.get('OCRExitCode', 'Unknown')}")
                                 else:
-                                    error_msg = result.get('ErrorMessage', 'No text found in PDF')
+                                    # No ParsedResults - check for error
+                                    exit_code = result.get('OCRExitCode', 'Unknown')
+                                    error_msg = result.get('ErrorMessage', f"OCR Exit Code: {exit_code}")
                                     print(f"OCR.space API error: {error_msg}")
+                                    print(f"Full response: {result}")
                                     # Check if it's a rate limit issue
-                                    if 'rate limit' in error_msg.lower() or 'quota' in error_msg.lower():
+                                    if 'rate limit' in str(error_msg).lower() or 'quota' in str(error_msg).lower():
                                         print("OCR.space rate limit reached. Consider getting an API key.")
+                                    elif exit_code == 1:
+                                        print("Exit code is 1 (success) but no ParsedResults - PDF might be blank or unreadable")
                             except ValueError as json_error:
                                 print(f"Error parsing OCR.space JSON response: {json_error}")
-                                print(f"Response text: {response.text[:500]}")
+                                print(f"Response text (first 1000 chars): {response.text[:1000]}")
+                                print(f"Response status: {response.status_code}")
                         elif response.status_code == 401:
-                            print("OCR.space API: Authentication failed (may need API key)")
+                            print("OCR.space API: Authentication failed (check API key)")
+                            print(f"Response: {response.text[:500]}")
                         elif response.status_code == 429:
                             print("OCR.space API: Rate limit exceeded")
+                            print(f"Response: {response.text[:500]}")
+                        elif response.status_code == 400:
+                            print("OCR.space API: Bad request - check file format")
+                            print(f"Response: {response.text[:500]}")
                         else:
                             print(f"OCR.space API returned status code: {response.status_code}")
                             try:
-                                error_detail = response.text[:500]
+                                error_detail = response.text[:1000]
                                 print(f"Error detail: {error_detail}")
                             except:
                                 pass
                     except requests.exceptions.Timeout:
-                        print("OCR.space API request timed out")
+                        print("OCR.space API request timed out after 120 seconds")
                     except requests.exceptions.RequestException as req_error:
                         print(f"OCR.space API request error: {req_error}")
+                        import traceback
+                        traceback.print_exc()
         except Exception as pdf_api_error:
             print(f"Error with direct PDF OCR API: {pdf_api_error}")
             import traceback

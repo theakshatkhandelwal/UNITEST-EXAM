@@ -349,7 +349,7 @@ class QuizQuestion(db.Model):
     quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id'), nullable=False)
     question = db.Column(db.Text, nullable=False)
     options_json = db.Column(db.Text)  # JSON array for MCQ options like ["A. ...","B. ...","C. ...","D. ..."]
-    answer = db.Column(db.String(10))  # For MCQ store letter like 'A'; for subjective can store sample answer
+    answer = db.Column(db.Text)  # For MCQ store letter like 'A'; for subjective can store sample answer (Text for long answers)
     qtype = db.Column(db.String(20), default='mcq')  # 'mcq', 'subjective', or 'coding'
     marks = db.Column(db.Integer, default=1)
     # For coding questions
@@ -2322,6 +2322,24 @@ def migrate_database():
                     print("✅ Qtype column already correct length")
             except Exception as e:
                 print(f"Qtype column: {e}")
+            
+            # Update answer column to TEXT for subjective questions (can store long answers)
+            try:
+                result = conn.execute(text("SELECT data_type FROM information_schema.columns WHERE table_name='quiz_question' AND column_name='answer'"))
+                row = result.fetchone()
+                if row and row[0] != 'text':
+                    # Check if it's VARCHAR with small size
+                    result2 = conn.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name='quiz_question' AND column_name='answer'"))
+                    row2 = result2.fetchone()
+                    if row2 and (row2[0] is None or row2[0] < 1000):
+                        conn.execute(text("ALTER TABLE quiz_question ALTER COLUMN answer TYPE TEXT"))
+                        print("✅ Updated answer column to TEXT")
+                    else:
+                        print("✅ Answer column already TEXT or large enough")
+                else:
+                    print("✅ Answer column already TEXT")
+            except Exception as e:
+                print(f"Answer column: {e}")
         
         return """
         <!DOCTYPE html>
@@ -2343,7 +2361,7 @@ def migrate_database():
                     
                     <div class="alert alert-success">
                         <span class="alert-icon">✅</span>
-                        Database migration completed! You can now sign up and login without errors.
+                        Database migration completed! The qtype and answer columns have been updated. You can now create quizzes with subjective questions.
                     </div>
                     
                     <div class="auth-links">

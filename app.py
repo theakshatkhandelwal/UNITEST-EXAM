@@ -1542,6 +1542,172 @@ def teacher_create_quiz_simple():
 
     return render_template('create_quiz_simple.html')
 
+# Extract questions from PDFs based on keywords
+@app.route('/teacher/quiz/extract_questions', methods=['POST'])
+@login_required
+def extract_questions_from_pdf():
+    guard = require_teacher()
+    if guard:
+        return jsonify({'success': False, 'error': 'Teacher access required'}), 403
+    
+    try:
+        # Get PDF files and keywords
+        pdf_files = request.files.getlist('pdf_files')
+        keywords = request.form.get('keywords', '').strip()
+        
+        if not pdf_files or not any(f.filename for f in pdf_files):
+            return jsonify({'success': False, 'error': 'Please select at least one PDF file'})
+        
+        if not keywords:
+            return jsonify({'success': False, 'error': 'Please enter keywords or a sentence'})
+        
+        # Save PDF files temporarily
+        pdf_file_paths = []
+        for file in pdf_files:
+            if file and file.filename and file.filename.lower().endswith('.pdf'):
+                try:
+                    import tempfile
+                    import os
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                        file.save(tmp_file.name)
+                        pdf_file_paths.append(tmp_file.name)
+                except Exception as e:
+                    print(f'Error saving PDF {file.filename}: {str(e)}')
+                    continue
+        
+        if not pdf_file_paths:
+            return jsonify({'success': False, 'error': 'No valid PDF files were uploaded'})
+        
+        # Extract content from PDFs
+        pdf_content = extract_pdf_content(pdf_file_paths)
+        
+        if not pdf_content:
+            # Clean up temp files
+            import os
+            for path in pdf_file_paths:
+                try:
+                    os.unlink(path)
+                except:
+                    pass
+            return jsonify({'success': False, 'error': 'Could not extract content from PDF(s). Please ensure the PDFs contain readable text.'})
+        
+        # Use AI to extract questions based on keywords
+        response_text = ""
+        try:
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            
+            # Truncate PDF content if too long
+            if len(pdf_content) > 15000:
+                pdf_content = pdf_content[:5000] + "\n\n[... content truncated ...]\n\n" + pdf_content[-10000:]
+            
+            prompt = f"""You are an expert at extracting relevant questions from educational content.
+
+PDF CONTENT:
+{pdf_content}
+
+KEYWORDS/TOPICS TO FOCUS ON:
+{keywords}
+
+Based on the PDF content above, extract questions that are directly related to the keywords/topics provided. 
+
+IMPORTANT REQUIREMENTS:
+1. Extract questions that are SPECIFICALLY related to the keywords: "{keywords}"
+2. Questions must be based ONLY on the information present in the PDF content
+3. Extract a variety of question types (both multiple choice and subjective)
+4. For each question, provide:
+   - The question text
+   - For MCQ: 4 options (A, B, C, D) and the correct answer
+   - For subjective: A sample answer or key points
+   - Question type (mcq or subjective)
+
+Return the questions in the following JSON format:
+{{
+  "questions": [
+    {{
+      "question": "Question text here",
+      "type": "mcq",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "answer": "A"
+    }},
+    {{
+      "question": "Question text here",
+      "type": "subjective",
+      "answer": "Sample answer or key points"
+    }}
+  ]
+}}
+
+Extract 5-10 questions that are most relevant to the keywords provided. Focus on quality over quantity."""
+
+            response = model.generate_content(prompt)
+            response_text = response.text.strip()
+            
+            # Parse JSON from response (handle markdown code blocks)
+            import json
+            import re
+            
+            # Remove markdown code blocks if present
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if json_match:
+                response_text = json_match.group(1)
+            else:
+                # Try to find JSON object directly
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    response_text = json_match.group(0)
+            
+            result = json.loads(response_text)
+            questions = result.get('questions', [])
+            
+            # Clean up temp files
+            import os
+            for path in pdf_file_paths:
+                try:
+                    os.unlink(path)
+                except:
+                    pass
+            
+            if questions:
+                return jsonify({
+                    'success': True,
+                    'questions': questions,
+                    'keywords': keywords,
+                    'pdf_count': len(pdf_file_paths)
+                })
+            else:
+                return jsonify({'success': False, 'error': 'No questions could be extracted. Please try different keywords.'})
+                
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {e}")
+            if response_text:
+                print(f"Response text: {response_text[:500]}")
+            # Clean up temp files
+            import os
+            for path in pdf_file_paths:
+                try:
+                    os.unlink(path)
+                except:
+                    pass
+            return jsonify({'success': False, 'error': 'Failed to parse AI response. Please try again.'})
+        except Exception as e:
+            print(f"Error extracting questions: {e}")
+            import traceback
+            traceback.print_exc()
+            # Clean up temp files
+            import os
+            for path in pdf_file_paths:
+                try:
+                    os.unlink(path)
+                except:
+                    pass
+            return jsonify({'success': False, 'error': f'Error extracting questions: {str(e)}'})
+            
+    except Exception as e:
+        print(f"Error in extract_questions_from_pdf: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Unexpected error: {str(e)}'})
+
 # Preview step for teacher to adjust marks before finalizing
 @app.route('/teacher/quiz/preview', methods=['POST'])
 @login_required

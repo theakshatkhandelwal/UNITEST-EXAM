@@ -2,6 +2,11 @@
 
 This guide explains how multiple developers can work on the same project simultaneously.
 
+## 👨‍💻 Team Members
+- **You (Owner)**: theakshatkhandelwal
+- **Collaborator 1**: [Ajitesh-004](https://github.com/Ajitesh-004)
+- **Collaborator 2**: [abhishekamaresh](https://github.com/abhishekamaresh)
+
 ## 🚀 Quick Setup for Team Members
 
 ### Step 1: Clone the Repository

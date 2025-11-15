@@ -2310,6 +2310,18 @@ def migrate_database():
                     print("✅ Password_hash column already correct length")
             except Exception as e:
                 print(f"Password hash column: {e}")
+            
+            # Update qtype column length in quiz_question table
+            try:
+                result = conn.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name='quiz_question' AND column_name='qtype'"))
+                row = result.fetchone()
+                if row and row[0] < 20:
+                    conn.execute(text("ALTER TABLE quiz_question ALTER COLUMN qtype TYPE VARCHAR(20)"))
+                    print("✅ Updated qtype column to VARCHAR(20)")
+                else:
+                    print("✅ Qtype column already correct length")
+            except Exception as e:
+                print(f"Qtype column: {e}")
         
         return """
         <!DOCTYPE html>

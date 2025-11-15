@@ -41,17 +41,20 @@ def extract_pdf_content_with_cloud_ocr(file_path):
         import base64
         import io
         
+        # Check if file exists and get size
+        if not os.path.exists(file_path):
+            print(f"Error: PDF file not found: {file_path}")
+            return None
+        
+        file_size = os.path.getsize(file_path)
+        print(f"Processing PDF with cloud OCR (file size: {file_size} bytes)")
+        
         # Method 1: Try direct PDF upload to OCR.space (works without pdf2image/Poppler)
         try:
-            with open(file_path, 'rb') as pdf_file:
-                # Check file size (OCR.space free tier has limits)
-                pdf_file.seek(0, 2)  # Seek to end
-                file_size = pdf_file.tell()
-                pdf_file.seek(0)  # Reset to beginning
-                
-                if file_size > 10 * 1024 * 1024:  # 10MB limit for free tier
-                    print(f"PDF file too large ({file_size} bytes). Splitting or using alternative method...")
-                else:
+            if file_size > 10 * 1024 * 1024:  # 10MB limit for free tier
+                print(f"PDF file too large ({file_size} bytes). Will try page-by-page processing...")
+            else:
+                with open(file_path, 'rb') as pdf_file:
                     files = {'file': (os.path.basename(file_path), pdf_file, 'application/pdf')}
                     payload = {
                         'language': 'eng',
@@ -61,38 +64,66 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                         'OCREngine': 2  # Use OCR Engine 2 for better accuracy
                     }
                     
-                    print(f"Uploading PDF to OCR.space API (size: {file_size} bytes)...")
-                    response = requests.post("https://api.ocr.space/parse/pdf", files=files, data=payload, timeout=120)
+                    # Check for OCR.space API key (optional, improves rate limits)
+                    ocr_api_key = os.environ.get('OCR_SPACE_API_KEY', '')
+                    if ocr_api_key:
+                        payload['apikey'] = ocr_api_key
+                        print(f"Using OCR.space API key for better rate limits")
                     
-                    if response.status_code == 200:
-                        result = response.json()
-                        if result.get('ParsedResults') and len(result['ParsedResults']) > 0:
-                            ocr_text = ""
-                            for parsed_result in result['ParsedResults']:
-                                page_text = parsed_result.get('ParsedText', '')
-                                if page_text.strip():
-                                    ocr_text += page_text + "\n\n"
-                            
-                            if ocr_text.strip():
-                                print(f"Cloud OCR (PDF direct) extracted {len(ocr_text)} characters")
-                                return ocr_text.strip()
+                    print(f"Uploading PDF to OCR.space API (size: {file_size} bytes)...")
+                    try:
+                        response = requests.post("https://api.ocr.space/parse/pdf", files=files, data=payload, timeout=120)
+                        print(f"OCR.space API response status: {response.status_code}")
+                        
+                        if response.status_code == 200:
+                            try:
+                                result = response.json()
+                                print(f"OCR.space API response: {result}")
+                                
+                                if result.get('ParsedResults') and len(result['ParsedResults']) > 0:
+                                    ocr_text = ""
+                                    for parsed_result in result['ParsedResults']:
+                                        page_text = parsed_result.get('ParsedText', '')
+                                        if page_text and page_text.strip():
+                                            ocr_text += page_text + "\n\n"
+                                    
+                                    if ocr_text.strip():
+                                        print(f"Cloud OCR (PDF direct) extracted {len(ocr_text)} characters")
+                                        return ocr_text.strip()
+                                else:
+                                    error_msg = result.get('ErrorMessage', 'No text found in PDF')
+                                    print(f"OCR.space API error: {error_msg}")
+                                    # Check if it's a rate limit issue
+                                    if 'rate limit' in error_msg.lower() or 'quota' in error_msg.lower():
+                                        print("OCR.space rate limit reached. Consider getting an API key.")
+                            except ValueError as json_error:
+                                print(f"Error parsing OCR.space JSON response: {json_error}")
+                                print(f"Response text: {response.text[:500]}")
+                        elif response.status_code == 401:
+                            print("OCR.space API: Authentication failed (may need API key)")
+                        elif response.status_code == 429:
+                            print("OCR.space API: Rate limit exceeded")
                         else:
-                            error_msg = result.get('ErrorMessage', 'Unknown error')
-                            print(f"OCR.space API error: {error_msg}")
-                    else:
-                        print(f"OCR.space API returned status code: {response.status_code}")
-                        try:
-                            error_detail = response.text[:200]
-                            print(f"Error detail: {error_detail}")
-                        except:
-                            pass
+                            print(f"OCR.space API returned status code: {response.status_code}")
+                            try:
+                                error_detail = response.text[:500]
+                                print(f"Error detail: {error_detail}")
+                            except:
+                                pass
+                    except requests.exceptions.Timeout:
+                        print("OCR.space API request timed out")
+                    except requests.exceptions.RequestException as req_error:
+                        print(f"OCR.space API request error: {req_error}")
         except Exception as pdf_api_error:
             print(f"Error with direct PDF OCR API: {pdf_api_error}")
+            import traceback
+            traceback.print_exc()
         
         # Method 2: Convert PDF to images and process page by page (if pdf2image is available)
         images = []
         if OCR_AVAILABLE:
             try:
+                print("Attempting to convert PDF to images for page-by-page OCR...")
                 images = convert_from_path(file_path, dpi=200)  # Lower DPI for faster processing
                 print(f"Converted PDF to {len(images)} images for cloud OCR")
             except Exception as convert_error:
@@ -122,27 +153,39 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                         'OCREngine': 2  # Use OCR Engine 2 for better accuracy
                     }
                     
+                    # Add API key if available
+                    ocr_api_key = os.environ.get('OCR_SPACE_API_KEY', '')
+                    if ocr_api_key:
+                        payload['apikey'] = ocr_api_key
+                    
                     # Make API request
+                    print(f"Processing page {i+1}/{len(images)} with OCR.space...")
                     response = requests.post(ocr_api_url, data=payload, timeout=60)
                     
                     if response.status_code == 200:
-                        result = response.json()
-                        if result.get('ParsedResults') and len(result['ParsedResults']) > 0:
-                            page_text = result['ParsedResults'][0].get('ParsedText', '')
-                            if page_text.strip():
-                                ocr_text += f"\n--- Page {i+1} ---\n{page_text}\n"
-                                print(f"Cloud OCR extracted text from page {i+1} ({len(page_text)} characters)")
+                        try:
+                            result = response.json()
+                            if result.get('ParsedResults') and len(result['ParsedResults']) > 0:
+                                page_text = result['ParsedResults'][0].get('ParsedText', '')
+                                if page_text and page_text.strip():
+                                    ocr_text += f"\n--- Page {i+1} ---\n{page_text}\n"
+                                    print(f"Cloud OCR extracted text from page {i+1} ({len(page_text)} characters)")
+                        except ValueError as json_error:
+                            print(f"Error parsing JSON for page {i+1}: {json_error}")
                     else:
                         print(f"OCR.space API returned status code {response.status_code} for page {i+1}")
                         
                 except Exception as page_error:
                     print(f"Error processing page {i+1} with cloud OCR: {page_error}")
+                    import traceback
+                    traceback.print_exc()
                     continue
             
             if ocr_text.strip():
                 print(f"Cloud OCR extracted total {len(ocr_text)} characters from {len(images)} pages")
                 return ocr_text.strip()
         
+        print("All cloud OCR methods failed")
         return None
         
     except Exception as e:
@@ -2260,7 +2303,11 @@ def quiz():
                         pdf_info += ' (Cloud OCR enabled for scanned PDFs)'
                     flash(pdf_info, 'success')
                 else:
-                    flash('Could not extract content from PDF(s). Please try again or enter a topic manually.', 'error')
+                    # Provide more helpful error message
+                    error_msg = 'Could not extract content from PDF(s). '
+                    error_msg += 'This may happen if the PDF is scanned/image-based and OCR services are unavailable. '
+                    error_msg += 'Please try again or enter a topic manually to generate questions.'
+                    flash(error_msg, 'error')
                     # Clean up temp files
                     import os
                     for path in pdf_file_paths:

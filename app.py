@@ -1437,26 +1437,82 @@ def teacher_create_quiz_simple():
             duration_minutes = int(duration) if duration else None
             question_type = request.form.get('question_type', 'mcq').strip()  # Get question type
 
-            if not topic or count <= 0:
-                flash('Please provide topic and number of questions (>0).', 'error')
+            if count <= 0:
+                flash('Please provide number of questions (>0).', 'error')
                 return redirect(url_for('teacher_create_quiz_simple'))
 
-            # If PDF uploaded, extract better topic context
-            if 'notes_pdf' in request.files and request.files['notes_pdf'].filename:
-                file = request.files['notes_pdf']
-                if file and file.filename.lower().endswith('.pdf'):
-                    import tempfile, os
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
-                        file.save(tmp.name)
-                        extracted = process_document(tmp.name)
-                    try:
-                        os.unlink(tmp.name)
-                    except Exception:
-                        pass
-                    if extracted:
-                        topic = f"{topic} - {extracted}"
+            # Handle PDF file uploads (supports OCR for scanned PDFs)
+            pdf_content = None
+            pdf_file_paths = []
+            
+            # Check for PDF file uploads (supports multiple files)
+            if 'notes_pdf' in request.files:
+                files = request.files.getlist('notes_pdf')
+                for file in files:
+                    if file and file.filename and file.filename.lower().endswith('.pdf'):
+                        try:
+                            import tempfile
+                            import os
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                                file.save(tmp_file.name)
+                                pdf_file_paths.append(tmp_file.name)
+                                print(f'Saved PDF: {file.filename} to {tmp_file.name}')
+                        except Exception as e:
+                            print(f'Error saving PDF {file.filename}: {str(e)}')
+                            continue
+            
+            # Extract content from PDFs (with OCR support for scanned PDFs)
+            if pdf_file_paths:
+                try:
+                    pdf_content = extract_pdf_content(pdf_file_paths)
+                    if pdf_content:
+                        # Extract a topic from PDF for tracking purposes (optional)
+                        if not topic:
+                            # Try to extract topic from first PDF filename
+                            import os
+                            first_pdf_name = os.path.basename(pdf_file_paths[0])
+                            topic = extract_topic_from_filename(pdf_file_paths[0]) or "PDF Content"
+                        
+                        pdf_info = f'Successfully processed {len(pdf_file_paths)} PDF file(s). Questions will be generated from PDF content.'
+                        if OCR_AVAILABLE:
+                            pdf_info += ' (Local OCR + Cloud OCR enabled for scanned PDFs)'
+                        else:
+                            pdf_info += ' (Cloud OCR enabled for scanned PDFs)'
+                        flash(pdf_info, 'success')
+                    else:
+                        flash('Could not extract content from PDF(s). Questions will be generated from topic only.', 'warning')
+                        # Clean up temp files
+                        import os
+                        for path in pdf_file_paths:
+                            try:
+                                os.unlink(path)
+                            except:
+                                pass
+                except Exception as e:
+                    flash(f'Error processing PDF(s): {str(e)}. Questions will be generated from topic only.', 'warning')
+                    # Clean up temp files
+                    import os
+                    for path in pdf_file_paths:
+                        try:
+                            os.unlink(path)
+                        except:
+                            pass
+            
+            # If no PDFs and no topic, require topic
+            if not pdf_content and not topic:
+                flash('Please either enter a topic OR upload PDF file(s) to generate questions from.', 'error')
+                return redirect(url_for('teacher_create_quiz_simple'))
 
-            questions = generate_quiz(topic, difficulty if difficulty in ['beginner','intermediate','advanced'] else 'beginner', question_type, count) or []
+            questions = generate_quiz(topic or "PDF Content", difficulty if difficulty in ['beginner','intermediate','advanced'] else 'beginner', question_type, count, pdf_content) or []
+            
+            # Clean up temporary PDF files after question generation
+            if pdf_file_paths:
+                import os
+                for path in pdf_file_paths:
+                    try:
+                        os.unlink(path)
+                    except Exception as cleanup_error:
+                        print(f"Warning: Could not delete temp file {path}: {cleanup_error}")
             if not questions:
                 flash('Failed to generate questions. Try again.', 'error')
                 return redirect(url_for('teacher_create_quiz_simple'))

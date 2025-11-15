@@ -15,13 +15,16 @@
           <input name="title" class="form-control" placeholder="e.g., Algebra Basics Quiz">
         </div>
         <div class="mb-3">
-          <label class="form-label">Topic</label>
-          <input name="topic" class="form-control" placeholder="e.g., Algebra" required>
+          <label class="form-label">Topic (optional if uploading PDFs)</label>
+          <input name="topic" class="form-control" placeholder="e.g., Algebra">
+          <div class="form-text">
+            <strong>OR</strong> upload PDF file(s) below to generate questions from PDF content
+          </div>
         </div>
         <div class="mb-3">
-          <label class="form-label">Upload Notes PDF (optional)</label>
-          <input type="file" name="notes_pdf" accept="application/pdf" class="form-control">
-          <div class="form-text">Used to refine question context.</div>
+          <label class="form-label">Upload Notes PDF File(s) (optional)</label>
+          <input type="file" name="notes_pdf" accept="application/pdf" class="form-control" multiple>
+          <div class="form-text">Upload one or multiple PDFs to generate questions from PDF content. Supports both text-based and scanned/image-based PDFs (OCR enabled).</div>
         </div>
         <div class="mb-3">
           <label class="form-label">Question Type</label>

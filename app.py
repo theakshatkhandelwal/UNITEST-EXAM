@@ -2591,6 +2591,28 @@ def migrate_database():
             except Exception as e:
                 print(f"Password hash column: {e}")
             
+            # Add reset_token column if missing
+            try:
+                result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token'"))
+                if not result.fetchone():
+                    conn.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token VARCHAR(100) UNIQUE"))
+                    print("✅ Added reset_token column")
+                else:
+                    print("✅ reset_token column already exists")
+            except Exception as e:
+                print(f"reset_token column: {e}")
+            
+            # Add reset_token_expiry column if missing
+            try:
+                result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token_expiry'"))
+                if not result.fetchone():
+                    conn.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token_expiry TIMESTAMP"))
+                    print("✅ Added reset_token_expiry column")
+                else:
+                    print("✅ reset_token_expiry column already exists")
+            except Exception as e:
+                print(f"reset_token_expiry column: {e}")
+            
             # Update qtype column length in quiz_question table
             try:
                 result = conn.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name='quiz_question' AND column_name='qtype'"))

@@ -20,6 +20,20 @@ import io
 from datetime import datetime, timedelta
 import requests
 
+# OCR imports (optional - graceful fallback if not available)
+try:
+    from pdf2image import convert_from_path
+    from PIL import Image
+    import pytesseract
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+    print("Warning: OCR libraries (pdf2image, Pillow, pytesseract) not installed. Scanned PDFs may not work.")
+
+# Optional: Set Tesseract path if not in system PATH (uncomment and adjust if needed)
+# if OCR_AVAILABLE and os.name == 'nt':  # Windows
+#     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
 # Download NLTK data only when needed
 def ensure_nltk_data():
     try:
@@ -347,39 +361,116 @@ def get_difficulty_from_bloom_level(bloom_level):
     else:
         return "difficult"
 
+def extract_pdf_content_with_ocr(file_path):
+    """Extract text from PDF using OCR (for scanned/image-based PDFs)"""
+    if not OCR_AVAILABLE:
+        return None
+    
+    try:
+        import tempfile
+        import os
+        
+        # Convert PDF pages to images
+        # Note: Requires Poppler to be installed (pdf2image dependency)
+        try:
+            images = convert_from_path(file_path, dpi=300)
+            print(f"Converted PDF to {len(images)} images for OCR processing")
+        except Exception as convert_error:
+            print(f"Error converting PDF to images (Poppler may not be installed): {convert_error}")
+            print("Install Poppler: Windows - download from poppler.freedesktop.org, Linux - sudo apt-get install poppler-utils, Mac - brew install poppler")
+            return None
+        
+        ocr_text = ""
+        for i, image in enumerate(images):
+            try:
+                # Perform OCR on each page
+                page_text = pytesseract.image_to_string(image, lang='eng')
+                if page_text.strip():
+                    ocr_text += f"\n--- Page {i+1} ---\n{page_text}\n"
+                    print(f"OCR extracted text from page {i+1} ({len(page_text)} characters)")
+            except Exception as ocr_error:
+                print(f"Error performing OCR on page {i+1}: {ocr_error}")
+                # Check if Tesseract is installed
+                if "tesseract" in str(ocr_error).lower() or "not found" in str(ocr_error).lower():
+                    print("Tesseract OCR engine not found. Please install Tesseract.")
+                continue
+        
+        return ocr_text.strip() if ocr_text.strip() else None
+    except Exception as e:
+        print(f"Error in OCR processing: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 def extract_pdf_content(file_paths):
-    """Extract text content from one or multiple PDF files"""
+    """Extract text content from one or multiple PDF files (supports both text and scanned PDFs)"""
     all_content = []
     
     for file_path in file_paths:
         try:
             content = ""
+            text_extracted = False
+            
             if file_path.lower().endswith('.pdf'):
-                with open(file_path, 'rb') as pdf_file:
-                    pdf_reader = PyPDF2.PdfReader(pdf_file)
-                    
-                    # Check if PDF is encrypted
-                    if pdf_reader.is_encrypted:
-                        try:
-                            pdf_reader.decrypt('')
-                        except Exception:
-                            print(f"Could not decrypt PDF: {file_path}")
-                            continue
-                    
-                    # Extract text from all pages
-                    for page in pdf_reader.pages:
-                        try:
-                            page_text = page.extract_text()
-                            if page_text:
-                                content += page_text + "\n"
-                        except Exception as page_error:
-                            print(f"Error extracting text from page: {page_error}")
-                            continue
+                # First, try to extract text directly (for text-based PDFs)
+                try:
+                    with open(file_path, 'rb') as pdf_file:
+                        pdf_reader = PyPDF2.PdfReader(pdf_file)
+                        
+                        # Check if PDF is encrypted
+                        if pdf_reader.is_encrypted:
+                            try:
+                                pdf_reader.decrypt('')
+                            except Exception:
+                                print(f"Could not decrypt PDF: {file_path}")
+                                # Try OCR as fallback
+                                if OCR_AVAILABLE:
+                                    ocr_content = extract_pdf_content_with_ocr(file_path)
+                                    if ocr_content:
+                                        all_content.append(ocr_content)
+                                continue
+                        
+                        # Extract text from all pages
+                        for page in pdf_reader.pages:
+                            try:
+                                page_text = page.extract_text()
+                                if page_text and page_text.strip():
+                                    content += page_text + "\n"
+                                    text_extracted = True
+                            except Exception as page_error:
+                                print(f"Error extracting text from page: {page_error}")
+                                continue
+                except Exception as pdf_error:
+                    print(f"Error reading PDF: {pdf_error}")
+                    text_extracted = False
+                
+                # If no text extracted or very little text, try OCR (for scanned PDFs)
+                if not text_extracted or (content.strip() and len(content.strip()) < 100):
+                    print(f"Little or no text extracted from PDF. Attempting OCR...")
+                    if OCR_AVAILABLE:
+                        ocr_content = extract_pdf_content_with_ocr(file_path)
+                        if ocr_content:
+                            # Use OCR content if it's better than extracted text
+                            if len(ocr_content) > len(content):
+                                content = ocr_content
+                                print(f"OCR extracted {len(ocr_content)} characters")
+                            elif content.strip():
+                                # Combine both if we have some text
+                                content = content + "\n\n[Additional content from OCR:]\n" + ocr_content
+                        else:
+                            print("OCR also failed to extract content")
+                    else:
+                        print("OCR not available - cannot process scanned PDF")
             
             if content.strip():
                 all_content.append(content)
+            else:
+                print(f"Warning: No content extracted from {file_path}")
+                
         except Exception as e:
             print(f"Error processing PDF {file_path}: {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
     # Combine all content
@@ -2030,7 +2121,10 @@ def quiz():
                         first_pdf_name = os.path.basename(pdf_file_paths[0])
                         topic = extract_topic_from_filename(pdf_file_paths[0]) or "PDF Content"
                     
-                    flash(f'Successfully processed {len(pdf_file_paths)} PDF file(s). Questions will be generated from PDF content.', 'success')
+                    pdf_info = f'Successfully processed {len(pdf_file_paths)} PDF file(s). Questions will be generated from PDF content.'
+                    if OCR_AVAILABLE:
+                        pdf_info += ' (OCR support enabled for scanned PDFs)'
+                    flash(pdf_info, 'success')
                 else:
                     flash('Could not extract content from PDF(s). Please try again or enter a topic manually.', 'error')
                     # Clean up temp files

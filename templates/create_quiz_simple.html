@@ -23,9 +23,38 @@
         </div>
         <div class="mb-3">
           <label class="form-label">Upload Notes PDF File(s) (optional)</label>
-          <input type="file" name="notes_pdf" accept="application/pdf" class="form-control" multiple>
-          <div class="form-text">Upload one or multiple PDFs to generate questions from PDF content. Supports both text-based and scanned/image-based PDFs (OCR enabled).</div>
+          <input type="file" name="notes_pdf" accept="application/pdf" class="form-control" multiple id="notes_pdf_input">
+          <div class="form-text">
+            Upload one or multiple PDFs to generate questions from PDF content. Supports both text-based and scanned/image-based PDFs (OCR enabled).
+            <br><strong>Maximum file size: 4.5MB per PDF</strong> (for larger files, split into multiple PDFs).
+          </div>
+          <div id="file_size_warning" class="alert alert-warning mt-2" style="display:none;"></div>
         </div>
+        
+        <script>
+          document.getElementById('notes_pdf_input').addEventListener('change', function(e) {
+            const files = e.target.files;
+            const maxSize = 4.5 * 1024 * 1024; // 4.5MB in bytes
+            const warningDiv = document.getElementById('file_size_warning');
+            let hasLargeFile = false;
+            let largeFiles = [];
+            
+            for (let i = 0; i < files.length; i++) {
+              if (files[i].size > maxSize) {
+                hasLargeFile = true;
+                const sizeMB = (files[i].size / (1024 * 1024)).toFixed(2);
+                largeFiles.push(`${files[i].name} (${sizeMB}MB)`);
+              }
+            }
+            
+            if (hasLargeFile) {
+              warningDiv.innerHTML = '<strong>Warning:</strong> The following file(s) exceed 4.5MB limit: ' + largeFiles.join(', ') + '. Please split into smaller files or compress the PDF.';
+              warningDiv.style.display = 'block';
+            } else {
+              warningDiv.style.display = 'none';
+            }
+          });
+        </script>
         <div class="mb-3">
           <label class="form-label">Question Type</label>
           <select class="form-select" name="question_type" id="question_type" required>

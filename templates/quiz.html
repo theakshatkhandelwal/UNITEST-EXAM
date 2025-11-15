@@ -39,6 +39,7 @@
                                            accept=".pdf" multiple onchange="handleFileUpload(this)">
                                     <div class="form-text">
                                         <i class="fas fa-info-circle me-1"></i>Upload one or multiple PDFs to generate questions from PDF content
+                                        <br><strong>Maximum file size: 4.5MB per PDF</strong> (for larger files, split into multiple PDFs).
                                     </div>
                                 </div>
                             </div>
@@ -286,17 +287,37 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// File upload handling - just show file info
+// File upload handling - show file info and validate size
 function handleFileUpload(input) {
     const files = input.files;
     const fileCount = files.length;
+    const maxSize = 4.5 * 1024 * 1024; // 4.5MB in bytes
+    let hasLargeFile = false;
+    let largeFiles = [];
+    let validFiles = [];
     
     if (fileCount > 0) {
-        const fileNames = Array.from(files).map(f => f.name).join(', ');
-        if (fileCount === 1) {
-            showAlert('info', `PDF selected: ${fileNames}. Questions will be generated from this PDF.`);
-        } else {
-            showAlert('info', `${fileCount} PDFs selected. Questions will be generated from all PDFs.`);
+        for (let i = 0; i < files.length; i++) {
+            if (files[i].size > maxSize) {
+                hasLargeFile = true;
+                const sizeMB = (files[i].size / (1024 * 1024)).toFixed(2);
+                largeFiles.push(`${files[i].name} (${sizeMB}MB)`);
+            } else {
+                validFiles.push(files[i].name);
+            }
+        }
+        
+        if (hasLargeFile) {
+            showAlert('warning', `Warning: The following file(s) exceed 4.5MB limit: ${largeFiles.join(', ')}. Please split into smaller files or compress the PDF.`);
+        }
+        
+        if (validFiles.length > 0) {
+            const fileNames = validFiles.join(', ');
+            if (validFiles.length === 1) {
+                showAlert('info', `PDF selected: ${fileNames}. Questions will be generated from this PDF.`);
+            } else {
+                showAlert('info', `${validFiles.length} PDFs selected. Questions will be generated from all PDFs.`);
+            }
         }
         
         // Clear topic field if PDFs are uploaded (optional - user can still enter topic)

@@ -19,6 +19,7 @@ from reportlab.lib.units import inch
 import io
 from datetime import datetime, timedelta
 import requests
+import secrets
 
 # OCR imports (optional - graceful fallback if not available)
 try:
@@ -325,6 +326,8 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False, nullable=False)  # Admin access flag
     last_login = db.Column(db.DateTime)  # Last login timestamp
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reset_token = db.Column(db.String(100), unique=True, nullable=True)  # Password reset token
+    reset_token_expiry = db.Column(db.DateTime, nullable=True)  # Token expiration time
     login_history = db.relationship('LoginHistory', backref='user', lazy=True, cascade='all, delete-orphan')
 
 class Progress(db.Model):
@@ -1335,6 +1338,117 @@ def login():
             return redirect(url_for('login'))
 
     return render_template('login.html')
+
+@app.route('/forgot_password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        try:
+            email = request.form.get('email', '').strip()
+            username = request.form.get('username', '').strip()
+            
+            if not email and not username:
+                flash('Please enter either your email or username', 'error')
+                return redirect(url_for('forgot_password'))
+            
+            # Find user by email or username
+            if email:
+                user = db.session.query(User).filter_by(email=email).first()
+            else:
+                user = db.session.query(User).filter_by(username=username).first()
+            
+            if user:
+                # Generate reset token
+                reset_token = secrets.token_urlsafe(32)
+                user.reset_token = reset_token
+                user.reset_token_expiry = datetime.utcnow() + timedelta(hours=1)  # Token valid for 1 hour
+                db.session.commit()
+                
+                # Generate reset link
+                reset_link = url_for('reset_password', token=reset_token, _external=True)
+                
+                # In production, send email here
+                # For now, show the link (you can configure email later)
+                flash(f'Password reset link generated! Reset Link: {reset_link}', 'info')
+                flash('Please copy this link and use it to reset your password. The link is valid for 1 hour.', 'info')
+                
+                # TODO: Send email with reset_link
+                # Example: send_password_reset_email(user.email, reset_link)
+                
+                return render_template('forgot_password.html', reset_link=reset_link, show_link=True)
+            else:
+                # Don't reveal if user exists for security
+                flash('If an account exists with that email/username, a password reset link has been sent.', 'info')
+                return redirect(url_for('forgot_password'))
+        except Exception as e:
+            print(f"Error in forgot_password: {str(e)}")
+            db.session.rollback()
+            flash(f'Error processing request: {str(e)}', 'error')
+            return redirect(url_for('forgot_password'))
+    
+    return render_template('forgot_password.html', show_link=False)
+
+@app.route('/reset_password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    if request.method == 'POST':
+        try:
+            new_password = request.form.get('password', '').strip()
+            confirm_password = request.form.get('confirm_password', '').strip()
+            
+            if not new_password or not confirm_password:
+                flash('Please fill in all fields', 'error')
+                return redirect(url_for('reset_password', token=token))
+            
+            if new_password != confirm_password:
+                flash('Passwords do not match', 'error')
+                return redirect(url_for('reset_password', token=token))
+            
+            if len(new_password) < 6:
+                flash('Password must be at least 6 characters long', 'error')
+                return redirect(url_for('reset_password', token=token))
+            
+            # Find user by token
+            user = db.session.query(User).filter_by(reset_token=token).first()
+            
+            if not user:
+                flash('Invalid or expired reset token', 'error')
+                return redirect(url_for('forgot_password'))
+            
+            # Check if token is expired
+            if user.reset_token_expiry and user.reset_token_expiry < datetime.utcnow():
+                flash('Reset token has expired. Please request a new one.', 'error')
+                user.reset_token = None
+                user.reset_token_expiry = None
+                db.session.commit()
+                return redirect(url_for('forgot_password'))
+            
+            # Update password
+            user.password_hash = generate_password_hash(new_password)
+            user.reset_token = None
+            user.reset_token_expiry = None
+            db.session.commit()
+            
+            flash('Password reset successfully! You can now login with your new password.', 'success')
+            return redirect(url_for('login'))
+        except Exception as e:
+            print(f"Error in reset_password: {str(e)}")
+            db.session.rollback()
+            flash(f'Error resetting password: {str(e)}', 'error')
+            return redirect(url_for('reset_password', token=token))
+    
+    # GET request - show reset form
+    user = db.session.query(User).filter_by(reset_token=token).first()
+    if not user:
+        flash('Invalid or expired reset token', 'error')
+        return redirect(url_for('forgot_password'))
+    
+    if user.reset_token_expiry and user.reset_token_expiry < datetime.utcnow():
+        flash('Reset token has expired. Please request a new one.', 'error')
+        user.reset_token = None
+        user.reset_token_expiry = None
+        db.session.commit()
+        return redirect(url_for('forgot_password'))
+    
+    return render_template('reset_password.html', token=token)
 
 @app.route('/logout')
 @login_required
@@ -3325,6 +3439,28 @@ def init_db():
                     print("Added last_login column to user table")
             except Exception as e:
                 print(f"last_login column check/add failed (may already exist): {e}")
+            
+            # Check if reset_token column exists, if not add it
+            try:
+                from sqlalchemy import text
+                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token'"))
+                if not result.fetchone():
+                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token VARCHAR(100) UNIQUE"))
+                    db.session.commit()
+                    print("Added reset_token column to user table")
+            except Exception as e:
+                print(f"reset_token column check/add failed (may already exist): {e}")
+            
+            # Check if reset_token_expiry column exists, if not add it
+            try:
+                from sqlalchemy import text
+                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token_expiry'"))
+                if not result.fetchone():
+                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token_expiry TIMESTAMP"))
+                    db.session.commit()
+                    print("Added reset_token_expiry column to user table")
+            except Exception as e:
+                print(f"reset_token_expiry column check/add failed (may already exist): {e}")
             
             # Create login_history table if it doesn't exist
             try:

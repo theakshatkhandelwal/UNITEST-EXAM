@@ -17,8 +17,10 @@ This guide helps you test changes locally **before** they go live on your websit
 
 1. **Create a `.env` file** (if you don't have one):
    ```bash
-   # Copy from example
-   cp env_example.txt .env
+   # Windows PowerShell
+   Copy-Item env_example.txt .env
+   
+   # Or manually copy and rename the file
    ```
 
 2. **Edit `.env` file** with your local settings:
@@ -36,6 +38,10 @@ This guide helps you test changes locally **before** they go live on your websit
 
 3. **Install dependencies** (if not already done):
    ```bash
+   # Windows
+   py -m pip install -r requirements.txt
+   
+   # Mac/Linux
    pip install -r requirements.txt
    ```
 
@@ -47,6 +53,14 @@ This guide helps you test changes locally **before** they go live on your websit
 
 1. **Start local server**:
    ```bash
+   # Windows
+   py run_local.py
+   
+   # Or standard way
+   py app.py
+   
+   # Mac/Linux
+   python run_local.py
    python app.py
    ```
 
@@ -73,7 +87,11 @@ This keeps your `main` branch safe for production:
 
 3. **Test locally**:
    ```bash
-   python app.py
+   # Windows
+   py run_local.py
+   
+   # Mac/Linux
+   python run_local.py
    ```
 
 4. **If everything works**, merge to main:
@@ -165,6 +183,10 @@ DATABASE_URL=sqlite:///unittest_local.db
 ### Issue: "Module not found" error
 **Solution**: Install dependencies:
 ```bash
+# Windows
+py -m pip install -r requirements.txt
+
+# Mac/Linux
 pip install -r requirements.txt
 ```
 

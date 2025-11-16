@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Local Development Server Runner
 Use this script to run the app in development mode with better error messages
@@ -6,6 +7,13 @@ Use this script to run the app in development mode with better error messages
 
 import os
 import sys
+
+# Fix Windows console encoding for emojis
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
 
 # Set development environment
 os.environ['FLASK_ENV'] = 'development'
@@ -52,7 +60,8 @@ except Exception as e:
     print(f"\n❌ Error starting server: {e}")
     print("\n💡 Troubleshooting:")
     print("1. Check if .env file has correct API keys")
-    print("2. Run: pip install -r requirements.txt")
+    print("2. Run: py -m pip install -r requirements.txt")
     print("3. Check for errors in app.py")
+    print("4. On Windows, use 'py' instead of 'python'")
     sys.exit(1)
 

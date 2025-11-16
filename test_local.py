@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Local Testing Script for UniTest
 Run this to quickly test your local setup before deploying
@@ -10,6 +11,13 @@ import subprocess
 import time
 import requests
 from pathlib import Path
+
+# Fix Windows console encoding for emojis
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
 
 def check_env_file():
     """Check if .env file exists"""
@@ -108,10 +116,12 @@ def main():
     print("🚀 Ready to test locally!")
     print()
     print("Next steps:")
-    print("1. Run: python app.py")
+    print("1. Run: py run_local.py  (or: py app.py)")
     print("2. Open: http://localhost:5000")
     print("3. Test your changes")
     print("4. If everything works, commit and push")
+    print()
+    print("💡 On Windows, use 'py' instead of 'python'")
     print()
     
     return True

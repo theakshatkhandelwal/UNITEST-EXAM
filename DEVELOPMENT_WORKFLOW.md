@@ -55,27 +55,36 @@ Test changes locally **before** they affect your live website.
 
 ### First Time Setup:
 ```bash
+# Windows PowerShell:
 # 1. Create .env file (if not exists)
-cp env_example.txt .env
+Copy-Item env_example.txt .env
 
 # 2. Edit .env file - add your API keys
 # Use a LOCAL database for testing:
 DATABASE_URL=sqlite:///unittest_local.db
 
 # 3. Install dependencies
-pip install -r requirements.txt
+py -m pip install -r requirements.txt
 
 # 4. Run local test script
-python test_local.py
+py test_local.py
+
+# Mac/Linux:
+# 1. Create .env file
+cp env_example.txt .env
+
+# 2-4. Same as above, but use 'python' instead of 'py'
 ```
 
 ### Daily Development:
 ```bash
-# Start local server
-python run_local.py
+# Windows:
+py run_local.py
+# Or: py app.py
 
-# Or use the standard way
-python app.py
+# Mac/Linux:
+python run_local.py
+# Or: python app.py
 ```
 
 ---
@@ -140,7 +149,8 @@ git checkout -b feature/new-button
 # Edit templates/home.html, app.py, etc.
 
 # 3. Test locally
-python run_local.py
+# Windows: py run_local.py
+# Mac/Linux: python run_local.py
 
 # 4. Open http://localhost:5000
 # Test the new button works
@@ -160,15 +170,15 @@ git push origin main
 
 ## 🎯 Quick Reference
 
-| Task | Command |
-|------|---------|
-| Test setup | `python test_local.py` |
-| Run locally | `python run_local.py` |
-| Create branch | `git checkout -b development` |
-| Test changes | Open `http://localhost:5000` |
-| Commit changes | `git add . && git commit -m "message"` |
-| Push to GitHub | `git push` |
-| Deploy to production | Push to `main` branch (auto-deploys) |
+| Task | Windows Command | Mac/Linux Command |
+|------|----------------|-------------------|
+| Test setup | `py test_local.py` | `python test_local.py` |
+| Run locally | `py run_local.py` | `python run_local.py` |
+| Create branch | `git checkout -b development` | `git checkout -b development` |
+| Test changes | Open `http://localhost:5000` | Open `http://localhost:5000` |
+| Commit changes | `git add . && git commit -m "message"` | `git add . && git commit -m "message"` |
+| Push to GitHub | `git push` | `git push` |
+| Deploy to production | Push to `main` branch | Push to `main` branch |
 
 ---
 

@@ -52,6 +52,11 @@
 
   <form id="quizForm" method="POST" action="{{ url_for('submit_shared_quiz', code=quiz.code) }}" style="display:none;">
     <input type="hidden" name="fullscreen_exit" id="fullscreen_exit_flag" value="false">
+    <input type="hidden" name="alt_tab_flag" id="alt_tab_flag" value="false">
+    <input type="hidden" name="win_shift_s_flag" id="win_shift_s_flag" value="false">
+    <input type="hidden" name="win_prtscn_flag" id="win_prtscn_flag" value="false">
+    <input type="hidden" name="prtscn_flag" id="prtscn_flag" value="false">
+    <input type="hidden" name="tab_switch_flag" id="tab_switch_flag" value="false">
     
     <!-- Single Question Container -->
     <div id="question-container">
@@ -258,6 +263,14 @@ if (document.readyState === 'loading') {
 
 function showQuiz() {
   quizStarted = true;
+  // Clear warnings when quiz starts (fresh start for each quiz)
+  violationWarnings = {};
+  try {
+    localStorage.removeItem(WARNING_KEY);
+  } catch(e) {
+    console.warn('Could not clear warnings:', e);
+  }
+  
   document.getElementById('quizForm').style.display = '';
   document.getElementById('quiz-nav-bar').style.display = '';
   document.getElementById('fs-gate').remove();
@@ -319,7 +332,16 @@ function exitQuiz() {
   }
   
   console.log('Exiting quiz - logging out');
-  document.getElementById('fullscreen_exit_flag').value = 'true';
+  
+  // Collect all violation flags
+  const flags = {
+    fullscreen_exit: document.getElementById('fullscreen_exit_flag').value === 'true',
+    alt_tab: document.getElementById('alt_tab_flag').value === 'true',
+    win_shift_s: document.getElementById('win_shift_s_flag').value === 'true',
+    win_prtscn: document.getElementById('win_prtscn_flag').value === 'true',
+    prtscn: document.getElementById('prtscn_flag').value === 'true',
+    tab_switch: document.getElementById('tab_switch_flag').value === 'true'
+  };
   
   // Collect answers and send
   const answers = {};
@@ -333,9 +355,16 @@ function exitQuiz() {
     answers['q_' + qid] = val;
   });
   
+  // Include flags in the submission
+  answers['violation_flags'] = flags;
+  
+  console.log('DEBUG: Sending violation flags:', flags);
+  console.log('DEBUG: Full payload:', answers);
+  
   try {
-    navigator.sendBeacon('{{ url_for('auto_submit_partial', code=quiz.code) }}', 
-      new Blob([JSON.stringify(answers)], {type: 'application/json'}));
+    const blob = new Blob([JSON.stringify(answers)], {type: 'application/json'});
+    navigator.sendBeacon('{{ url_for('auto_submit_partial', code=quiz.code) }}', blob);
+    console.log('DEBUG: Beacon sent successfully');
   } catch(e) {
     console.error('Failed to send answers:', e);
   }
@@ -365,10 +394,196 @@ document.addEventListener('msfullscreenchange', function() {
   }
 });
 
-// Disable copy/paste
+// Warning system - track warnings per violation type
+const WARNING_KEY = 'quiz_violation_warnings';
+let violationWarnings = {};
+
+// Load warnings from localStorage
+try {
+  const stored = localStorage.getItem(WARNING_KEY);
+  if (stored) {
+    violationWarnings = JSON.parse(stored);
+  }
+} catch(e) {
+  console.warn('Could not load warnings from localStorage:', e);
+}
+
+function showWarning(violationType, message) {
+  // Check if already warned for this violation type
+  if (violationWarnings[violationType]) {
+    // Second violation - flag it
+    console.log(`⚠️ Second ${violationType} violation - flagging`);
+    return true; // Return true to flag violation
+  } else {
+    // First violation - show warning
+    violationWarnings[violationType] = true;
+    try {
+      localStorage.setItem(WARNING_KEY, JSON.stringify(violationWarnings));
+    } catch(e) {
+      console.warn('Could not save warning to localStorage:', e);
+    }
+    
+    // Show warning modal
+    const warningModal = document.createElement('div');
+    warningModal.id = 'warningModal_' + Date.now();
+    warningModal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:999999;display:flex;align-items:center;justify-content:center;';
+    
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = 'background:#1e1e1e;padding:30px;border-radius:10px;max-width:500px;border:2px solid #f48771;';
+    modalContent.innerHTML = `
+      <h3 style="color:#f48771;margin-bottom:15px;">⚠️ Warning</h3>
+      <p style="color:#d4d4d4;margin-bottom:20px;font-size:16px;">${message}</p>
+      <p style="color:#858585;margin-bottom:20px;font-size:14px;">This is your first warning. If you do this again, your quiz will be automatically submitted and flagged.</p>
+      <button id="warningOkBtn" style="background:#0078d4;color:white;border:none;padding:10px 30px;border-radius:5px;cursor:pointer;font-size:16px;width:100%;">I Understand</button>
+    `;
+    
+    warningModal.appendChild(modalContent);
+    document.body.appendChild(warningModal);
+    
+    // Add click handler - use the button directly from modalContent
+    const okButton = modalContent.querySelector('#warningOkBtn');
+    if (okButton) {
+      okButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (warningModal && warningModal.parentNode) {
+          warningModal.parentNode.removeChild(warningModal);
+        }
+      });
+      
+      // Also allow clicking outside the modal to close it
+      warningModal.addEventListener('click', function(e) {
+        if (e.target === warningModal) {
+          warningModal.parentNode.removeChild(warningModal);
+        }
+      });
+    }
+    
+    console.log(`⚠️ First ${violationType} violation - warning shown`);
+    return false; // Return false to not flag yet
+  }
+}
+
+// Tab switching and window focus detection
+let lastVisibilityChange = Date.now();
+let visibilityWarningShown = false;
+
+// Detect tab switching using Page Visibility API
+document.addEventListener('visibilitychange', function() {
+  if (!quizStarted) return;
+  
+  if (document.hidden) {
+    const shouldFlag = showWarning('tab_switch', 'You switched tabs or minimized the window. This is not allowed during the quiz.');
+    if (shouldFlag) {
+      console.log('⚠️ Tab switched - flagging violation');
+      document.getElementById('tab_switch_flag').value = 'true';
+      document.getElementById('alt_tab_flag').value = 'true';
+      lastVisibilityChange = Date.now();
+      
+      if (!visibilityWarningShown) {
+        visibilityWarningShown = true;
+        exitQuiz();
+      }
+    }
+  } else {
+    console.log('Tab became visible again');
+  }
+});
+
+// Detect window blur (when user switches to another window)
+window.addEventListener('blur', function() {
+  if (!quizStarted) return;
+  
+  const shouldFlag = showWarning('window_blur', 'You switched to another window. This is not allowed during the quiz.');
+  if (shouldFlag) {
+    console.log('⚠️ Window lost focus - flagging violation');
+    document.getElementById('tab_switch_flag').value = 'true';
+    document.getElementById('alt_tab_flag').value = 'true';
+    
+    if (!visibilityWarningShown) {
+      visibilityWarningShown = true;
+      exitQuiz();
+    }
+  }
+});
+
+// Disable copy/paste and detect keyboard shortcuts
 document.addEventListener('keydown', function(e) {
   if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'a' || e.key === 'v')) {
     e.preventDefault();
+  }
+  
+  // Only check violations if quiz has started
+  if (!quizStarted) return;
+  
+  // Detect Alt+Tab (Alt key + Tab key) - improved detection
+  if (e.altKey && (e.key === 'Tab' || e.keyCode === 9)) {
+    e.preventDefault();
+    e.stopPropagation();
+    const shouldFlag = showWarning('alt_tab', 'Alt+Tab shortcut detected. Switching windows is not allowed during the quiz.');
+    if (shouldFlag) {
+      console.log('⚠️ Alt+Tab detected - flagging violation');
+      document.getElementById('alt_tab_flag').value = 'true';
+      document.getElementById('tab_switch_flag').value = 'true';
+      exitQuiz();
+    }
+    return false;
+  }
+  
+  // Detect Win+Shift+S (Windows Snipping Tool) - improved detection
+  // Note: Win key is detected as metaKey on Windows
+  const isWinKey = e.metaKey || (e.key && e.key.toLowerCase() === 'meta') || e.getModifierState('Meta');
+  if (isWinKey && e.shiftKey && (e.key && e.key.toLowerCase() === 's' || e.keyCode === 83 || e.code === 'KeyS')) {
+    e.preventDefault();
+    e.stopPropagation();
+    const shouldFlag = showWarning('screenshot', 'Screenshot shortcut (Win+Shift+S) detected. Taking screenshots is not allowed during the quiz.');
+    if (shouldFlag) {
+      console.log('⚠️ Win+Shift+S detected - flagging violation');
+      document.getElementById('win_shift_s_flag').value = 'true';
+      exitQuiz();
+    }
+    return false;
+  }
+  
+  // Detect Win+PrintScreen
+  if (isWinKey && (e.key === 'PrintScreen' || e.keyCode === 44 || e.code === 'PrintScreen')) {
+    e.preventDefault();
+    e.stopPropagation();
+    const shouldFlag = showWarning('screenshot', 'Screenshot shortcut (Win+PrintScreen) detected. Taking screenshots is not allowed during the quiz.');
+    if (shouldFlag) {
+      console.log('⚠️ Win+PrintScreen detected - flagging violation');
+      document.getElementById('win_prtscn_flag').value = 'true';
+      exitQuiz();
+    }
+    return false;
+  }
+  
+  // Detect PrintScreen (standalone)
+  if ((e.key === 'PrintScreen' || e.keyCode === 44 || e.code === 'PrintScreen') && 
+      !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    const shouldFlag = showWarning('screenshot', 'PrintScreen key detected. Taking screenshots is not allowed during the quiz.');
+    if (shouldFlag) {
+      console.log('⚠️ PrintScreen detected - flagging violation');
+      document.getElementById('prtscn_flag').value = 'true';
+      exitQuiz();
+    }
+    return false;
+  }
+  
+  // Detect Ctrl+Shift+I (Developer Tools) - additional security
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.keyCode === 73)) {
+    console.log('⚠️ Developer Tools shortcut detected');
+    e.preventDefault();
+    return false;
+  }
+  
+  // Detect F12 (Developer Tools)
+  if (e.key === 'F12' || e.keyCode === 123) {
+    console.log('⚠️ F12 (Developer Tools) detected');
+    e.preventDefault();
+    return false;
   }
 });
 

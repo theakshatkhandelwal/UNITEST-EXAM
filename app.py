@@ -377,6 +377,11 @@ class QuizSubmission(db.Model):
     review_unlocked_at = db.Column(db.DateTime)
     # flag if student exited fullscreen during test
     fullscreen_exit_flag = db.Column(db.Boolean, default=False)
+    # additional violation flags
+    alt_tab_flag = db.Column(db.Boolean, default=False)
+    win_shift_s_flag = db.Column(db.Boolean, default=False)
+    win_prtscn_flag = db.Column(db.Boolean, default=False)
+    prtscn_flag = db.Column(db.Boolean, default=False)
     # counts to determine clean vs hold
     answered_count = db.Column(db.Integer, default=0)
     question_count = db.Column(db.Integer, default=0)
@@ -2124,11 +2129,24 @@ def submit_shared_quiz(code):
     submission.passed = passed
     # set review unlock time 15 minutes after submission
     submission.review_unlocked_at = datetime.utcnow() + timedelta(minutes=15)
-    # check if student exited fullscreen during test
+    # Get violation flags from form (if submitted normally)
     submission.fullscreen_exit_flag = request.form.get('fullscreen_exit') == 'true'
+    submission.alt_tab_flag = request.form.get('alt_tab_flag') == 'true'
+    submission.win_shift_s_flag = request.form.get('win_shift_s_flag') == 'true'
+    submission.win_prtscn_flag = request.form.get('win_prtscn_flag') == 'true'
+    submission.prtscn_flag = request.form.get('prtscn_flag') == 'true'
+    # Tab switch also counts as alt_tab
+    if request.form.get('tab_switch_flag') == 'true':
+        submission.alt_tab_flag = True
+    
+    # Check if any violation occurred
+    has_violation = (submission.fullscreen_exit_flag or submission.alt_tab_flag or 
+                     submission.win_shift_s_flag or submission.win_prtscn_flag or 
+                     submission.prtscn_flag)
+    
     submission.answered_count = answered_count
     submission.question_count = len(questions)
-    submission.is_full_completion = (answered_count == len(questions)) and (not submission.fullscreen_exit_flag)
+    submission.is_full_completion = (answered_count == len(questions)) and (not has_violation)
     submission.completed = True
     db.session.commit()
 
@@ -2154,6 +2172,22 @@ def auto_submit_partial(code):
         scored_marks = 0.0
         answered_count = 0
         data = request.get_json(silent=True) or {}
+        
+        # Fallback: manually parse JSON if get_json didn't work (for sendBeacon)
+        if not data and request.data:
+            try:
+                import json
+                data = json.loads(request.data.decode('utf-8'))
+                print(f"DEBUG: Manually parsed JSON from request.data")
+            except Exception as e:
+                print(f"DEBUG: Failed to parse JSON manually: {e}")
+                data = {}
+        
+        print(f"DEBUG: Received data in auto_submit_partial: {data}")
+        print(f"DEBUG: Data type: {type(data)}")
+        print(f"DEBUG: Request content type: {request.content_type}")
+        if request.data:
+            print(f"DEBUG: Request data (first 200 chars): {request.data[:200]}")
 
         for q in questions:
             total_marks += float(q.marks or 1)
@@ -2198,7 +2232,21 @@ def auto_submit_partial(code):
         submission.passed = submission.percentage >= 60
         from datetime import timedelta
         submission.review_unlocked_at = datetime.utcnow() + timedelta(minutes=15)
-        submission.fullscreen_exit_flag = True
+        # Set violation flags from request data
+        violation_flags = data.get('violation_flags', {})
+        print(f"DEBUG: Received violation_flags: {violation_flags}")
+        print(f"DEBUG: violation_flags type: {type(violation_flags)}")
+        if violation_flags:
+            print(f"DEBUG: alt_tab value: {violation_flags.get('alt_tab')}, tab_switch: {violation_flags.get('tab_switch')}")
+        submission.fullscreen_exit_flag = True  # Auto-submit always means fullscreen exit
+        # Convert to boolean explicitly - tab_switch also counts as alt_tab
+        alt_tab_violation = bool(violation_flags.get('alt_tab', False)) or bool(violation_flags.get('tab_switch', False)) if violation_flags else False
+        submission.alt_tab_flag = alt_tab_violation
+        submission.win_shift_s_flag = bool(violation_flags.get('win_shift_s', False)) if violation_flags else False
+        submission.win_prtscn_flag = bool(violation_flags.get('win_prtscn', False)) if violation_flags else False
+        submission.prtscn_flag = bool(violation_flags.get('prtscn', False)) if violation_flags else False
+        print(f"DEBUG: Set flags - alt_tab: {submission.alt_tab_flag}, win_shift_s: {submission.win_shift_s_flag}, win_prtscn: {submission.win_prtscn_flag}, prtscn: {submission.prtscn_flag}")
+        
         submission.answered_count = answered_count
         submission.question_count = len(questions)
         submission.is_full_completion = False
@@ -2530,6 +2578,14 @@ def dev_migrate():
                     conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN review_unlocked_at DATETIME;"))
                 if 'fullscreen_exit_flag' not in cols:
                     conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN fullscreen_exit_flag BOOLEAN DEFAULT 0;"))
+                if 'alt_tab_flag' not in cols:
+                    conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN alt_tab_flag BOOLEAN DEFAULT 0;"))
+                if 'win_shift_s_flag' not in cols:
+                    conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_shift_s_flag BOOLEAN DEFAULT 0;"))
+                if 'win_prtscn_flag' not in cols:
+                    conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_prtscn_flag BOOLEAN DEFAULT 0;"))
+                if 'prtscn_flag' not in cols:
+                    conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN prtscn_flag BOOLEAN DEFAULT 0;"))
                 if 'answered_count' not in cols:
                     conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN answered_count INTEGER DEFAULT 0;"))
                 if 'question_count' not in cols:
@@ -3492,7 +3548,30 @@ def init_db():
                 except Exception as e:
                     print(f"reset_token_expiry column check/add failed (may already exist): {e}")
             else:
-                # For SQLite, db.create_all() handles everything - no need for manual column checks
+                # For SQLite, we need to manually add columns to existing tables
+                try:
+                    from sqlalchemy import text
+                    with db.engine.begin() as conn:
+                        # Check quiz_submission table columns
+                        res = conn.execute(text("PRAGMA table_info(quiz_submission);"))
+                        cols = [str(r[1]) for r in res]
+                        
+                        # Add violation flag columns if missing
+                        if 'alt_tab_flag' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN alt_tab_flag BOOLEAN DEFAULT 0;"))
+                            print("✅ Added alt_tab_flag column to quiz_submission")
+                        if 'win_shift_s_flag' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_shift_s_flag BOOLEAN DEFAULT 0;"))
+                            print("✅ Added win_shift_s_flag column to quiz_submission")
+                        if 'win_prtscn_flag' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_prtscn_flag BOOLEAN DEFAULT 0;"))
+                            print("✅ Added win_prtscn_flag column to quiz_submission")
+                        if 'prtscn_flag' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN prtscn_flag BOOLEAN DEFAULT 0;"))
+                            print("✅ Added prtscn_flag column to quiz_submission")
+                except Exception as e:
+                    print(f"SQLite migration check failed (may already exist): {e}")
+                
                 print("Using SQLite database - all tables created by db.create_all()")
             
             # Create login_history table if it doesn't exist

@@ -45,9 +45,18 @@
                 {% if s.is_full_completion %}
                   <span class="badge bg-success" title="Completed all questions in fullscreen">✅ Clean</span>
                 {% else %}
-                  <span class="badge bg-warning" title="Partial/Exited fullscreen">⏸ Hold</span>
+                  <span class="badge bg-warning" title="Partial/Violation detected">⏸ Hold</span>
                   <div class="small text-muted">Answered: {{ s.answered_count }}/{{ s.question_count }}</div>
-                  {% if s.fullscreen_exit_flag %}<div class="small text-danger">Exited fullscreen</div>{% endif %}
+                  {% if s.fullscreen_exit_flag or s.alt_tab_flag or s.win_shift_s_flag or s.win_prtscn_flag or s.prtscn_flag %}
+                    <div class="small text-danger mt-1">
+                      <strong>Violations:</strong>
+                      {% if s.fullscreen_exit_flag %}<div>⚠️ Exited fullscreen</div>{% endif %}
+                      {% if s.alt_tab_flag %}<div>⚠️ Alt+Tab / Tab switch detected</div>{% endif %}
+                      {% if s.win_shift_s_flag %}<div>⚠️ Screenshot taken (Win+Shift+S)</div>{% endif %}
+                      {% if s.win_prtscn_flag %}<div>⚠️ Screenshot taken (Win+PrintScreen)</div>{% endif %}
+                      {% if s.prtscn_flag %}<div>⚠️ Screenshot taken (PrintScreen)</div>{% endif %}
+                    </div>
+                  {% endif %}
                 {% endif %}
               </td>
               <td>{{ s.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>

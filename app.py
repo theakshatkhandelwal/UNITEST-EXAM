@@ -1136,11 +1136,13 @@ def home():
 
 @app.route('/favicon.ico')
 def favicon():
-    return '', 204  # No content response
+    """Serve favicon for better Google search results"""
+    return send_file('static/favicon.ico', mimetype='image/x-icon')
 
 @app.route('/favicon.png')
 def favicon_png():
-    return '', 204  # No content response
+    """Serve favicon PNG if needed"""
+    return send_file('static/favicon.ico', mimetype='image/x-icon')
 
 @app.route('/test')
 def test():

@@ -5,10 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}UNITEST - #1 AI Quiz Generator & AI Learning Platform | AI-Based Quiz Maker{% endblock %}</title>
     
-    <!-- Favicon -->
-    <link rel="icon" type="image/jpeg" href="{{ url_for('static', filename='favicon.jpg') }}">
-    <link rel="shortcut icon" type="image/jpeg" href="{{ url_for('static', filename='favicon.jpg') }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon.jpg') }}">
+    <!-- Favicon - Multiple sizes for better Google indexing -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="shortcut icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="icon" type="image/jpeg" href="{{ url_for('static', filename='favicon.jpg') }}" sizes="any">
     
     <!-- SEO Meta Tags -->
     <meta name="description" content="{% block description %}UNITEST - The #1 AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes, coding questions, and assessments with Google Gemini AI. Best AI quiz generator for students and teachers.{% endblock %}">
@@ -21,19 +26,23 @@
     <meta property="og:description" content="{% block og_description %}UNITEST - The best AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes, coding questions, and assessments with Google Gemini AI.{% endblock %}">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://unitest.in{{ request.path }}">
-    <meta property="og:image" content="https://unitest.in/static/style.css">
+    <meta property="og:image" content="https://unitest.in/static/favicon.ico">
+    <meta property="og:image:type" content="image/x-icon">
+    <meta property="og:image:width" content="32">
+    <meta property="og:image:height" content="32">
     <meta property="og:site_name" content="UNITEST">
     
     <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="{% block twitter_title %}UNITEST - #1 AI Quiz Generator & AI Learning Platform{% endblock %}">
     <meta name="twitter:description" content="{% block twitter_description %}UNITEST - The best AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes and assessments.{% endblock %}">
-    <meta name="twitter:image" content="https://unitest.in/static/style.css">
+    <meta name="twitter:image" content="https://unitest.in/static/favicon.ico">
     
     <!-- Additional SEO Tags -->
     <link rel="canonical" href="https://unitest.in{{ request.path }}">
     <meta name="theme-color" content="#4285f4">
     <meta name="msapplication-TileColor" content="#4285f4">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     
     <!-- Structured Data for SEO -->
     <script type="application/ld+json">
@@ -86,7 +95,7 @@
         "name": "UNITEST",
         "alternateName": "UNITEST AI Quiz Generator",
         "url": "https://unitest.in",
-        "logo": "https://unitest.in/static/favicon.jpg",
+        "logo": "https://unitest.in/static/favicon.ico",
         "description": "UNITEST - The #1 AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes and assessments.",
         "sameAs": [],
         "contactPoint": {

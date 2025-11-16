@@ -3547,6 +3547,39 @@ def init_db():
                         print("Added reset_token_expiry column to user table")
                 except Exception as e:
                     print(f"reset_token_expiry column check/add failed (may already exist): {e}")
+                
+                # Check and add violation flag columns to quiz_submission table (PostgreSQL)
+                try:
+                    from sqlalchemy import text
+                    # Check if alt_tab_flag column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='alt_tab_flag'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN alt_tab_flag BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added alt_tab_flag column to quiz_submission table")
+                    
+                    # Check if win_shift_s_flag column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='win_shift_s_flag'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_shift_s_flag BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added win_shift_s_flag column to quiz_submission table")
+                    
+                    # Check if win_prtscn_flag column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='win_prtscn_flag'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_prtscn_flag BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added win_prtscn_flag column to quiz_submission table")
+                    
+                    # Check if prtscn_flag column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='prtscn_flag'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN prtscn_flag BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added prtscn_flag column to quiz_submission table")
+                except Exception as e:
+                    print(f"Violation flag columns check/add failed (may already exist): {e}")
             else:
                 # For SQLite, we need to manually add columns to existing tables
                 try:
@@ -3587,12 +3620,13 @@ def init_db():
         print(f"Database initialization error: {str(e)}")
         # Continue running the app even if database fails
 
-# Initialize database on startup (for local development)
-if os.environ.get('FLASK_ENV') == 'development' or not os.environ.get('DATABASE_URL'):
-    try:
-        init_db()
-    except Exception as e:
-        print(f"Warning: Database initialization failed: {e}")
+# Initialize database on startup (runs migrations for both dev and production)
+# This ensures new columns are added automatically
+try:
+    init_db()
+except Exception as e:
+    print(f"Warning: Database initialization failed: {e}")
+    if os.environ.get('FLASK_ENV') == 'development' or not os.environ.get('DATABASE_URL'):
         print("You may need to run: py init_local_db.py")
 
 if __name__ == '__main__':

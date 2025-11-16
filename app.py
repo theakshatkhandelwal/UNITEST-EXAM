@@ -3413,78 +3413,87 @@ def not_found_error(error):
 def init_db():
     try:
         with app.app_context():
+            # Create all tables first
             db.create_all()
             
-            # Check if we need to add the role column to existing user table
-            try:
-                from sqlalchemy import text
-                # Check if role column exists
-                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='role'"))
-                if not result.fetchone():
-                    # Add role column if it doesn't exist
-                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN role VARCHAR(20) DEFAULT 'student'"))
-                    db.session.commit()
-                    print("Added role column to user table")
-            except Exception as e:
-                print(f"Role column check/add failed (may already exist): {e}")
+            # Check database type - PostgreSQL has information_schema, SQLite doesn't
+            is_sqlite = 'sqlite' in app.config.get('SQLALCHEMY_DATABASE_URI', '').lower()
             
-            # Check if we need to update password_hash column length
-            try:
-                from sqlalchemy import text
-                # Check current password_hash column length
-                result = db.session.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name='user' AND column_name='password_hash'"))
-                row = result.fetchone()
-                if row and row[0] < 255:
-                    # Update password_hash column to be longer
-                    db.session.execute(text("ALTER TABLE \"user\" ALTER COLUMN password_hash TYPE VARCHAR(255)"))
-                    db.session.commit()
-                    print("Updated password_hash column length to 255")
-            except Exception as e:
-                print(f"Password hash column update failed (may already be correct): {e}")
+            # For PostgreSQL, check and add columns if needed
+            if not is_sqlite:
+                # Check if we need to add the role column to existing user table
+                try:
+                    from sqlalchemy import text
+                    # Check if role column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='role'"))
+                    if not result.fetchone():
+                        # Add role column if it doesn't exist
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN role VARCHAR(20) DEFAULT 'student'"))
+                        db.session.commit()
+                        print("Added role column to user table")
+                except Exception as e:
+                    print(f"Role column check/add failed (may already exist): {e}")
             
-            # Check if is_admin column exists, if not add it
-            try:
-                from sqlalchemy import text
-                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='is_admin'"))
-                if not result.fetchone():
-                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
-                    db.session.commit()
-                    print("Added is_admin column to user table")
-            except Exception as e:
-                print(f"is_admin column check/add failed (may already exist): {e}")
-            
-            # Check if last_login column exists, if not add it
-            try:
-                from sqlalchemy import text
-                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='last_login'"))
-                if not result.fetchone():
-                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN last_login TIMESTAMP"))
-                    db.session.commit()
-                    print("Added last_login column to user table")
-            except Exception as e:
-                print(f"last_login column check/add failed (may already exist): {e}")
-            
-            # Check if reset_token column exists, if not add it
-            try:
-                from sqlalchemy import text
-                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token'"))
-                if not result.fetchone():
-                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token VARCHAR(100) UNIQUE"))
-                    db.session.commit()
-                    print("Added reset_token column to user table")
-            except Exception as e:
-                print(f"reset_token column check/add failed (may already exist): {e}")
-            
-            # Check if reset_token_expiry column exists, if not add it
-            try:
-                from sqlalchemy import text
-                result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token_expiry'"))
-                if not result.fetchone():
-                    db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token_expiry TIMESTAMP"))
-                    db.session.commit()
-                    print("Added reset_token_expiry column to user table")
-            except Exception as e:
-                print(f"reset_token_expiry column check/add failed (may already exist): {e}")
+                # Check if we need to update password_hash column length
+                try:
+                    from sqlalchemy import text
+                    # Check current password_hash column length
+                    result = db.session.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name='user' AND column_name='password_hash'"))
+                    row = result.fetchone()
+                    if row and row[0] < 255:
+                        # Update password_hash column to be longer
+                        db.session.execute(text("ALTER TABLE \"user\" ALTER COLUMN password_hash TYPE VARCHAR(255)"))
+                        db.session.commit()
+                        print("Updated password_hash column length to 255")
+                except Exception as e:
+                    print(f"Password hash column update failed (may already be correct): {e}")
+                
+                # Check if is_admin column exists, if not add it
+                try:
+                    from sqlalchemy import text
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='is_admin'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added is_admin column to user table")
+                except Exception as e:
+                    print(f"is_admin column check/add failed (may already exist): {e}")
+                
+                # Check if last_login column exists, if not add it
+                try:
+                    from sqlalchemy import text
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='last_login'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN last_login TIMESTAMP"))
+                        db.session.commit()
+                        print("Added last_login column to user table")
+                except Exception as e:
+                    print(f"last_login column check/add failed (may already exist): {e}")
+                
+                # Check if reset_token column exists, if not add it
+                try:
+                    from sqlalchemy import text
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token VARCHAR(100) UNIQUE"))
+                        db.session.commit()
+                        print("Added reset_token column to user table")
+                except Exception as e:
+                    print(f"reset_token column check/add failed (may already exist): {e}")
+                
+                # Check if reset_token_expiry column exists, if not add it
+                try:
+                    from sqlalchemy import text
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token_expiry'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token_expiry TIMESTAMP"))
+                        db.session.commit()
+                        print("Added reset_token_expiry column to user table")
+                except Exception as e:
+                    print(f"reset_token_expiry column check/add failed (may already exist): {e}")
+            else:
+                # For SQLite, db.create_all() handles everything - no need for manual column checks
+                print("Using SQLite database - all tables created by db.create_all()")
             
             # Create login_history table if it doesn't exist
             try:
@@ -3498,6 +3507,14 @@ def init_db():
     except Exception as e:
         print(f"Database initialization error: {str(e)}")
         # Continue running the app even if database fails
+
+# Initialize database on startup (for local development)
+if os.environ.get('FLASK_ENV') == 'development' or not os.environ.get('DATABASE_URL'):
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Warning: Database initialization failed: {e}")
+        print("You may need to run: py init_local_db.py")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

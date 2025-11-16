@@ -66,7 +66,10 @@ DATABASE_URL=sqlite:///unittest_local.db
 # 3. Install dependencies
 py -m pip install -r requirements.txt
 
-# 4. Run local test script
+# 4. Initialize database (IMPORTANT - do this first!)
+py init_local_db.py
+
+# 5. Run local test script
 py test_local.py
 
 # Mac/Linux:

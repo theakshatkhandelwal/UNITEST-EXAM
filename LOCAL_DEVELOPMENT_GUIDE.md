@@ -49,6 +49,20 @@ This guide helps you test changes locally **before** they go live on your websit
 
 ## 🧪 Testing Your Changes Locally
 
+### Step 0: Initialize Database (First Time Only)
+
+**Important**: Before running the app for the first time, you need to initialize the database:
+
+```bash
+# Windows
+py init_local_db.py
+
+# Mac/Linux
+python init_local_db.py
+```
+
+This creates all the necessary database tables. You only need to do this once (or if you delete the database file).
+
 ### Method 1: Run Locally (Recommended)
 
 1. **Start local server**:

@@ -3501,7 +3501,12 @@ def init_db():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    # Enable debug mode for local development (not in production)
+    debug_mode = os.environ.get('FLASK_ENV') == 'development' or os.environ.get('FLASK_DEBUG') == '1'
+    if debug_mode:
+        print("🔧 Running in DEVELOPMENT mode (debug=True)")
+        print("⚠️  Never use debug=True in production!")
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
 
 # Deployment trigger - commit 82835ee reverted to stable state
 

@@ -314,7 +314,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # Configure Google AI
-genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyBKYJLje8mR0VP5XxmrpG3PfXAleNXU_-c'))
+genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyDR7hfxwYKuLeb_HJ4jC0JSzFpuxo_sz-4'))
 
 # Database Models
 class User(UserMixin, db.Model):
@@ -414,6 +414,65 @@ class LoginHistory(db.Model):
 def load_user(user_id):
     return db.session.get(User, int(user_id))
 
+def handle_gemini_api_error(e, context="API call"):
+    """Handle Gemini API errors and provide user-friendly messages"""
+    error_str = str(e).lower()
+    error_msg = str(e)
+    
+    # Check for quota exceeded
+    if 'quota' in error_str or '429' in error_msg:
+        print(f"⚠️ GEMINI API QUOTA EXCEEDED in {context}")
+        print(f"   Error: {error_msg}")
+        print("   → Check Google Cloud Console for usage: https://console.cloud.google.com/")
+        print("   → Quota resets at midnight UTC")
+        return {
+            'error': 'quota_exceeded',
+            'message': 'API quota exceeded. Please try again later or check your usage limits.',
+            'user_message': 'The AI service is temporarily unavailable due to quota limits. Please try again in a few minutes.'
+        }
+    
+    # Check for rate limit
+    elif 'rate limit' in error_str or 'rate_limit' in error_str:
+        print(f"⚠️ GEMINI API RATE LIMIT in {context}")
+        print(f"   Error: {error_msg}")
+        print("   → Too many requests per minute. Please wait and retry.")
+        return {
+            'error': 'rate_limit',
+            'message': 'Rate limit exceeded. Please wait a moment and try again.',
+            'user_message': 'Too many requests. Please wait a moment and try again.'
+        }
+    
+    # Check for invalid API key
+    elif 'api key' in error_str or 'invalid' in error_str or '401' in error_msg or '403' in error_msg:
+        print(f"❌ GEMINI API AUTHENTICATION ERROR in {context}")
+        print(f"   Error: {error_msg}")
+        print("   → Check your GOOGLE_AI_API_KEY environment variable")
+        return {
+            'error': 'auth_error',
+            'message': 'API authentication failed. Please check your API key configuration.',
+            'user_message': 'API configuration error. Please contact support.'
+        }
+    
+    # Check for permission denied
+    elif 'permission' in error_str or 'forbidden' in error_str:
+        print(f"❌ GEMINI API PERMISSION DENIED in {context}")
+        print(f"   Error: {error_msg}")
+        print("   → Enable 'Generative Language API' in Google Cloud Console")
+        return {
+            'error': 'permission_denied',
+            'message': 'API permission denied. Please enable Generative Language API.',
+            'user_message': 'API service not available. Please contact support.'
+        }
+    
+    # Generic error
+    else:
+        print(f"❌ GEMINI API ERROR in {context}: {error_msg}")
+        return {
+            'error': 'api_error',
+            'message': f'API error: {error_msg}',
+            'user_message': 'An error occurred while processing your request. Please try again.'
+        }
+
 def evaluate_subjective_answer(question, student_answer, model_answer):
     """Use AI to evaluate subjective answers"""
     if not genai or not student_answer.strip():
@@ -448,7 +507,8 @@ def evaluate_subjective_answer(question, student_answer, model_answer):
 
         return 0.5  # Default if can't parse
     except Exception as e:
-        print(f"Error in evaluate_subjective_answer: {str(e)}")
+        error_info = handle_gemini_api_error(e, "evaluate_subjective_answer")
+        print(f"Error in evaluate_subjective_answer: {error_info['message']}")
         return 0.5  # Default on error
 
 def execute_code(code, language, test_input, time_limit=2, memory_limit=256):

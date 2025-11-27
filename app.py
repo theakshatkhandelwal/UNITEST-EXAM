@@ -3515,6 +3515,121 @@ def admin_users():
         flash(f'Error loading user statistics: {str(e)}', 'error')
         return redirect(url_for('dashboard'))
 
+@app.route('/admin/metrics')
+@login_required
+def admin_metrics():
+    """Admin route to view system capacity metrics - ADMIN ONLY"""
+    # Check if user is admin
+    if not current_user.is_admin:
+        flash('Access denied: Administrator privileges required.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    try:
+        from sqlalchemy import text, func
+        import os
+        
+        metrics = {
+            'database': {},
+            'capacity': {},
+            'current_usage': {}
+        }
+        
+        # Check database type
+        database_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        is_postgres = 'postgresql' in database_url.lower() or 'postgres' in database_url.lower()
+        
+        if is_postgres:
+            # Get active database connections
+            try:
+                result = db.session.execute(text("""
+                    SELECT 
+                        count(*) as active_connections,
+                        max_conn as max_connections
+                    FROM pg_stat_activity, 
+                    (SELECT setting::int as max_conn FROM pg_settings WHERE name = 'max_connections') as max_conn_setting
+                    WHERE datname = current_database()
+                    GROUP BY max_conn
+                """))
+                row = result.fetchone()
+                if row:
+                    metrics['database']['active_connections'] = row[0]
+                    metrics['database']['max_connections'] = row[1]
+                    metrics['database']['usage_percent'] = round((row[0] / row[1]) * 100, 2) if row[1] > 0 else 0
+                else:
+                    # Fallback query
+                    result = db.session.execute(text("""
+                        SELECT count(*) FROM pg_stat_activity 
+                        WHERE datname = current_database()
+                    """))
+                    active = result.scalar() or 0
+                    metrics['database']['active_connections'] = active
+                    metrics['database']['max_connections'] = 100  # Default for free tier
+                    metrics['database']['usage_percent'] = round((active / 100) * 100, 2)
+            except Exception as e:
+                print(f"Error getting connection stats: {e}")
+                metrics['database']['active_connections'] = 'N/A'
+                metrics['database']['max_connections'] = 'N/A'
+                metrics['database']['usage_percent'] = 'N/A'
+            
+            # Get database size
+            try:
+                result = db.session.execute(text("""
+                    SELECT pg_size_pretty(pg_database_size(current_database())) as db_size
+                """))
+                row = result.fetchone()
+                metrics['database']['size'] = row[0] if row else 'N/A'
+            except Exception as e:
+                metrics['database']['size'] = 'N/A'
+        else:
+            metrics['database']['type'] = 'SQLite (Local Development)'
+            metrics['database']['active_connections'] = 'N/A'
+            metrics['database']['max_connections'] = 'N/A'
+            metrics['database']['usage_percent'] = 'N/A'
+        
+        # Get current logged-in users (active sessions in last 5 minutes)
+        try:
+            from datetime import datetime, timedelta
+            five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
+            
+            # Count users with recent activity (approximate)
+            active_users = db.session.query(func.count(func.distinct(QuizSubmission.user_id))).filter(
+                QuizSubmission.submitted_at >= five_minutes_ago
+            ).scalar() or 0
+            
+            # Also check recent logins
+            recent_logins = db.session.query(func.count(func.distinct(LoginHistory.user_id))).filter(
+                LoginHistory.login_time >= five_minutes_ago
+            ).scalar() or 0
+            
+            metrics['current_usage']['recently_active_users'] = max(active_users, recent_logins)
+        except Exception as e:
+            metrics['current_usage']['recently_active_users'] = 'N/A'
+        
+        # Estimate capacity based on database connections
+        if isinstance(metrics['database'].get('max_connections'), int):
+            max_conn = metrics['database']['max_connections']
+            # Estimate: 1.2 connections per user on average
+            estimated_capacity = int((max_conn - 10) / 1.2)  # Reserve 10 connections
+            metrics['capacity']['estimated_concurrent_users'] = estimated_capacity
+            metrics['capacity']['safe_concurrent_users'] = int(estimated_capacity * 0.8)  # 80% of max for safety
+        else:
+            metrics['capacity']['estimated_concurrent_users'] = 'N/A'
+            metrics['capacity']['safe_concurrent_users'] = 'N/A'
+        
+        # Get deployment info
+        metrics['deployment'] = {
+            'platform': 'Vercel' if os.environ.get('VERCEL') else 'Unknown',
+            'database_provider': 'NeonDB' if 'neon.tech' in database_url else 'Other'
+        }
+        
+        return jsonify(metrics)
+        
+    except Exception as e:
+        print(f"Error in admin_metrics: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 # Error handlers
 @app.errorhandler(500)
 def internal_error(error):

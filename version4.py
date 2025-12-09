@@ -37,10 +37,13 @@ except LookupError:
 
 import google.generativeai as genai
 
-# Replace this with your new API key from https://makersuite.google.com/app/apikey
-# SECURITY NOTE: Always use environment variable GOOGLE_AI_API_KEY in production
-# This hardcoded key is for local development only
-genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyAXpYD8vb9RwoMLmC1mRfw35c067UODyP0'))
+# Configure Google AI - API key must be set via GOOGLE_AI_API_KEY environment variable
+# Get your API key from: https://makersuite.google.com/app/apikey
+# Set it as: export GOOGLE_AI_API_KEY='your-api-key-here' (Linux/Mac) or set GOOGLE_AI_API_KEY=your-api-key-here (Windows)
+api_key = os.environ.get('GOOGLE_AI_API_KEY')
+if not api_key:
+    raise ValueError("GOOGLE_AI_API_KEY environment variable is required. Please set it before running the application.")
+genai.configure(api_key=api_key)
 
 user_id = None
 conn = mysql.connector.connect(

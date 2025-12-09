@@ -313,10 +313,13 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Configure Google AI
-# SECURITY NOTE: Always use GOOGLE_AI_API_KEY environment variable in production
-# The fallback key below is for local development only and should be set via environment variables
-genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyAXpYD8vb9RwoMLmC1mRfw35c067UODyP0'))
+# Configure Google AI - API key must be set via GOOGLE_AI_API_KEY environment variable
+# Get your API key from: https://makersuite.google.com/app/apikey
+api_key = os.environ.get('GOOGLE_AI_API_KEY')
+if not api_key:
+    print("⚠️ WARNING: GOOGLE_AI_API_KEY environment variable not set. Quiz generation will not work.")
+    print("   Set it in Vercel: Settings → Environment Variables → Add GOOGLE_AI_API_KEY")
+genai.configure(api_key=api_key or '')
 
 # Database Models
 class User(UserMixin, db.Model):

@@ -806,10 +806,27 @@ def extract_pdf_content(file_paths):
 
 def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
     if not genai:
-        return None
+        raise Exception("Google Generative AI library not available")
+    
+    # Check if API key is set
+    api_key = os.environ.get('GOOGLE_AI_API_KEY')
+    if not api_key:
+        raise Exception("GOOGLE_AI_API_KEY environment variable is not set. Please configure it in Vercel: Settings → Environment Variables")
 
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        # Try to get available models, fallback to gemini-pro
+        try:
+            available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            if available_models:
+                model_name = available_models[0].split('/')[-1]
+                print(f"✓ Using available model: {model_name}")
+                model = genai.GenerativeModel(model_name)
+            else:
+                raise Exception("No models available")
+        except:
+            # Fallback to gemini-pro (most widely available)
+            print("⚠️ Could not list models, using gemini-pro as fallback")
+            model = genai.GenerativeModel("gemini-pro")
         
         # Map difficulty levels to Bloom's taxonomy levels and descriptions
         difficulty_mapping = {
@@ -969,8 +986,13 @@ Return ONLY valid JSON array. Do NOT include any markdown code blocks, explanati
         return questions
 
     except Exception as e:
+        error_info = handle_gemini_api_error(e, "generate_quiz")
+        error_msg = error_info.get('user_message', str(e))
         print(f"Error in generate_quiz: {str(e)}")
-        return None
+        print(f"Error details: {error_info}")
+        import traceback
+        traceback.print_exc()
+        raise Exception(error_msg)
 
 def process_document(file_path):
     """Process uploaded document to extract content and topic"""
@@ -2928,14 +2950,28 @@ def quiz():
 
         # Generate questions using difficulty level (with PDF content if available)
         questions = []
-        if question_type == "both":
-            mcq_questions = generate_quiz(topic or "PDF Content", difficulty_level, "mcq", mcq_count, pdf_content)
-            subj_questions = generate_quiz(topic or "PDF Content", difficulty_level, "subjective", subj_count, pdf_content)
-            if mcq_questions and subj_questions:
-                questions = mcq_questions + subj_questions
-        else:
-            num_q = mcq_count if question_type == "mcq" else subj_count
-            questions = generate_quiz(topic or "PDF Content", difficulty_level, question_type, num_q, pdf_content)
+        try:
+            if question_type == "both":
+                mcq_questions = generate_quiz(topic or "PDF Content", difficulty_level, "mcq", mcq_count, pdf_content)
+                subj_questions = generate_quiz(topic or "PDF Content", difficulty_level, "subjective", subj_count, pdf_content)
+                if mcq_questions and subj_questions:
+                    questions = mcq_questions + subj_questions
+            else:
+                num_q = mcq_count if question_type == "mcq" else subj_count
+                questions = generate_quiz(topic or "PDF Content", difficulty_level, question_type, num_q, pdf_content)
+        except Exception as gen_error:
+            error_msg = str(gen_error)
+            print(f"Quiz generation error: {error_msg}")
+            flash(f'Failed to generate quiz questions: {error_msg}', 'error')
+            # Clean up temporary PDF files
+            if pdf_file_paths:
+                import os
+                for path in pdf_file_paths:
+                    try:
+                        os.unlink(path)
+                    except:
+                        pass
+            return redirect(url_for('quiz'))
         
         # Clean up temporary PDF files after question generation
         if pdf_file_paths:
@@ -2955,7 +2991,7 @@ def quiz():
             }
             return redirect(url_for('take_quiz'))
         else:
-            flash('Failed to generate quiz questions', 'error')
+            flash('Failed to generate quiz questions. Please check your API key configuration or try again later.', 'error')
 
     return render_template('quiz.html')
 

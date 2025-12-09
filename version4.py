@@ -38,7 +38,9 @@ except LookupError:
 import google.generativeai as genai
 
 # Replace this with your new API key from https://makersuite.google.com/app/apikey
-genai.configure(api_key="AIzaSyCF1jtMJ3Se6kK3yPsE1bn9BUA9oFYYbGw")
+# SECURITY NOTE: Always use environment variable GOOGLE_AI_API_KEY in production
+# This hardcoded key is for local development only
+genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyAXpYD8vb9RwoMLmC1mRfw35c067UODyP0'))
 
 user_id = None
 conn = mysql.connector.connect(

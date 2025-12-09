@@ -314,7 +314,9 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # Configure Google AI
-genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyCF1jtMJ3Se6kK3yPsE1bn9BUA9oFYYbGw'))
+# SECURITY NOTE: Always use GOOGLE_AI_API_KEY environment variable in production
+# The fallback key below is for local development only and should be set via environment variables
+genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyAXpYD8vb9RwoMLmC1mRfw35c067UODyP0'))
 
 # Database Models
 class User(UserMixin, db.Model):

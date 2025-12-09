@@ -38,7 +38,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # Configure Google AI
-genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyBZtUxzv3yLcOLj0kIogfZnITGxHWkWs8Q'))
+genai.configure(api_key=os.environ.get('GOOGLE_AI_API_KEY', 'AIzaSyCF1jtMJ3Se6kK3yPsE1bn9BUA9oFYYbGw'))
 
 # Database Models
 class User(UserMixin, db.Model):

@@ -3854,12 +3854,26 @@ def init_db():
 
 # Initialize database on startup (runs migrations for both dev and production)
 # This ensures new columns are added automatically
-try:
-    init_db()
-except Exception as e:
-    print(f"Warning: Database initialization failed: {e}")
-    if os.environ.get('FLASK_ENV') == 'development' or not os.environ.get('DATABASE_URL'):
-        print("You may need to run: py init_local_db.py")
+# Note: In serverless, this runs on first request, not at import time
+def initialize_on_first_request():
+    """Initialize database on first request (lazy initialization for serverless)"""
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Warning: Database initialization failed: {e}")
+        # Don't crash - continue without initialization
+
+# For Vercel/serverless: Don't initialize at import time
+# Initialize will happen on first request via @app.before_first_request or similar
+if os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'):
+    # Serverless: Initialize lazily
+    pass
+else:
+    # Local: Initialize immediately
+    try:
+        init_db()
+    except Exception as e:
+        print(f"Warning: Database initialization failed: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

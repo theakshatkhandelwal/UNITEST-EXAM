@@ -3164,14 +3164,17 @@ def quiz():
         # Extract content from PDFs
         if pdf_file_paths:
             try:
+                print(f"📄 Processing {len(pdf_file_paths)} PDF file(s)...")
                 pdf_content = extract_pdf_content(pdf_file_paths)
                 if pdf_content:
+                    print(f"✅ PDF content extracted: {len(pdf_content)} characters")
                     # Extract a topic from PDF for tracking purposes (optional)
                     if not topic:
                         # Try to extract topic from first PDF filename
                         import os
                         first_pdf_name = os.path.basename(pdf_file_paths[0])
                         topic = extract_topic_from_filename(pdf_file_paths[0]) or "PDF Content"
+                        print(f"📝 Extracted topic from PDF: {topic}")
                     
                     pdf_info = f'Successfully processed {len(pdf_file_paths)} PDF file(s). Questions will be generated from PDF content.'
                     if OCR_AVAILABLE:
@@ -3194,6 +3197,9 @@ def quiz():
                             pass
                     return redirect(url_for('quiz'))
             except Exception as e:
+                print(f"❌ Error processing PDF(s): {str(e)}")
+                import traceback
+                traceback.print_exc()
                 flash(f'Error processing PDF(s): {str(e)}', 'error')
                 # Clean up temp files
                 import os

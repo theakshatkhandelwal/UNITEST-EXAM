@@ -1166,14 +1166,16 @@ Return ONLY valid JSON array. Do NOT include any markdown code blocks, explanati
 def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
     """Generate quiz - tries OpenRouter first, falls back to Gemini if OpenRouter fails"""
     
+    openrouter_error = None
     # Try OpenRouter first (primary)
     openrouter_key = os.environ.get('OPENROUTER_API_KEY')
     if openrouter_key:
         try:
             print("🚀 Using OpenRouter API (primary)...")
             return generate_quiz_openrouter(topic, difficulty_level, question_type, num_questions, pdf_content)
-        except Exception as openrouter_error:
-            print(f"⚠️ OpenRouter failed: {str(openrouter_error)[:100]}")
+        except Exception as e:
+            openrouter_error = e
+            print(f"⚠️ OpenRouter failed: {str(e)[:100]}")
             print("🔄 Attempting fallback to Gemini API...")
     
     # Fallback to Gemini if OpenRouter fails or not configured
@@ -1181,7 +1183,8 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5,
         return generate_quiz_gemini(topic, difficulty_level, question_type, num_questions, pdf_content)
     except Exception as gemini_error:
         # If both fail, raise error
-        error_msg = f"Both OpenRouter and Gemini failed. OpenRouter: {str(openrouter_error) if openrouter_key else 'not configured'}, Gemini: {str(gemini_error)}"
+        openrouter_msg = str(openrouter_error)[:100] if openrouter_error else 'not configured'
+        error_msg = f"Both OpenRouter and Gemini failed. OpenRouter: {openrouter_msg}, Gemini: {str(gemini_error)[:100]}"
         print(f"❌ {error_msg}")
         raise Exception("Failed to generate quiz. Please check your API keys configuration.")
 

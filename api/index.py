@@ -71,13 +71,19 @@ def evaluate_subjective_answer(question, student_answer, model_answer):
         return 0.0
 
     try:
-        # Use gemini-pro (most stable free tier)
+        # Use gemini-2.5-flash (current free tier) with fallback to gemini-2.5-flash-lite
         api_key = os.environ.get('GOOGLE_AI_API_KEY', '')
         genai.configure(api_key=api_key)
         try:
-            model = genai.GenerativeModel("gemini-pro")
+            model = genai.GenerativeModel("gemini-2.5-flash")
         except:
-            model = genai.GenerativeModel("gemini-1.5-pro")
+            try:
+                model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            except:
+                try:
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                except:
+                    raise Exception("No working Gemini model found. Check API key and quota.")
         prompt = f"""
         Evaluate this student's answer for the given question:
 
@@ -113,13 +119,19 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5)
         return None
 
     try:
-        # Use gemini-pro (most stable free tier)
+        # Use gemini-2.5-flash (current free tier) with fallback to gemini-2.5-flash-lite
         api_key = os.environ.get('GOOGLE_AI_API_KEY', '')
         genai.configure(api_key=api_key)
         try:
-            model = genai.GenerativeModel("gemini-pro")
+            model = genai.GenerativeModel("gemini-2.5-flash")
         except:
-            model = genai.GenerativeModel("gemini-1.5-pro")
+            try:
+                model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            except:
+                try:
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                except:
+                    raise Exception("No working Gemini model found. Check API key and quota.")
         
         difficulty_mapping = {
             "beginner": {

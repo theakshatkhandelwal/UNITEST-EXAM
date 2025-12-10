@@ -484,14 +484,17 @@ def evaluate_subjective_answer(question, student_answer, model_answer):
         return 0.0
 
     try:
-        # Use gemini-pro (most stable free tier) with fallback to gemini-1.5-pro
+        # Use gemini-2.5-flash (current free tier) with fallback to gemini-2.5-flash-lite
         try:
-            model = genai.GenerativeModel("gemini-pro")
+            model = genai.GenerativeModel("gemini-2.5-flash")
         except:
             try:
-                model = genai.GenerativeModel("gemini-1.5-pro")
+                model = genai.GenerativeModel("gemini-2.5-flash-lite")
             except:
-                raise Exception("No working Gemini model found. Check API key and quota.")
+                try:
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                except:
+                    raise Exception("No working Gemini model found. Check API key and quota.")
         prompt = f"""
         Evaluate this student's answer for the given question:
 
@@ -836,8 +839,8 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5,
                     model_names.append(model_name)
                     print(f"  Available model: {model_name}")
             
-            # Try available models in order of preference
-            preferred_order = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest', 'gemini-1.5-pro', 'gemini-pro']
+            # Try available models in order of preference (gemini-2.5-flash is the current free tier model)
+            preferred_order = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest', 'gemini-1.5-pro', 'gemini-pro']
             for preferred in preferred_order:
                 if preferred in model_names:
                     try:
@@ -859,9 +862,9 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5,
         except Exception as list_error:
             print(f"⚠️ Could not list models: {list_error}")
         
-        # Fallback: try common model names directly
+        # Fallback: try current free tier models directly (gemini-2.5-flash is the primary free tier model)
         if not model:
-            for fallback_name in ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest', 'gemini-1.5-pro']:
+            for fallback_name in ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest', 'gemini-1.5-pro']:
                 try:
                     model = genai.GenerativeModel(fallback_name)
                     print(f"✓ Using fallback model: {fallback_name}")
@@ -1847,14 +1850,17 @@ def extract_questions_from_pdf():
         # Use AI to extract questions based on keywords
         response_text = ""
         try:
-            # Use gemini-pro (most stable free tier) with fallback to gemini-1.5-pro
+            # Use gemini-2.5-flash (current free tier) with fallback to gemini-2.5-flash-lite
             try:
-                model = genai.GenerativeModel("gemini-pro")
+                model = genai.GenerativeModel("gemini-2.5-flash")
             except:
                 try:
-                    model = genai.GenerativeModel("gemini-1.5-pro")
+                    model = genai.GenerativeModel("gemini-2.5-flash-lite")
                 except:
-                    raise Exception("No working Gemini model found. Check API key and quota.")
+                    try:
+                        model = genai.GenerativeModel("gemini-1.5-flash")
+                    except:
+                        raise Exception("No working Gemini model found. Check API key and quota.")
             
             # Truncate PDF content if too long
             if len(pdf_content) > 15000:
@@ -3358,14 +3364,17 @@ def ai_learn():
             return jsonify({'success': False, 'error': 'Topic is required'})
         
         # Generate learning content using AI
-        # Use gemini-pro (most stable free tier) with fallback to gemini-1.5-pro
+        # Use gemini-2.5-flash (current free tier) with fallback to gemini-2.5-flash-lite
         try:
-            model = genai.GenerativeModel("gemini-pro")
+            model = genai.GenerativeModel("gemini-2.5-flash")
         except:
             try:
-                model = genai.GenerativeModel("gemini-1.5-pro")
+                model = genai.GenerativeModel("gemini-2.5-flash-lite")
             except:
-                raise Exception("No working Gemini model found. Check API key and quota.")
+                try:
+                    model = genai.GenerativeModel("gemini-1.5-flash")
+                except:
+                    raise Exception("No working Gemini model found. Check API key and quota.")
         prompt = f"""
         Create a personalized learning path for {topic} at {level} level, 
         focusing on {style} learning style.

@@ -484,11 +484,14 @@ def evaluate_subjective_answer(question, student_answer, model_answer):
         return 0.0
 
     try:
-        # Use gemini-1.5-flash (best free tier) with fallback to gemini-pro
+        # Use gemini-pro (most stable free tier) with fallback to gemini-1.5-pro
         try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
-        except:
             model = genai.GenerativeModel("gemini-pro")
+        except:
+            try:
+                model = genai.GenerativeModel("gemini-1.5-pro")
+            except:
+                raise Exception("No working Gemini model found. Check API key and quota.")
         prompt = f"""
         Evaluate this student's answer for the given question:
 
@@ -818,13 +821,13 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5,
         raise Exception("GOOGLE_AI_API_KEY environment variable is not set. Please configure it in Vercel: Settings → Environment Variables")
 
     try:
-        # Use free tier models in order: gemini-1.5-flash (best) -> gemini-pro -> gemini-1.5-pro
-        # Skip gemini-2.0-flash (no free quota)
+        # Use free tier models in order: gemini-pro (most stable) -> gemini-1.5-pro
+        # Skip gemini-1.5-flash and gemini-2.0-flash (may not be available)
         genai.configure(api_key=api_key)
         model = None
         
-        # Try models in order without listing (faster, avoids timeout in serverless)
-        for model_name in ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.5-pro']:
+        # Try models in order - use gemini-pro first (most widely available)
+        for model_name in ['gemini-pro', 'gemini-1.5-pro']:
             try:
                 model = genai.GenerativeModel(model_name)
                 print(f"✓ Using model: {model_name}")
@@ -834,7 +837,7 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5,
                 continue
         
         if not model:
-            raise Exception("No working Gemini model found. Check API key and quota. Use gemini-1.5-flash or gemini-pro (free tier).")
+            raise Exception("No working Gemini model found. Check API key and quota. Try gemini-pro (free tier).")
         
         # Map difficulty levels to Bloom's taxonomy levels and descriptions
         difficulty_mapping = {
@@ -1810,11 +1813,14 @@ def extract_questions_from_pdf():
         # Use AI to extract questions based on keywords
         response_text = ""
         try:
-            # Use gemini-1.5-flash (best free tier) with fallback to gemini-pro
+            # Use gemini-pro (most stable free tier) with fallback to gemini-1.5-pro
             try:
-                model = genai.GenerativeModel("gemini-1.5-flash")
-            except:
                 model = genai.GenerativeModel("gemini-pro")
+            except:
+                try:
+                    model = genai.GenerativeModel("gemini-1.5-pro")
+                except:
+                    raise Exception("No working Gemini model found. Check API key and quota.")
             
             # Truncate PDF content if too long
             if len(pdf_content) > 15000:
@@ -3318,11 +3324,14 @@ def ai_learn():
             return jsonify({'success': False, 'error': 'Topic is required'})
         
         # Generate learning content using AI
-        # Use gemini-1.5-flash (best free tier) with fallback to gemini-pro
+        # Use gemini-pro (most stable free tier) with fallback to gemini-1.5-pro
         try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
-        except:
             model = genai.GenerativeModel("gemini-pro")
+        except:
+            try:
+                model = genai.GenerativeModel("gemini-1.5-pro")
+            except:
+                raise Exception("No working Gemini model found. Check API key and quota.")
         prompt = f"""
         Create a personalized learning path for {topic} at {level} level, 
         focusing on {style} learning style.

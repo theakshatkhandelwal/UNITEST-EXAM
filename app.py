@@ -822,6 +822,15 @@ def generate_quiz_openrouter(topic, difficulty_level, question_type="mcq", num_q
     if not openrouter_key:
         raise Exception("OPENROUTER_API_KEY not set. Set it in Vercel environment variables.")
     
+    # Validate API key format
+    if not openrouter_key.startswith('sk-or-'):
+        print(f"⚠️ WARNING: OpenRouter API key format may be incorrect. Expected 'sk-or-...', got: {openrouter_key[:15]}...")
+    else:
+        print(f"✅ OpenRouter API key format validated: {openrouter_key[:15]}...")
+    
+    # Debug: Check API key length (should be around 100+ characters)
+    print(f"🔍 Debug: API key length: {len(openrouter_key)} characters")
+    
     # Map difficulty levels
     difficulty_mapping = {
         "beginner": {"bloom_level": 1, "description": "Remembering and Understanding level - basic facts, definitions, and simple concepts"},
@@ -850,28 +859,42 @@ Generate questions based ONLY on the information provided in the PDF content abo
 """
     
     if question_type == "mcq":
-        prompt = f"""Generate a multiple-choice quiz{f' based on the provided PDF content' if pdf_content else f' on {topic}'} at {difficulty_level.upper()} level ({level_description}).
+        prompt = f"""CRITICAL: You MUST generate questions ONLY on the topic: "{topic}"
+
+Generate exactly {num_questions} multiple-choice questions on the topic: "{topic}" at {difficulty_level.upper()} level ({level_description}).
+
+IMPORTANT REQUIREMENTS:
+1. ALL questions MUST be about "{topic}" - do NOT generate questions on other topics
+2. Include exactly {num_questions} questions
+3. Each question must have exactly 4 answer choices (A, B, C, D)
+4. Make questions diverse and varied - avoid repetitive patterns
+5. Use randomization seed {random_seed} to ensure variety
+6. Include a "level" key specifying the Bloom's Taxonomy level (Remembering, Understanding, Applying, etc.)
+
 {pdf_context if pdf_content else ''}
-- Include exactly {num_questions} questions.
-- Each question should have 4 answer choices.
-- Make questions diverse and varied - avoid repetitive patterns.
-- Use randomization seed {random_seed} to ensure variety.
-- Include a "level" key specifying the Bloom's Taxonomy level (Remembering, Understanding, Applying, etc.).
-- Return output in valid JSON format: 
+
+Return output in valid JSON format ONLY (no explanations, no markdown):
 [
     {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq"}},
     ...
 ]"""
     else:  # subjective
-        prompt = f"""Generate subjective questions{f' based on the provided PDF content' if pdf_content else f' on {topic}'} at {difficulty_level.upper()} level ({level_description}).
+        prompt = f"""CRITICAL: You MUST generate questions ONLY on the topic: "{topic}"
+
+Generate exactly {num_questions} subjective questions on the topic: "{topic}" at {difficulty_level.upper()} level ({level_description}).
+
+IMPORTANT REQUIREMENTS:
+1. ALL questions MUST be about "{topic}" - do NOT generate questions on other topics
+2. Include exactly {num_questions} questions
+3. Questions should be open-ended and require detailed answers
+4. Make questions diverse and varied - avoid repetitive patterns
+5. Use randomization seed {random_seed} to ensure variety
+6. Include a "level" key specifying the Bloom's Taxonomy level
+7. Vary the marks between 5, 10, 15, and 20 marks for different questions
+
 {pdf_context if pdf_content else ''}
-- Include exactly {num_questions} questions.
-- Questions should be open-ended and require detailed answers.
-- Make questions diverse and varied - avoid repetitive patterns.
-- Use randomization seed {random_seed} to ensure variety.
-- Include a "level" key specifying the Bloom's Taxonomy level.
-- Vary the marks between 5, 10, 15, and 20 marks for different questions.
-- Return output in valid JSON format: 
+
+Return output in valid JSON format ONLY (no explanations, no markdown):
 [
     {{"question": "Explain the concept of AI and its applications", "answer": "Sample answer explaining AI...", "type": "subjective", "marks": 10}},
     ...
@@ -887,10 +910,14 @@ Generate questions based ONLY on the information provided in the PDF content abo
     for model_name in models_to_try:
         try:
             print(f"🔄 Trying OpenRouter model: {model_name}")
+            # Ensure API key is properly formatted
+            auth_header = f"Bearer {openrouter_key.strip()}"
+            print(f"🔍 Debug: Authorization header starts with: {auth_header[:25]}...")
+            
             response = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {openrouter_key}",
+                    "Authorization": auth_header,
                     "Content-Type": "application/json",
                     "HTTP-Referer": "https://www.unitest.in",
                     "X-Title": "UniTest Quiz Generator"
@@ -926,7 +953,10 @@ Generate questions based ONLY on the information provided in the PDF content abo
                 print(f"✅ OpenRouter SUCCESS: Model '{model_name}' generated {len(questions)} questions")
                 return questions
             else:
-                print(f"  Model {model_name} failed: {response.status_code} - {response.text[:100]}")
+                error_detail = response.text[:200] if response.text else "No error message"
+                print(f"  Model {model_name} failed: {response.status_code} - {error_detail}")
+                if response.status_code == 401:
+                    print(f"  ⚠️ Authentication error - check if API key is correct: {openrouter_key[:15]}...")
                 continue
         except Exception as model_error:
             print(f"  Model {model_name} error: {str(model_error)[:100]}")
@@ -1041,18 +1071,25 @@ Generate questions based ONLY on the information provided in the PDF content abo
         
         if question_type == "mcq":
             prompt = f"""
-                Generate a multiple-choice quiz{f' based on the provided PDF content' if pdf_content else f' on {topic}'} at {difficulty_level.upper()} level ({level_description}).
-                {pdf_context if pdf_content else ''}
-                - Include exactly {num_questions} questions.
-                - Each question should have 4 answer choices.
-                - Make questions diverse and varied - avoid repetitive patterns.
-                - Use randomization seed {random_seed} to ensure variety.
-                - Include a "level" key specifying the Bloom's Taxonomy level (Remembering, Understanding, Applying, etc.).
-                - Return output in valid JSON format: 
-                [
-                    {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq"}},
-                    ...
-                ]
+CRITICAL: You MUST generate questions ONLY on the topic: "{topic}"
+
+Generate exactly {num_questions} multiple-choice questions on the topic: "{topic}" at {difficulty_level.upper()} level ({level_description}).
+
+IMPORTANT REQUIREMENTS:
+1. ALL questions MUST be about "{topic}" - do NOT generate questions on other topics
+2. Include exactly {num_questions} questions
+3. Each question must have exactly 4 answer choices (A, B, C, D)
+4. Make questions diverse and varied - avoid repetitive patterns
+5. Use randomization seed {random_seed} to ensure variety
+6. Include a "level" key specifying the Bloom's Taxonomy level (Remembering, Understanding, Applying, etc.)
+
+{pdf_context if pdf_content else ''}
+
+Return output in valid JSON format ONLY (no explanations, no markdown):
+[
+    {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq"}},
+    ...
+]
             """
         elif question_type == "coding":
             prompt = f"""
@@ -1111,19 +1148,26 @@ Return ONLY valid JSON array. Do NOT include any markdown code blocks, explanati
             """
         else:  # subjective
             prompt = f"""
-                Generate subjective questions{f' based on the provided PDF content' if pdf_content else f' on {topic}'} at {difficulty_level.upper()} level ({level_description}).
-                {pdf_context if pdf_content else ''}
-                - Include exactly {num_questions} questions.
-                - Questions should be open-ended and require detailed answers.
-                - Make questions diverse and varied - avoid repetitive patterns.
-                - Use randomization seed {random_seed} to ensure variety.
-                - Include a "level" key specifying the Bloom's Taxonomy level.
-                - Vary the marks between 5, 10, 15, and 20 marks for different questions.
-                - Return output in valid JSON format: 
-                [
-                    {{"question": "Explain the concept of AI and its applications", "answer": "Sample answer explaining AI...", "type": "subjective", "marks": 10}},
-                    ...
-                ]
+CRITICAL: You MUST generate questions ONLY on the topic: "{topic}"
+
+Generate exactly {num_questions} subjective questions on the topic: "{topic}" at {difficulty_level.upper()} level ({level_description}).
+
+IMPORTANT REQUIREMENTS:
+1. ALL questions MUST be about "{topic}" - do NOT generate questions on other topics
+2. Include exactly {num_questions} questions
+3. Questions should be open-ended and require detailed answers
+4. Make questions diverse and varied - avoid repetitive patterns
+5. Use randomization seed {random_seed} to ensure variety
+6. Include a "level" key specifying the Bloom's Taxonomy level
+7. Vary the marks between 5, 10, 15, and 20 marks for different questions
+
+{pdf_context if pdf_content else ''}
+
+Return output in valid JSON format ONLY (no explanations, no markdown):
+[
+    {{"question": "Explain the concept of AI and its applications", "answer": "Sample answer explaining AI...", "type": "subjective", "marks": 10}},
+    ...
+]
             """
 
         response = model.generate_content(prompt)

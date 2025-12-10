@@ -1811,10 +1811,10 @@ def extract_questions_from_pdf():
         response_text = ""
         try:
             # Use gemini-1.5-flash (best free tier) with fallback to gemini-pro
-        try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
-        except:
-            model = genai.GenerativeModel("gemini-pro")
+            try:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+            except:
+                model = genai.GenerativeModel("gemini-pro")
             
             # Truncate PDF content if too long
             if len(pdf_content) > 15000:

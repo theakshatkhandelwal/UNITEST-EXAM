@@ -484,7 +484,11 @@ def evaluate_subjective_answer(question, student_answer, model_answer):
         return 0.0
 
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        # Use gemini-1.5-flash (best free tier) with fallback to gemini-pro
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+        except:
+            model = genai.GenerativeModel("gemini-pro")
         prompt = f"""
         Evaluate this student's answer for the given question:
 
@@ -814,19 +818,41 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5,
         raise Exception("GOOGLE_AI_API_KEY environment variable is not set. Please configure it in Vercel: Settings → Environment Variables")
 
     try:
-        # Try to get available models, fallback to gemini-pro
+        # Try free tier models in order: gemini-1.5-flash (best) -> gemini-pro -> gemini-1.5-pro
+        genai.configure(api_key=api_key)
+        model = None
+        
+        # Try to list available models first
         try:
             available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             if available_models:
-                model_name = available_models[0].split('/')[-1]
-                print(f"✓ Using available model: {model_name}")
-                model = genai.GenerativeModel(model_name)
-            else:
-                raise Exception("No models available")
-        except:
-            # Fallback to gemini-pro (most widely available)
-            print("⚠️ Could not list models, using gemini-pro as fallback")
-            model = genai.GenerativeModel("gemini-pro")
+                # Prefer gemini-1.5-flash (best free tier), then gemini-pro
+                for preferred in ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.5-pro']:
+                    for m in available_models:
+                        if preferred in m.lower() and '2.0' not in m.lower():  # Skip gemini-2.0-flash
+                            model_name = m.split('/')[-1] if '/' in m else m
+                            print(f"✓ Using available model: {model_name}")
+                            model = genai.GenerativeModel(model_name)
+                            break
+                    if model:
+                        break
+        except Exception as e:
+            print(f"⚠️ Could not list models: {e}")
+        
+        # Fallback chain: try models in order (skip gemini-2.0-flash - no free quota)
+        if not model:
+            for fallback_model in ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.5-pro']:
+                try:
+                    print(f"⚠️ Trying fallback model: {fallback_model}")
+                    model = genai.GenerativeModel(fallback_model)
+                    print(f"✓ Using fallback model: {fallback_model}")
+                    break
+                except Exception as e:
+                    print(f"  Failed: {str(e)[:50]}")
+                    continue
+        
+        if not model:
+            raise Exception("No working Gemini model found. Check API key and quota. Use gemini-1.5-flash or gemini-pro (free tier).")
         
         # Map difficulty levels to Bloom's taxonomy levels and descriptions
         difficulty_mapping = {
@@ -1802,7 +1828,11 @@ def extract_questions_from_pdf():
         # Use AI to extract questions based on keywords
         response_text = ""
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            # Use gemini-1.5-flash (best free tier) with fallback to gemini-pro
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+        except:
+            model = genai.GenerativeModel("gemini-pro")
             
             # Truncate PDF content if too long
             if len(pdf_content) > 15000:
@@ -3306,7 +3336,11 @@ def ai_learn():
             return jsonify({'success': False, 'error': 'Topic is required'})
         
         # Generate learning content using AI
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        # Use gemini-1.5-flash (best free tier) with fallback to gemini-pro
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+        except:
+            model = genai.GenerativeModel("gemini-pro")
         prompt = f"""
         Create a personalized learning path for {topic} at {level} level, 
         focusing on {style} learning style.

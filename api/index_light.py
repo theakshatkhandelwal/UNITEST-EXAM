@@ -115,7 +115,13 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5)
         return None
 
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        # Use gemini-pro (most stable free tier)
+        api_key = os.environ.get('GOOGLE_AI_API_KEY', '')
+        genai.configure(api_key=api_key)
+        try:
+            model = genai.GenerativeModel("gemini-pro")
+        except:
+            model = genai.GenerativeModel("gemini-1.5-pro")
         
         # Map difficulty levels to Bloom's taxonomy levels and descriptions
         difficulty_mapping = {

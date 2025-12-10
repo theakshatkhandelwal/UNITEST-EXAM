@@ -818,38 +818,20 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5,
         raise Exception("GOOGLE_AI_API_KEY environment variable is not set. Please configure it in Vercel: Settings → Environment Variables")
 
     try:
-        # Try free tier models in order: gemini-1.5-flash (best) -> gemini-pro -> gemini-1.5-pro
+        # Use free tier models in order: gemini-1.5-flash (best) -> gemini-pro -> gemini-1.5-pro
+        # Skip gemini-2.0-flash (no free quota)
         genai.configure(api_key=api_key)
         model = None
         
-        # Try to list available models first
-        try:
-            available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            if available_models:
-                # Prefer gemini-1.5-flash (best free tier), then gemini-pro
-                for preferred in ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.5-pro']:
-                    for m in available_models:
-                        if preferred in m.lower() and '2.0' not in m.lower():  # Skip gemini-2.0-flash
-                            model_name = m.split('/')[-1] if '/' in m else m
-                            print(f"✓ Using available model: {model_name}")
-                            model = genai.GenerativeModel(model_name)
-                            break
-                    if model:
-                        break
-        except Exception as e:
-            print(f"⚠️ Could not list models: {e}")
-        
-        # Fallback chain: try models in order (skip gemini-2.0-flash - no free quota)
-        if not model:
-            for fallback_model in ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.5-pro']:
-                try:
-                    print(f"⚠️ Trying fallback model: {fallback_model}")
-                    model = genai.GenerativeModel(fallback_model)
-                    print(f"✓ Using fallback model: {fallback_model}")
-                    break
-                except Exception as e:
-                    print(f"  Failed: {str(e)[:50]}")
-                    continue
+        # Try models in order without listing (faster, avoids timeout in serverless)
+        for model_name in ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.5-pro']:
+            try:
+                model = genai.GenerativeModel(model_name)
+                print(f"✓ Using model: {model_name}")
+                break
+            except Exception as e:
+                print(f"  Model {model_name} failed: {str(e)[:50]}")
+                continue
         
         if not model:
             raise Exception("No working Gemini model found. Check API key and quota. Use gemini-1.5-flash or gemini-pro (free tier).")

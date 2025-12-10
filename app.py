@@ -3227,7 +3227,19 @@ def quiz():
         except Exception as gen_error:
             error_msg = str(gen_error)
             print(f"Quiz generation error: {error_msg}")
-            flash(f'Failed to generate quiz questions: {error_msg}', 'error')
+            print(f"Error type: {type(gen_error).__name__}")
+            import traceback
+            traceback.print_exc()
+            
+            # Provide more helpful error message
+            if "API" in error_msg or "key" in error_msg.lower() or "configuration" in error_msg.lower():
+                user_error_msg = "Failed to generate quiz questions: API configuration error. Please check your API keys in Vercel environment variables (OPENROUTER_API_KEY and/or GOOGLE_AI_API_KEY)."
+            elif "PDF" in error_msg or "content" in error_msg.lower():
+                user_error_msg = f"Failed to generate quiz from PDF: {error_msg}. Please try with a different PDF or enter a topic manually."
+            else:
+                user_error_msg = f"Failed to generate quiz questions: {error_msg}"
+            
+            flash(user_error_msg, 'error')
             # Clean up temporary PDF files
             if pdf_file_paths:
                 import os

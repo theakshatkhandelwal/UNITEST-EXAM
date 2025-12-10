@@ -821,23 +821,57 @@ def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5,
         raise Exception("GOOGLE_AI_API_KEY environment variable is not set. Please configure it in Vercel: Settings → Environment Variables")
 
     try:
-        # Use free tier models in order: gemini-pro (most stable) -> gemini-1.5-pro
-        # Skip gemini-1.5-flash and gemini-2.0-flash (may not be available)
+        # List available models and use the first one that works
         genai.configure(api_key=api_key)
         model = None
         
-        # Try models in order - use gemini-pro first (most widely available)
-        for model_name in ['gemini-pro', 'gemini-1.5-pro']:
-            try:
-                model = genai.GenerativeModel(model_name)
-                print(f"✓ Using model: {model_name}")
-                break
-            except Exception as e:
-                print(f"  Model {model_name} failed: {str(e)[:50]}")
-                continue
+        # First, try to list available models
+        try:
+            available_models = genai.list_models()
+            model_names = []
+            for m in available_models:
+                if 'generateContent' in m.supported_generation_methods:
+                    # Extract model name (remove 'models/' prefix if present)
+                    model_name = m.name.replace('models/', '') if m.name.startswith('models/') else m.name
+                    model_names.append(model_name)
+                    print(f"  Available model: {model_name}")
+            
+            # Try available models in order of preference
+            preferred_order = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest', 'gemini-1.5-pro', 'gemini-pro']
+            for preferred in preferred_order:
+                if preferred in model_names:
+                    try:
+                        model = genai.GenerativeModel(preferred)
+                        print(f"✓ Using available model: {preferred}")
+                        break
+                    except Exception as e:
+                        print(f"  Failed to use {preferred}: {str(e)[:50]}")
+                        continue
+            
+            # If no preferred model worked, try first available
+            if not model and model_names:
+                try:
+                    first_model = model_names[0]
+                    model = genai.GenerativeModel(first_model)
+                    print(f"✓ Using first available model: {first_model}")
+                except Exception as e:
+                    print(f"  Failed to use {first_model}: {str(e)[:50]}")
+        except Exception as list_error:
+            print(f"⚠️ Could not list models: {list_error}")
+        
+        # Fallback: try common model names directly
+        if not model:
+            for fallback_name in ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro-latest', 'gemini-1.5-pro']:
+                try:
+                    model = genai.GenerativeModel(fallback_name)
+                    print(f"✓ Using fallback model: {fallback_name}")
+                    break
+                except Exception as e:
+                    print(f"  Fallback {fallback_name} failed: {str(e)[:50]}")
+                    continue
         
         if not model:
-            raise Exception("No working Gemini model found. Check API key and quota. Try gemini-pro (free tier).")
+            raise Exception("No working Gemini model found. Check API key and quota. Available models may have changed.")
         
         # Map difficulty levels to Bloom's taxonomy levels and descriptions
         difficulty_mapping = {

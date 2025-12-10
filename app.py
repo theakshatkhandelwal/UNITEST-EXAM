@@ -814,6 +814,126 @@ def extract_pdf_content(file_paths):
     combined_content = "\n\n".join(all_content)
     return combined_content if combined_content.strip() else None
 
+def generate_quiz_openrouter(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
+    """Generate quiz using OpenRouter API as fallback when Gemini fails"""
+    import requests
+    
+    openrouter_key = os.environ.get('OPENROUTER_API_KEY')
+    if not openrouter_key:
+        raise Exception("OPENROUTER_API_KEY not set. Set it in Vercel environment variables.")
+    
+    # Map difficulty levels
+    difficulty_mapping = {
+        "beginner": {"bloom_level": 1, "description": "Remembering and Understanding level - basic facts, definitions, and simple concepts"},
+        "intermediate": {"bloom_level": 3, "description": "Applying and Analyzing level - practical application and analysis of concepts"},
+        "difficult": {"bloom_level": 5, "description": "Evaluating and Creating level - critical thinking, evaluation, and synthesis"}
+    }
+    difficulty_info = difficulty_mapping.get(difficulty_level, difficulty_mapping["beginner"])
+    level_description = difficulty_info["description"]
+    
+    import random
+    random_seed = random.randint(1000, 9999)
+    
+    # Build prompt
+    pdf_context = ""
+    if pdf_content:
+        if len(pdf_content) > 15000:
+            pdf_content = pdf_content[:5000] + "\n\n[... content truncated ...]\n\n" + pdf_content[-10000:]
+        pdf_context = f"""
+            
+IMPORTANT: Use the following PDF content as the PRIMARY SOURCE for generating questions. All questions MUST be based on this content:
+
+PDF CONTENT:
+{pdf_content}
+
+Generate questions based ONLY on the information provided in the PDF content above. If the topic "{topic}" is mentioned, use it as context, but prioritize the PDF content.
+"""
+    
+    if question_type == "mcq":
+        prompt = f"""Generate a multiple-choice quiz{f' based on the provided PDF content' if pdf_content else f' on {topic}'} at {difficulty_level.upper()} level ({level_description}).
+{pdf_context if pdf_content else ''}
+- Include exactly {num_questions} questions.
+- Each question should have 4 answer choices.
+- Make questions diverse and varied - avoid repetitive patterns.
+- Use randomization seed {random_seed} to ensure variety.
+- Include a "level" key specifying the Bloom's Taxonomy level (Remembering, Understanding, Applying, etc.).
+- Return output in valid JSON format: 
+[
+    {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq"}},
+    ...
+]"""
+    else:  # subjective
+        prompt = f"""Generate subjective questions{f' based on the provided PDF content' if pdf_content else f' on {topic}'} at {difficulty_level.upper()} level ({level_description}).
+{pdf_context if pdf_content else ''}
+- Include exactly {num_questions} questions.
+- Questions should be open-ended and require detailed answers.
+- Make questions diverse and varied - avoid repetitive patterns.
+- Use randomization seed {random_seed} to ensure variety.
+- Include a "level" key specifying the Bloom's Taxonomy level.
+- Vary the marks between 5, 10, 15, and 20 marks for different questions.
+- Return output in valid JSON format: 
+[
+    {{"question": "Explain the concept of AI and its applications", "answer": "Sample answer explaining AI...", "type": "subjective", "marks": 10}},
+    ...
+]"""
+    
+    # Try free models first, then paid
+    models_to_try = [
+        "meta-llama/llama-3.1-8b-instruct:free",  # Completely free
+        "mistralai/mistral-7b-instruct:free",     # Free
+        "openai/gpt-3.5-turbo",                   # Free tier available
+    ]
+    
+    for model_name in models_to_try:
+        try:
+            print(f"🔄 Trying OpenRouter model: {model_name}")
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {openrouter_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://www.unitest.in",
+                    "X-Title": "UniTest Quiz Generator"
+                },
+                json={
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": "You are an expert quiz generator. Always return valid JSON arrays."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 4000
+                },
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result['choices'][0]['message']['content']
+                
+                # Parse JSON from response
+                json_match = re.search(r"```json\n(.*)\n```", content, re.DOTALL)
+                if json_match:
+                    questions = json.loads(json_match.group(1))
+                else:
+                    questions = json.loads(content)
+                
+                # Validate questions
+                for q in questions:
+                    if 'type' not in q:
+                        q['type'] = question_type
+                
+                print(f"✅ OpenRouter ({model_name}) generated {len(questions)} questions")
+                return questions
+            else:
+                print(f"  Model {model_name} failed: {response.status_code} - {response.text[:100]}")
+                continue
+        except Exception as model_error:
+            print(f"  Model {model_name} error: {str(model_error)[:100]}")
+            continue
+    
+    raise Exception("All OpenRouter models failed. Please check your API key or try again later.")
+
 def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
     if not genai:
         raise Exception("Google Generative AI library not available")
@@ -1036,8 +1156,18 @@ Return ONLY valid JSON array. Do NOT include any markdown code blocks, explanati
     except Exception as e:
         error_info = handle_gemini_api_error(e, "generate_quiz")
         error_msg = error_info.get('user_message', str(e))
-        print(f"Error in generate_quiz: {str(e)}")
+        print(f"Error in generate_quiz (Gemini): {str(e)}")
         print(f"Error details: {error_info}")
+        
+        # Try OpenRouter as fallback if Gemini fails
+        openrouter_key = os.environ.get('OPENROUTER_API_KEY')
+        if openrouter_key:
+            print("🔄 Attempting fallback to OpenRouter API...")
+            try:
+                return generate_quiz_openrouter(topic, difficulty_level, question_type, num_questions, pdf_content)
+            except Exception as openrouter_error:
+                print(f"OpenRouter fallback also failed: {str(openrouter_error)}")
+        
         import traceback
         traceback.print_exc()
         raise Exception(error_msg)

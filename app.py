@@ -815,7 +815,7 @@ def extract_pdf_content(file_paths):
     return combined_content if combined_content.strip() else None
 
 def generate_quiz_openrouter(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
-    """Generate quiz using OpenRouter API as fallback when Gemini fails"""
+    """Generate quiz using OpenRouter API (primary)"""
     import requests
     
     openrouter_key = os.environ.get('OPENROUTER_API_KEY')
@@ -934,7 +934,8 @@ Generate questions based ONLY on the information provided in the PDF content abo
     
     raise Exception("All OpenRouter models failed. Please check your API key or try again later.")
 
-def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
+def generate_quiz_gemini(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
+    """Generate quiz using Gemini API (fallback when OpenRouter fails)"""
     if not genai:
         raise Exception("Google Generative AI library not available")
     
@@ -1154,23 +1155,35 @@ Return ONLY valid JSON array. Do NOT include any markdown code blocks, explanati
         return questions
 
     except Exception as e:
-        error_info = handle_gemini_api_error(e, "generate_quiz")
+        error_info = handle_gemini_api_error(e, "generate_quiz_gemini")
         error_msg = error_info.get('user_message', str(e))
-        print(f"Error in generate_quiz (Gemini): {str(e)}")
+        print(f"Error in generate_quiz_gemini: {str(e)}")
         print(f"Error details: {error_info}")
-        
-        # Try OpenRouter as fallback if Gemini fails
-        openrouter_key = os.environ.get('OPENROUTER_API_KEY')
-        if openrouter_key:
-            print("🔄 Attempting fallback to OpenRouter API...")
-            try:
-                return generate_quiz_openrouter(topic, difficulty_level, question_type, num_questions, pdf_content)
-            except Exception as openrouter_error:
-                print(f"OpenRouter fallback also failed: {str(openrouter_error)}")
-        
         import traceback
         traceback.print_exc()
         raise Exception(error_msg)
+
+def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
+    """Generate quiz - tries OpenRouter first, falls back to Gemini if OpenRouter fails"""
+    
+    # Try OpenRouter first (primary)
+    openrouter_key = os.environ.get('OPENROUTER_API_KEY')
+    if openrouter_key:
+        try:
+            print("🚀 Using OpenRouter API (primary)...")
+            return generate_quiz_openrouter(topic, difficulty_level, question_type, num_questions, pdf_content)
+        except Exception as openrouter_error:
+            print(f"⚠️ OpenRouter failed: {str(openrouter_error)[:100]}")
+            print("🔄 Attempting fallback to Gemini API...")
+    
+    # Fallback to Gemini if OpenRouter fails or not configured
+    try:
+        return generate_quiz_gemini(topic, difficulty_level, question_type, num_questions, pdf_content)
+    except Exception as gemini_error:
+        # If both fail, raise error
+        error_msg = f"Both OpenRouter and Gemini failed. OpenRouter: {str(openrouter_error) if openrouter_key else 'not configured'}, Gemini: {str(gemini_error)}"
+        print(f"❌ {error_msg}")
+        raise Exception("Failed to generate quiz. Please check your API keys configuration.")
 
 def process_document(file_path):
     """Process uploaded document to extract content and topic"""

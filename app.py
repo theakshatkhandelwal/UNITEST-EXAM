@@ -923,7 +923,7 @@ Generate questions based ONLY on the information provided in the PDF content abo
                     if 'type' not in q:
                         q['type'] = question_type
                 
-                print(f"✅ OpenRouter ({model_name}) generated {len(questions)} questions")
+                print(f"✅ OpenRouter SUCCESS: Model '{model_name}' generated {len(questions)} questions")
                 return questions
             else:
                 print(f"  Model {model_name} failed: {response.status_code} - {response.text[:100]}")
@@ -966,7 +966,7 @@ def generate_quiz_gemini(topic, difficulty_level, question_type="mcq", num_quest
                 if preferred in model_names:
                     try:
                         model = genai.GenerativeModel(preferred)
-                        print(f"✓ Using available model: {preferred}")
+                        print(f"✓ Gemini: Using available model: {preferred}")
                         break
                     except Exception as e:
                         print(f"  Failed to use {preferred}: {str(e)[:50]}")
@@ -1166,26 +1166,43 @@ Return ONLY valid JSON array. Do NOT include any markdown code blocks, explanati
 def generate_quiz(topic, difficulty_level, question_type="mcq", num_questions=5, pdf_content=None):
     """Generate quiz - tries OpenRouter first, falls back to Gemini if OpenRouter fails"""
     
+    print("=" * 60)
+    print("📝 QUIZ GENERATION STARTED")
+    print(f"   Topic: {topic}")
+    print(f"   Type: {question_type}, Difficulty: {difficulty_level}, Count: {num_questions}")
+    print("=" * 60)
+    
     openrouter_error = None
     # Try OpenRouter first (primary)
     openrouter_key = os.environ.get('OPENROUTER_API_KEY')
     if openrouter_key:
+        print("✅ OpenRouter API key found")
         try:
-            print("🚀 Using OpenRouter API (primary)...")
-            return generate_quiz_openrouter(topic, difficulty_level, question_type, num_questions, pdf_content)
+            print("🚀 PRIMARY: Attempting OpenRouter API...")
+            result = generate_quiz_openrouter(topic, difficulty_level, question_type, num_questions, pdf_content)
+            print("✅ SUCCESS: Quiz generated using OpenRouter API (primary)")
+            print("=" * 60)
+            return result
         except Exception as e:
             openrouter_error = e
             print(f"⚠️ OpenRouter failed: {str(e)[:100]}")
-            print("🔄 Attempting fallback to Gemini API...")
+            print("🔄 FALLBACK: Switching to Gemini API...")
+    else:
+        print("⚠️ OpenRouter API key not found - using Gemini as primary")
     
     # Fallback to Gemini if OpenRouter fails or not configured
     try:
-        return generate_quiz_gemini(topic, difficulty_level, question_type, num_questions, pdf_content)
+        print("🔄 FALLBACK: Attempting Gemini API...")
+        result = generate_quiz_gemini(topic, difficulty_level, question_type, num_questions, pdf_content)
+        print("✅ SUCCESS: Quiz generated using Gemini API (fallback)")
+        print("=" * 60)
+        return result
     except Exception as gemini_error:
         # If both fail, raise error
         openrouter_msg = str(openrouter_error)[:100] if openrouter_error else 'not configured'
         error_msg = f"Both OpenRouter and Gemini failed. OpenRouter: {openrouter_msg}, Gemini: {str(gemini_error)[:100]}"
-        print(f"❌ {error_msg}")
+        print(f"❌ FAILED: {error_msg}")
+        print("=" * 60)
         raise Exception("Failed to generate quiz. Please check your API keys configuration.")
 
 def process_document(file_path):

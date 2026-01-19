@@ -25,14 +25,87 @@
         <div class="card mb-3">
           <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Question {{ loop.index }}</h5>
-            <div class="input-group" style="max-width:150px;">
-              <span class="input-group-text">Marks:</span>
-              <input type="number" class="form-control" name="marks_{{ loop.index0 }}" value="{{ q.marks or 1 }}" min="1" max="10" required>
+            <div class="d-flex align-items-center gap-2">
+              {% if q.type == 'coding' %}
+                <span class="badge bg-warning text-dark">💻 Coding</span>
+              {% elif q.type == 'subjective' %}
+                <span class="badge bg-info">📝 Subjective</span>
+              {% else %}
+                <span class="badge bg-primary">📋 MCQ</span>
+              {% endif %}
+              <div class="input-group" style="max-width:150px;">
+                <span class="input-group-text">Marks:</span>
+                <input type="number" class="form-control" name="marks_{{ loop.index0 }}" value="{{ q.marks or 1 }}" min="1" max="100" required>
+              </div>
             </div>
           </div>
           <div class="card-body">
-            <p class="fw-bold mb-3">{{ q.question }}</p>
-            {% if q.options %}
+            <p class="fw-bold mb-3" style="white-space: pre-wrap;">{{ q.question }}</p>
+            
+            {% if q.type == 'coding' %}
+            <!-- Coding Question Details -->
+            <div class="row">
+              <div class="col-md-6">
+                <div class="card bg-light mb-2">
+                  <div class="card-header py-2"><small class="fw-bold">📥 Sample Input</small></div>
+                  <div class="card-body py-2">
+                    <pre class="mb-0 small"><code>{{ q.sample_input or 'N/A' }}</code></pre>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="card bg-light mb-2">
+                  <div class="card-header py-2"><small class="fw-bold">📤 Sample Output</small></div>
+                  <div class="card-body py-2">
+                    <pre class="mb-0 small"><code>{{ q.sample_output or 'N/A' }}</code></pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {% if q.test_cases %}
+            <div class="mt-2">
+              <small class="fw-bold">🧪 Test Cases ({{ q.test_cases|length }} total):</small>
+              <div class="table-responsive mt-1">
+                <table class="table table-sm table-bordered small">
+                  <thead class="table-secondary">
+                    <tr>
+                      <th>#</th>
+                      <th>Input</th>
+                      <th>Expected Output</th>
+                      <th>Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for tc in q.test_cases[:5] %}
+                    <tr>
+                      <td>{{ loop.index }}</td>
+                      <td><code>{{ tc.input[:50] }}{{ '...' if tc.input|length > 50 else '' }}</code></td>
+                      <td><code>{{ tc.expected_output[:30] }}{{ '...' if tc.expected_output|length > 30 else '' }}</code></td>
+                      <td>{% if tc.is_hidden %}<span class="badge bg-secondary">Hidden</span>{% else %}<span class="badge bg-success">Visible</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if q.test_cases|length > 5 %}
+                    <tr><td colspan="4" class="text-center text-muted">... and {{ q.test_cases|length - 5 }} more test cases</td></tr>
+                    {% endif %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {% endif %}
+            
+            {% if q.starter_code %}
+            <div class="mt-2">
+              <small class="fw-bold">🚀 Starter Code Available:</small>
+              <span class="badge bg-success mx-1">Python</span>
+              <span class="badge bg-danger mx-1">Java</span>
+              <span class="badge bg-info mx-1">C++</span>
+              <span class="badge bg-warning text-dark mx-1">C</span>
+            </div>
+            {% endif %}
+            
+            {% elif q.options %}
+            <!-- MCQ Options -->
             <div class="mb-3">
               <strong>Options:</strong>
               <ul class="mb-2">
@@ -41,6 +114,12 @@
                 {% endfor %}
               </ul>
               <small class="text-success"><strong>✓ Correct Answer: {{ q.answer }}</strong></small>
+            </div>
+            
+            {% elif q.type == 'subjective' %}
+            <!-- Subjective Answer -->
+            <div class="mb-3">
+              <small class="text-muted"><strong>Sample Answer:</strong> {{ q.answer[:200] }}{{ '...' if q.answer|length > 200 else '' }}</small>
             </div>
             {% endif %}
           </div>

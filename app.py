@@ -917,6 +917,53 @@ Return output in valid JSON format ONLY (no explanations, no markdown):
     {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq"}},
     ...
 ]"""
+    elif question_type == "coding":
+        prompt = f"""CRITICAL: Generate {num_questions} PROGRAMMING/CODING problems on the topic: "{topic}"
+
+Difficulty Level: {difficulty_level.upper()} ({level_description})
+{pdf_context if pdf_content else ''}
+
+IMPORTANT: These must be ACTUAL CODING PROBLEMS that require writing code, NOT theoretical/subjective questions.
+
+REQUIREMENTS:
+1. Generate EXACTLY {num_questions} coding problems
+2. Each problem must require students to write actual code (Python, Java, C++, or C)
+3. Include clear input/output specifications
+4. Include test cases with expected outputs
+5. Problems should be solvable in 15-30 minutes
+
+EXAMPLES OF GOOD CODING PROBLEMS:
+- "Write a function to find the sum of all elements in an array"
+- "Implement a function to check if a string is a palindrome"
+- "Write a program to find the factorial of a number"
+- "Create a function to reverse a linked list"
+
+EXAMPLES OF BAD (DO NOT GENERATE THESE):
+- "Explain the difference between arrays and linked lists" (This is subjective, NOT coding)
+- "What is recursion?" (This is theoretical, NOT coding)
+
+Return ONLY valid JSON in this exact format:
+[
+    {{
+        "question": "Write a function that takes an array of integers and returns the sum of all elements.\\n\\nInput: First line contains n (size of array). Second line contains n space-separated integers.\\nOutput: Print the sum of all elements.",
+        "type": "coding",
+        "sample_input": "5\\n1 2 3 4 5",
+        "sample_output": "15",
+        "test_cases": [
+            {{"input": "5\\n1 2 3 4 5", "expected_output": "15", "is_hidden": false}},
+            {{"input": "3\\n10 20 30", "expected_output": "60", "is_hidden": false}},
+            {{"input": "4\\n-1 -2 3 4", "expected_output": "4", "is_hidden": true}}
+        ],
+        "time_limit_seconds": 2,
+        "memory_limit_mb": 256,
+        "starter_code": {{
+            "python": "def solve(arr):\\n    # Write your code here\\n    pass\\n\\n# Read input\\nn = int(input())\\narr = list(map(int, input().split()))\\nprint(solve(arr))",
+            "java": "import java.util.*;\\npublic class Solution {{\\n    public static void main(String[] args) {{\\n        Scanner sc = new Scanner(System.in);\\n        int n = sc.nextInt();\\n        int[] arr = new int[n];\\n        for(int i=0; i<n; i++) arr[i] = sc.nextInt();\\n        // Write your code here\\n    }}\\n}}",
+            "cpp": "#include <iostream>\\nusing namespace std;\\nint main() {{\\n    int n;\\n    cin >> n;\\n    int arr[n];\\n    for(int i=0; i<n; i++) cin >> arr[i];\\n    // Write your code here\\n    return 0;\\n}}",
+            "c": "#include <stdio.h>\\nint main() {{\\n    int n;\\n    scanf(\\"%d\\", &n);\\n    int arr[n];\\n    for(int i=0; i<n; i++) scanf(\\"%d\\", &arr[i]);\\n    // Write your code here\\n    return 0;\\n}}"
+        }}
+    }}
+]"""
     else:  # subjective
         prompt = f"""CRITICAL: You MUST generate questions ONLY on the topic: "{topic}"
 
@@ -988,8 +1035,33 @@ Return output in valid JSON format ONLY (no explanations, no markdown):
                 for q in questions:
                     if 'type' not in q:
                         q['type'] = question_type
+                    
+                    # Ensure coding questions have required fields
+                    if question_type == 'coding':
+                        q['type'] = 'coding'  # Force correct type
+                        # Ensure required fields exist
+                        if 'sample_input' not in q:
+                            q['sample_input'] = ''
+                        if 'sample_output' not in q:
+                            q['sample_output'] = ''
+                        if 'test_cases' not in q or not q['test_cases']:
+                            # Generate default test cases from sample if available
+                            q['test_cases'] = [
+                                {"input": q.get('sample_input', ''), "expected_output": q.get('sample_output', ''), "is_hidden": False}
+                            ]
+                        if 'time_limit_seconds' not in q:
+                            q['time_limit_seconds'] = 2
+                        if 'memory_limit_mb' not in q:
+                            q['memory_limit_mb'] = 256
+                        if 'starter_code' not in q or not q['starter_code']:
+                            q['starter_code'] = {
+                                "python": "# Write your code here\n",
+                                "java": "// Write your code here\n",
+                                "cpp": "// Write your code here\n",
+                                "c": "// Write your code here\n"
+                            }
                 
-                print(f"✅ OpenRouter SUCCESS: Model '{model_name}' generated {len(questions)} questions")
+                print(f"✅ OpenRouter SUCCESS: Model '{model_name}' generated {len(questions)} {question_type} questions")
                 return questions
             else:
                 error_detail = response.text[:200] if response.text else "No error message"
@@ -1232,6 +1304,31 @@ Return output in valid JSON format ONLY (no explanations, no markdown):
                 elif q.get('type') != question_type:
                     print(f"WARNING: Question type mismatch. Expected {question_type}, got {q.get('type')}")
                     q['type'] = question_type  # Force correct type
+                
+                # Ensure coding questions have required fields
+                if question_type == 'coding':
+                    q['type'] = 'coding'  # Force correct type
+                    # Ensure required fields exist
+                    if 'sample_input' not in q:
+                        q['sample_input'] = ''
+                    if 'sample_output' not in q:
+                        q['sample_output'] = ''
+                    if 'test_cases' not in q or not q['test_cases']:
+                        # Generate default test cases from sample if available
+                        q['test_cases'] = [
+                            {"input": q.get('sample_input', ''), "expected_output": q.get('sample_output', ''), "is_hidden": False}
+                        ]
+                    if 'time_limit_seconds' not in q:
+                        q['time_limit_seconds'] = 2
+                    if 'memory_limit_mb' not in q:
+                        q['memory_limit_mb'] = 256
+                    if 'starter_code' not in q or not q['starter_code']:
+                        q['starter_code'] = {
+                            "python": "# Write your code here\n",
+                            "java": "// Write your code here\n",
+                            "cpp": "// Write your code here\n",
+                            "c": "// Write your code here\n"
+                        }
             
             print(f"DEBUG: Validated {len(questions)} questions, all have type: {question_type}")
 

@@ -511,10 +511,23 @@ window.addEventListener('blur', function() {
   }
 });
 
-// Disable copy/paste and detect keyboard shortcuts
+// Disable copy/paste EXCEPT in code editors and textareas
 document.addEventListener('keydown', function(e) {
+  // Allow copy/paste/select-all in code editors and textareas
+  const activeElement = document.activeElement;
+  const isCodeEditor = activeElement && (
+    activeElement.classList.contains('CodeMirror') ||
+    activeElement.closest('.CodeMirror') ||
+    activeElement.tagName === 'TEXTAREA' ||
+    activeElement.tagName === 'INPUT'
+  );
+  
   if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'a' || e.key === 'v')) {
-    e.preventDefault();
+    // Allow in code editors, block elsewhere
+    if (!isCodeEditor) {
+      e.preventDefault();
+    }
+    return; // Don't process as violation
   }
   
   // Only check violations if quiz has started
@@ -591,11 +604,20 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-// Disable text selection
+// Disable text selection on body (but CSS allows it in code editors)
 document.body.style.userSelect = 'none';
 document.body.style.webkitUserSelect = 'none';
 document.body.style.mozUserSelect = 'none';
 document.body.style.msUserSelect = 'none';
+
+// Re-enable text selection for code editors after they're initialized
+setTimeout(function() {
+  document.querySelectorAll('.CodeMirror, .CodeMirror *, textarea, .code-editor').forEach(function(el) {
+    el.style.userSelect = 'text';
+    el.style.webkitUserSelect = 'text';
+    el.style.pointerEvents = 'auto';
+  });
+}, 500);
 
 // Handle coding questions
 document.addEventListener('DOMContentLoaded', function() {
@@ -1132,14 +1154,25 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
-/* Disable selection/copy */
-* { 
+/* Disable selection/copy - but allow in code editors and textareas */
+body { 
   -webkit-user-select: none; 
   -ms-user-select: none; 
   user-select: none; 
-}
-body { 
   -webkit-touch-callout: none; 
+}
+
+/* Allow text selection in code editors and textareas */
+.CodeMirror,
+.CodeMirror *,
+.code-editor,
+textarea,
+input[type="text"],
+.answer-textarea {
+  -webkit-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+  pointer-events: auto !important;
 }
 
 /* Ensure fullscreen gate and button are always clickable */

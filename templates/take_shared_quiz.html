@@ -1258,17 +1258,16 @@ input[type="text"],
   }
 }
 
-/* CodeMirror styling */
+/* CodeMirror styling - FIXED layout */
 .CodeMirror {
   height: 100% !important;
   min-height: 400px;
-  font-size: 15px;
-  line-height: 1.6;
-  font-family: 'Consolas', 'Monaco', 'Courier New', 'Fira Code', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   background: #1e1e1e !important;
   color: #d4d4d4 !important;
   border-radius: 8px;
-  overflow: hidden;
   position: relative !important;
   z-index: 1 !important;
   pointer-events: auto !important;
@@ -1277,46 +1276,28 @@ input[type="text"],
 
 .CodeMirror-scroll {
   min-height: 400px;
-  padding: 0 !important;
-}
-
-.CodeMirror-wrap .CodeMirror-scroll {
-  overflow-x: auto !important;
-  overflow-y: auto !important;
+  overflow: auto !important;
 }
 
 .CodeMirror-gutters {
   background: #252526 !important;
   border-right: 1px solid #3e3e42 !important;
-  width: 60px !important;
-  padding-right: 10px !important;
-  position: absolute !important;
-  left: 0 !important;
-  top: 0 !important;
-  z-index: 3 !important;
 }
 
 .CodeMirror-linenumber {
   color: #858585 !important;
-  padding: 0 10px 0 0 !important;
-  min-width: 50px !important;
-  width: 50px !important;
+  padding: 0 8px 0 8px !important;
+  min-width: 40px !important;
   text-align: right !important;
-  cursor: default !important;
-  display: inline-block !important;
-  box-sizing: border-box !important;
 }
 
+/* Remove custom padding overrides that break layout */
 .CodeMirror-lines {
-  padding-left: 70px !important;
-  padding-right: 10px !important;
-  padding-top: 10px !important;
-  padding-bottom: 10px !important;
+  padding: 10px 0 !important;
 }
 
 .CodeMirror-sizer {
-  padding-left: 70px !important;
-  margin-left: 0 !important;
+  /* Let CodeMirror handle this automatically */
 }
 
 .CodeMirror-cursor {

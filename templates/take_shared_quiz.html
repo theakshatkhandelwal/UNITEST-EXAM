@@ -619,18 +619,132 @@ setTimeout(function() {
   });
 }, 500);
 
-// Handle coding questions
-document.addEventListener('DOMContentLoaded', function() {
-  // Load test cases for each coding question from the page
-  const codingQuestions = {{ questions|tojson }};
-  
-  // Store test cases in a map
-  const testCasesMap = {};
-  codingQuestions.forEach(q => {
-    if (q.qtype === 'coding') {
-      testCasesMap[q.id] = q.test_cases || [];
+// Global quiz navigation functions (must work even if coding init fails)
+window.currentQuestionIndex = 0;
+window.totalQuestions = {{ questions|length }};
+window.codeMirrorEditors = {};
+
+window.updateQuestionIndicator = function(index) {
+  const indicator = document.getElementById('current-question-indicator');
+  if (indicator) {
+    indicator.textContent = 'Question ' + (index + 1) + ' of ' + window.totalQuestions;
+  }
+  document.querySelectorAll('.question-nav-btn').forEach(btn => {
+    const btnIndex = parseInt(btn.getAttribute('data-question-index'));
+    if (btnIndex === index) {
+      btn.style.background = '#0078d4';
+      btn.style.color = '#fff';
+      btn.style.borderColor = '#0078d4';
+    } else {
+      btn.style.background = '#3e3e42';
+      btn.style.color = '#d4d4d4';
+      btn.style.borderColor = '#555';
     }
   });
+};
+
+window.updateNavigationButtons = function(index) {
+  document.querySelectorAll('.question-wrapper').forEach((wrapper, i) => {
+    const prevBtn = wrapper.querySelector('.prev-question-btn');
+    const nextBtn = wrapper.querySelector('.next-question-btn');
+    if (prevBtn) prevBtn.style.display = i > 0 ? 'inline-block' : 'none';
+    if (nextBtn) nextBtn.style.display = i < window.totalQuestions - 1 ? 'inline-block' : 'none';
+  });
+};
+
+window.saveCurrentAnswer = function() {
+  if (window.codeMirrorEditors) {
+    Object.keys(window.codeMirrorEditors).forEach(questionId => {
+      const editor = window.codeMirrorEditors[questionId];
+      const textarea = document.getElementById('code_' + questionId);
+      if (editor && textarea) {
+        textarea.value = editor.getValue();
+      }
+    });
+  }
+};
+
+window.showQuestion = function(index) {
+  document.querySelectorAll('.question-wrapper').forEach(wrapper => {
+    wrapper.style.display = 'none';
+  });
+  const questionWrapper = document.querySelector('.question-wrapper[data-question-index="' + index + '"]');
+  if (questionWrapper) {
+    questionWrapper.style.display = 'block';
+    window.currentQuestionIndex = index;
+    window.updateQuestionIndicator(index);
+    window.updateNavigationButtons(index);
+    questionWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
+// Handle all questions
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('DOMContentLoaded fired - initializing quiz...');
+  
+  // Initialize navigation for ALL question types (not just coding)
+  window.updateQuestionIndicator(0);
+  window.updateNavigationButtons(0);
+  
+  // Attach navigation button handlers
+  document.querySelectorAll('.question-nav-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const index = parseInt(this.getAttribute('data-question-index'));
+      window.saveCurrentAnswer();
+      window.showQuestion(index);
+    });
+  });
+  
+  document.querySelectorAll('.next-question-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const currentIndex = parseInt(this.getAttribute('data-question-index'));
+      window.saveCurrentAnswer();
+      if (currentIndex < window.totalQuestions - 1) {
+        window.showQuestion(currentIndex + 1);
+      }
+    });
+  });
+  
+  document.querySelectorAll('.prev-question-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const currentIndex = parseInt(this.getAttribute('data-question-index'));
+      window.saveCurrentAnswer();
+      if (currentIndex > 0) {
+        window.showQuestion(currentIndex - 1);
+      }
+    });
+  });
+  
+  // Handle Final Submit Button
+  const finalSubmitBtn = document.getElementById('finalSubmitBtn');
+  if (finalSubmitBtn) {
+    finalSubmitBtn.addEventListener('click', function() {
+      window.isSubmittingQuiz = true;
+      if (confirm('Are you sure you want to submit the quiz?')) {
+        window.saveCurrentAnswer();
+        document.getElementById('quizForm').submit();
+      } else {
+        window.isSubmittingQuiz = false;
+      }
+    });
+  }
+  
+  console.log('Navigation initialized for ' + window.totalQuestions + ' questions');
+  
+  // Now initialize coding-specific features (in try-catch so navigation still works if this fails)
+  try {
+    // Load test cases for each coding question from the page
+    const codingQuestions = {{ questions|tojson|safe }};
+    console.log('Loaded questions:', codingQuestions.length);
+    
+    // Store test cases in a map
+    const testCasesMap = {};
+    codingQuestions.forEach(q => {
+      if (q.qtype === 'coding') {
+        testCasesMap[q.id] = q.test_cases || [];
+        console.log('Loaded test cases for question', q.id);
+      }
+    });
   
   // Initialize CodeMirror editors for all coding questions
   window.codeMirrorEditors = {};
@@ -989,148 +1103,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
   
-  // Question Navigation Logic - Make functions global
-  window.currentQuestionIndex = 0;
-  window.totalQuestions = {{ questions|length }};
-  
-  window.updateQuestionIndicator = function(index) {
-    const indicator = document.getElementById('current-question-indicator');
-    if (indicator) {
-      indicator.textContent = `Question ${index + 1} of ${window.totalQuestions}`;
-    }
-    
-    // Update question number buttons
-    document.querySelectorAll('.question-nav-btn').forEach(btn => {
-      const btnIndex = parseInt(btn.getAttribute('data-question-index'));
-      if (btnIndex === index) {
-        btn.style.background = '#0078d4';
-        btn.style.color = '#fff';
-        btn.style.borderColor = '#0078d4';
-      } else {
-        btn.style.background = '#3e3e42';
-        btn.style.color = '#d4d4d4';
-        btn.style.borderColor = '#555';
-      }
-    });
-  }
-  
-  window.updateNavigationButtons = function(index) {
-    // Update Previous button visibility
-    document.querySelectorAll('.prev-question-btn').forEach(btn => {
-      const btnIndex = parseInt(btn.getAttribute('data-question-index'));
-      if (btnIndex === index) {
-        btn.style.display = index > 0 ? 'inline-block' : 'none';
-      }
-    });
-    
-    // Update Next button visibility
-    document.querySelectorAll('.next-question-btn').forEach(btn => {
-      const btnIndex = parseInt(btn.getAttribute('data-question-index'));
-      if (btnIndex === index) {
-        btn.style.display = index < window.totalQuestions - 1 ? 'inline-block' : 'none';
-      }
-    });
-  }
-  
-  window.saveCurrentAnswer = function() {
-    // Sync CodeMirror editors if any
-    if (window.codeMirrorEditors) {
-      Object.keys(window.codeMirrorEditors).forEach(questionId => {
-        const editor = window.codeMirrorEditors[questionId];
-        const textarea = document.getElementById('code_' + questionId);
-        if (editor && textarea) {
-          textarea.value = editor.getValue();
-        }
-      });
-    }
-    // Answers are automatically saved in form fields
-  }
-  
-  window.showQuestion = function(index) {
-    // Hide all questions
-    document.querySelectorAll('.question-wrapper').forEach(wrapper => {
-      wrapper.style.display = 'none';
-    });
-    
-    // Show selected question
-    const questionWrapper = document.querySelector(`.question-wrapper[data-question-index="${index}"]`);
-    if (questionWrapper) {
-      questionWrapper.style.display = 'block';
-      window.currentQuestionIndex = index;
-      window.updateQuestionIndicator(index);
-      window.updateNavigationButtons(index);
-      
-      // Scroll to top of question
-      questionWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }
-  
-  // Initialize on page load
-  window.updateQuestionIndicator(0);
-  window.updateNavigationButtons(0);
-  
-  // Handle question number button clicks
-  document.querySelectorAll('.question-nav-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const index = parseInt(this.getAttribute('data-question-index'));
-      window.saveCurrentAnswer();
-      window.showQuestion(index);
-    });
-  });
-  
-  // Handle Next button clicks
-  document.querySelectorAll('.next-question-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const currentIndex = parseInt(this.getAttribute('data-question-index'));
-      window.saveCurrentAnswer();
-      if (currentIndex < window.totalQuestions - 1) {
-        window.showQuestion(currentIndex + 1);
-      }
-    });
-  });
-  
-  // Handle Previous button clicks
-  document.querySelectorAll('.prev-question-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      const currentIndex = parseInt(this.getAttribute('data-question-index'));
-      window.saveCurrentAnswer();
-      if (currentIndex > 0) {
-        window.showQuestion(currentIndex - 1);
-      }
-    });
-  });
-  
-  // Handle Final Submit Button (top right)
-  const finalSubmitBtn = document.getElementById('finalSubmitBtn');
-  if (finalSubmitBtn) {
-    finalSubmitBtn.addEventListener('click', function() {
-      // Set flag BEFORE showing confirmation dialog (which exits fullscreen)
-      window.isSubmittingQuiz = true;
-      
-      if (confirm('Are you sure you want to submit the quiz? You cannot change your answers after submission.')) {
-        window.saveCurrentAnswer();
-        // Sync all CodeMirror editors
-        if (window.codeMirrorEditors) {
-          Object.keys(window.codeMirrorEditors).forEach(questionId => {
-            const editor = window.codeMirrorEditors[questionId];
-            const textarea = document.getElementById('code_' + questionId);
-            if (editor && textarea) {
-              textarea.value = editor.getValue();
-            }
-          });
-        }
-        // Submit the form
-        document.getElementById('quizForm').submit();
-      } else {
-        // User cancelled - reset flag
-        window.isSubmittingQuiz = false;
-      }
-    });
-  }
-  
-  // Language change handler is now handled in CodeMirror initialization above
-  
-  // Fix reset button functionality
+  // Fix reset button functionality (coding-specific, so stays in try block)
   document.querySelectorAll('.reset-code-btn').forEach(btn => {
     btn.addEventListener('click', function() {
       const questionId = this.getAttribute('data-question-id');
@@ -1147,9 +1120,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
       // Hide test results
-      document.getElementById('test_results_' + questionId).style.display = 'none';
+      const testResultsEl = document.getElementById('test_results_' + questionId);
+      if (testResultsEl) testResultsEl.style.display = 'none';
     });
   });
+  
+  console.log('Quiz initialization complete!');
+  
+  } catch (error) {
+    console.error('ERROR initializing quiz:', error);
+    console.error('Error stack:', error.stack);
+    alert('Error loading quiz. Please refresh the page. Error: ' + error.message);
+  }
 });
 </script>
 

@@ -69,3 +69,4 @@ If you see "API configuration error" or "Quota exceeded":
 - ❌ **Avoid**: `gemini-2.0-flash` (no free quota)
 - 🔄 **Auto-selection**: Code picks the best available model automatically
 
+

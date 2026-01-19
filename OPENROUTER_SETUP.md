@@ -95,3 +95,4 @@ A: OpenRouter is more reliable (no quota issues), but Gemini is free if it works
 
 Once you add the `OPENROUTER_API_KEY` to Vercel, your quiz generation will be **much more reliable**!
 
+

@@ -282,6 +282,8 @@
                             <th>Email</th>
                             <th>Login Time</th>
                             <th>IP Address</th>
+                            <th>Location</th>
+                            <th>Coordinates</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -291,11 +293,35 @@
                             <td>{{ login.user.email }}</td>
                             <td>{{ login.login_time.strftime('%Y-%m-%d %H:%M:%S') if login.login_time else 'N/A' }}</td>
                             <td><small class="text-muted">{{ login.ip_address or 'N/A' }}</small></td>
+                            <td>
+                                {% if login.city or login.country %}
+                                    <i class="fas fa-map-marker-alt text-danger me-1"></i>
+                                    {{ login.city or '' }}{% if login.city and login.country %}, {% endif %}{{ login.country or '' }}
+                                    {% if login.region %}
+                                        <br><small class="text-muted">{{ login.region }}</small>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if login.latitude and login.longitude %}
+                                    <a href="https://www.google.com/maps?q={{ login.latitude }},{{ login.longitude }}" 
+                                       target="_blank" 
+                                       class="btn btn-sm btn-outline-primary"
+                                       title="View on Google Maps">
+                                        <i class="fas fa-map"></i>
+                                        {{ "%.4f"|format(login.latitude) }}, {{ "%.4f"|format(login.longitude) }}
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                         {% if not recent_logins %}
                         <tr>
-                            <td colspan="4" class="text-center text-muted">No login history available</td>
+                            <td colspan="6" class="text-center text-muted">No login history available</td>
                         </tr>
                         {% endif %}
                     </tbody>

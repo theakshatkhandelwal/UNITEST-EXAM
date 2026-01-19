@@ -35,6 +35,39 @@ except ImportError:
 # if OCR_AVAILABLE and os.name == 'nt':  # Windows
 #     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
+# Geolocation helper function - get location from IP address
+def get_geolocation_from_ip(ip_address):
+    """Get geolocation data (lat, lng, city, country) from IP address using free API"""
+    try:
+        # Skip for localhost/private IPs
+        if not ip_address or ip_address in ['127.0.0.1', 'localhost', '::1']:
+            return None
+        
+        # Check for private IP ranges
+        if ip_address.startswith(('10.', '172.', '192.168.')):
+            return None
+        
+        # Use ip-api.com (free, no API key required, 45 requests/minute)
+        response = requests.get(
+            f'http://ip-api.com/json/{ip_address}',
+            timeout=3  # Quick timeout to not slow down login
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('status') == 'success':
+                return {
+                    'latitude': data.get('lat'),
+                    'longitude': data.get('lon'),
+                    'city': data.get('city'),
+                    'country': data.get('country'),
+                    'region': data.get('regionName')
+                }
+        return None
+    except Exception as e:
+        print(f"Geolocation lookup failed for {ip_address}: {str(e)}")
+        return None
+
 # Cloud OCR API support (works in serverless environments like Vercel)
 def extract_pdf_content_with_cloud_ocr(file_path):
     """Extract text from PDF using cloud OCR API (works in serverless environments)"""
@@ -414,6 +447,12 @@ class LoginHistory(db.Model):
     login_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     ip_address = db.Column(db.String(45))  # IPv6 can be up to 45 characters
     user_agent = db.Column(db.String(255))  # Browser/user agent string
+    # Geolocation fields
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    city = db.Column(db.String(100), nullable=True)
+    country = db.Column(db.String(100), nullable=True)
+    region = db.Column(db.String(100), nullable=True)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -1664,12 +1703,25 @@ def login():
                 login_time = datetime.utcnow()
                 user.last_login = login_time
                 
-                # Record login history
+                # Get real IP address (handle proxies like Vercel/Cloudflare)
+                ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+                if ip_address and ',' in ip_address:
+                    ip_address = ip_address.split(',')[0].strip()  # Get first IP in chain
+                
+                # Get geolocation from IP
+                geo_data = get_geolocation_from_ip(ip_address)
+                
+                # Record login history with geolocation
                 login_history = LoginHistory(
                     user_id=user.id,
                     login_time=login_time,
-                    ip_address=request.remote_addr,
-                    user_agent=request.headers.get('User-Agent', 'Unknown')
+                    ip_address=ip_address,
+                    user_agent=request.headers.get('User-Agent', 'Unknown'),
+                    latitude=geo_data.get('latitude') if geo_data else None,
+                    longitude=geo_data.get('longitude') if geo_data else None,
+                    city=geo_data.get('city') if geo_data else None,
+                    country=geo_data.get('country') if geo_data else None,
+                    region=geo_data.get('region') if geo_data else None
                 )
                 db.session.add(login_history)
                 db.session.commit()

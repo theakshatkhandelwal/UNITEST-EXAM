@@ -790,9 +790,11 @@ document.addEventListener('DOMContentLoaded', function() {
           }
         }
         
+        console.log('Initializing CodeMirror for question', questionId);
+        
         // Initialize CodeMirror with enhanced features
         const editor = CodeMirror(editorDiv, {
-          value: initialCode,
+          value: initialCode || '# Write your code here\n',
           mode: languageModes[initialLang] || 'python',
           theme: 'monokai',
           lineNumbers: true,
@@ -805,7 +807,8 @@ document.addEventListener('DOMContentLoaded', function() {
           styleActiveLine: true,
           foldGutter: true,
           gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
-          scrollbarStyle: 'simple',
+          scrollbarStyle: 'native',
+          inputStyle: 'contenteditable',  // Better for mobile and some browsers
           extraKeys: {
             'Tab': function(cm) {
               if (cm.somethingSelected()) {
@@ -892,17 +895,45 @@ document.addEventListener('DOMContentLoaded', function() {
         // Ensure editor is focusable and clickable
         editorDiv.style.pointerEvents = 'auto';
         editorDiv.style.cursor = 'text';
+        editorDiv.style.userSelect = 'text';
+        
+        // Make the wrapper also clickable to focus editor
+        const codePanel = editorDiv.closest('.code-panel');
+        if (codePanel) {
+          codePanel.addEventListener('click', function(e) {
+            if (e.target.closest('.CodeMirror') || e.target.id === 'codeeditor_' + questionId) {
+              editor.focus();
+            }
+          });
+        }
+        
+        // Also add direct click handler on editor div
+        editorDiv.addEventListener('click', function() {
+          editor.focus();
+        });
         
         // Sync CodeMirror to textarea on change
         editor.on('change', function() {
           textarea.value = editor.getValue();
+          console.log('Code changed for question', questionId);
         });
         
         // Refresh editor to fix any rendering issues
         setTimeout(() => {
           editor.refresh();
-          editor.focus();
-        }, 200);
+          // Make CodeMirror wrapper interactive
+          const cmWrapper = editorDiv.querySelector('.CodeMirror');
+          if (cmWrapper) {
+            cmWrapper.style.pointerEvents = 'auto';
+            cmWrapper.style.userSelect = 'text';
+          }
+          console.log('CodeMirror initialized for question', questionId);
+        }, 300);
+        
+        // Additional refresh after quiz becomes visible
+        setTimeout(() => {
+          editor.refresh();
+        }, 1000);
         
         // Update mode when language changes
         if (languageSelect) {
@@ -1144,10 +1175,20 @@ body {
   -webkit-touch-callout: none; 
 }
 
-/* Allow text selection in code editors and textareas */
+/* Allow text selection and input in code editors and textareas */
 .CodeMirror,
 .CodeMirror *,
+.CodeMirror-code,
+.CodeMirror-lines,
+.CodeMirror-line,
+.CodeMirror-scroll,
+.CodeMirror-sizer,
+.CodeMirror-gutter-wrapper,
+.CodeMirror-cursors,
+.CodeMirror-cursor,
 .code-editor,
+.code-panel,
+.code-panel *,
 textarea,
 input[type="text"],
 .answer-textarea {
@@ -1155,6 +1196,21 @@ input[type="text"],
   -ms-user-select: text !important;
   user-select: text !important;
   pointer-events: auto !important;
+}
+
+/* Ensure CodeMirror input area is interactive */
+.CodeMirror-focused,
+.CodeMirror-focused * {
+  pointer-events: auto !important;
+  cursor: text !important;
+}
+
+/* Fix for contenteditable input */
+.CodeMirror [contenteditable="true"] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  pointer-events: auto !important;
+  cursor: text !important;
 }
 
 /* Ensure fullscreen gate and button are always clickable */

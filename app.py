@@ -3268,8 +3268,52 @@ def dev_migrate():
                     conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN started_at DATETIME;"))
                 if 'completed' not in cols:
                     conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN completed BOOLEAN DEFAULT 0;"))
+                
+                # New Proctoring Columns
+                proctor_cols = {
+                    'full_screen_exit_count': 'INTEGER DEFAULT 0',
+                    'tab_switch_count': 'INTEGER DEFAULT 0',
+                    'user_count_max': 'INTEGER DEFAULT 0',
+                    'full_screen_exit_duration': 'INTEGER DEFAULT 0',
+                    'is_webcam_data_reliable': 'BOOLEAN DEFAULT 1',
+                    'assignment_open_count': 'INTEGER DEFAULT 0',
+                    'page_unfocused_count': 'INTEGER DEFAULT 0',
+                    'illegal_key_combination_detected': 'BOOLEAN DEFAULT 0',
+                    'system_sleep_detected': 'BOOLEAN DEFAULT 0',
+                    'total_breaches': 'INTEGER DEFAULT 0',
+                    'different_window_detected': 'BOOLEAN DEFAULT 0',
+                    'camera_off_detected': 'BOOLEAN DEFAULT 0',
+                    'face_not_visible_detected': 'BOOLEAN DEFAULT 0',
+                    'incorrect_camera_angle_detected': 'BOOLEAN DEFAULT 0',
+                    'multiple_faces_detected': 'BOOLEAN DEFAULT 0',
+                    'talking_to_someone_detected': 'BOOLEAN DEFAULT 0',
+                    'using_other_device_detected': 'BOOLEAN DEFAULT 0',
+                    'device_id_change_detected': 'BOOLEAN DEFAULT 0',
+                    'is_flagged_cheating': 'BOOLEAN DEFAULT 0'
+                }
+                for col, defn in proctor_cols.items():
+                    if col not in cols:
+                        conn.execute(text(f"ALTER TABLE quiz_submission ADD COLUMN {col} {defn};"))
+                        print(f"✅ Added {col} column to quiz_submission")
+                
+                # Geolocation columns for login_history (SQLite)
+                res = conn.execute(text("PRAGMA table_info(login_history);"))
+                cols = [str(r[1]) for r in res]
+                geo_cols = {
+                    'latitude': 'FLOAT',
+                    'longitude': 'FLOAT',
+                    'city': 'VARCHAR(100)',
+                    'country': 'VARCHAR(100)',
+                    'region': 'VARCHAR(100)',
+                    'ip_address': 'VARCHAR(45)',
+                    'user_agent': 'VARCHAR(255)'
+                }
+                for col, defn in geo_cols.items():
+                    if col not in cols:
+                        conn.execute(text(f"ALTER TABLE login_history ADD COLUMN {col} {defn};"))
+                        print(f"✅ Added {col} to login_history")
             except Exception as e:
-                print(f"ALTER TABLE quiz_submission add columns failed (may exist): {e}")
+                print(f"Database migration (extra tables/columns) failed: {e}")
 
         # Create any new tables
         db.create_all()
@@ -4411,8 +4455,54 @@ def init_db():
                         db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN prtscn_flag BOOLEAN DEFAULT FALSE"))
                         db.session.commit()
                         print("Added prtscn_flag column to quiz_submission table")
+                    
+                    # New Proctoring Columns (PostgreSQL)
+                    proctor_cols = {
+                        'full_screen_exit_count': 'INTEGER DEFAULT 0',
+                        'tab_switch_count': 'INTEGER DEFAULT 0',
+                        'user_count_max': 'INTEGER DEFAULT 0',
+                        'full_screen_exit_duration': 'INTEGER DEFAULT 0',
+                        'is_webcam_data_reliable': 'BOOLEAN DEFAULT TRUE',
+                        'assignment_open_count': 'INTEGER DEFAULT 0',
+                        'page_unfocused_count': 'INTEGER DEFAULT 0',
+                        'illegal_key_combination_detected': 'BOOLEAN DEFAULT FALSE',
+                        'system_sleep_detected': 'BOOLEAN DEFAULT FALSE',
+                        'total_breaches': 'INTEGER DEFAULT 0',
+                        'different_window_detected': 'BOOLEAN DEFAULT FALSE',
+                        'camera_off_detected': 'BOOLEAN DEFAULT FALSE',
+                        'face_not_visible_detected': 'BOOLEAN DEFAULT FALSE',
+                        'incorrect_camera_angle_detected': 'BOOLEAN DEFAULT FALSE',
+                        'multiple_faces_detected': 'BOOLEAN DEFAULT FALSE',
+                        'talking_to_someone_detected': 'BOOLEAN DEFAULT FALSE',
+                        'using_other_device_detected': 'BOOLEAN DEFAULT FALSE',
+                        'device_id_change_detected': 'BOOLEAN DEFAULT FALSE',
+                        'is_flagged_cheating': 'BOOLEAN DEFAULT FALSE'
+                    }
+                    for col, defn in proctor_cols.items():
+                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='{col}'"))
+                        if not result.fetchone():
+                            db.session.execute(text(f"ALTER TABLE quiz_submission ADD COLUMN {col} {defn}"))
+                            db.session.commit()
+                            print(f"Added {col} column to quiz_submission table")
+                    
+                    # New LoginHistory Geolocation Columns (PostgreSQL)
+                    geo_cols = {
+                        'latitude': 'FLOAT',
+                        'longitude': 'FLOAT',
+                        'city': 'VARCHAR(100)',
+                        'country': 'VARCHAR(100)',
+                        'region': 'VARCHAR(100)',
+                        'ip_address': 'VARCHAR(45)',
+                        'user_agent': 'VARCHAR(255)'
+                    }
+                    for col, defn in geo_cols.items():
+                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='login_history' AND column_name='{col}'"))
+                        if not result.fetchone():
+                            db.session.execute(text(f"ALTER TABLE login_history ADD COLUMN {col} {defn}"))
+                            db.session.commit()
+                            print(f"Added {col} column to login_history table")
                 except Exception as e:
-                    print(f"Violation flag columns check/add failed (may already exist): {e}")
+                    print(f"Violation flag or login history columns check/add failed: {e}")
             else:
                 # For SQLite, we need to manually add columns to existing tables
                 try:
@@ -4435,6 +4525,41 @@ def init_db():
                         if 'prtscn_flag' not in cols:
                             conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN prtscn_flag BOOLEAN DEFAULT 0;"))
                             print("✅ Added prtscn_flag column to quiz_submission")
+                        
+                        # New Proctoring Columns (SQLite)
+                        proctor_cols = {
+                            'full_screen_exit_count': 'INTEGER DEFAULT 0',
+                            'tab_switch_count': 'INTEGER DEFAULT 0',
+                            'user_count_max': 'INTEGER DEFAULT 0',
+                            'full_screen_exit_duration': 'INTEGER DEFAULT 0',
+                            'is_webcam_data_reliable': 'BOOLEAN DEFAULT 1',
+                            'assignment_open_count': 'INTEGER DEFAULT 0',
+                            'page_unfocused_count': 'INTEGER DEFAULT 0',
+                            'illegal_key_combination_detected': 'BOOLEAN DEFAULT 0',
+                            'system_sleep_detected': 'BOOLEAN DEFAULT 0',
+                            'total_breaches': 'INTEGER DEFAULT 0',
+                            'different_window_detected': 'BOOLEAN DEFAULT 0',
+                            'camera_off_detected': 'BOOLEAN DEFAULT 0',
+                            'face_not_visible_detected': 'BOOLEAN DEFAULT 0',
+                            'incorrect_camera_angle_detected': 'BOOLEAN DEFAULT 0',
+                            'multiple_faces_detected': 'BOOLEAN DEFAULT 0',
+                            'talking_to_someone_detected': 'BOOLEAN DEFAULT 0',
+                            'using_other_device_detected': 'BOOLEAN DEFAULT 0',
+                            'device_id_change_detected': 'BOOLEAN DEFAULT 0',
+                            'is_flagged_cheating': 'BOOLEAN DEFAULT 0'
+                        }
+                        for col, defn in proctor_cols.items():
+                            if col not in cols:
+                                conn.execute(text(f"ALTER TABLE quiz_submission ADD COLUMN {col} {defn};"))
+                                print(f"✅ Added {col} to quiz_submission")
+                        
+                        # Add geolocation columns to login_history if missing (SQLite in init_db fallback)
+                        res = conn.execute(text("PRAGMA table_info(login_history);"))
+                        lh_cols = [str(r[1]) for r in res]
+                        for col, defn in [('latitude', 'FLOAT'), ('longitude', 'FLOAT'), ('city', 'VARCHAR(100)'), ('country', 'VARCHAR(100)'), ('region', 'VARCHAR(100)'), ('ip_address', 'VARCHAR(45)'), ('user_agent', 'VARCHAR(255)')]:
+                            if col not in lh_cols:
+                                conn.execute(text(f"ALTER TABLE login_history ADD COLUMN {col} {defn};"))
+                                print(f"✅ Added {col} to login_history")
                 except Exception as e:
                     print(f"SQLite migration check failed (may already exist): {e}")
                 

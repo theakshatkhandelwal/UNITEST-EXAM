@@ -1988,6 +1988,29 @@ def logout():
     logout_user()
     return redirect(url_for('home'))
 
+_db_initialized = False
+
+@app.before_request
+def initialize_on_first_request_hook():
+    global _db_initialized
+    if not _db_initialized:
+        # Only run automatically on live environments (Vercel/Production)
+        # Local env handles it differently at the bottom of the file
+        if os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'):
+            initialize_on_first_request()
+            _db_initialized = True
+
+@app.route('/migrate')
+def force_migrate():
+    """Manually force database migration on live site"""
+    try:
+        init_db()
+        return "✅ Database migration completed successfully! <br>The new columns have been added to QuizSubmission and LoginHistory. <br>Please try to login or access your dashboard again."
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        return f"❌ Database migration failed: {str(e)} <br><br>Details:<pre>{error_details}</pre>"
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -4589,17 +4612,15 @@ def initialize_on_first_request():
         print(f"Warning: Database initialization failed: {e}")
         # Don't crash - continue without initialization
 
-# For Vercel/serverless: Don't initialize at import time
-# Initialize will happen on first request via @app.before_first_request or similar
 if os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'):
-    # Serverless: Initialize lazily
+    # Serverless/Production: Hook into before_request (handled by initialize_on_first_request_hook above)
     pass
 else:
-    # Local: Initialize immediately
+    # Local: Initialize immediately on startup
     try:
         init_db()
     except Exception as e:
-        print(f"Warning: Database initialization failed: {e}")
+        print(f"Warning: Local database initialization failed: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

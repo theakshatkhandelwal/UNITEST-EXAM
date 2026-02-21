@@ -36,39 +36,56 @@
               <td>{{ '%.0f'|format(s.percentage) }}%</td>
               <td>
                 {% if s.passed %}
-                  <span class="badge bg-success">Passed</span>
+                <span class="badge bg-success">Passed</span>
                 {% else %}
-                  <span class="badge bg-danger">Failed</span>
+                <span class="badge bg-danger">Failed</span>
                 {% endif %}
               </td>
               <td>
                 {% if s.is_full_completion %}
-                  <span class="badge bg-success" title="Completed all questions in fullscreen">✅ Clean</span>
+                <span class="badge bg-success" title="Completed all questions in fullscreen">✅ Clean</span>
                 {% else %}
-                  <span class="badge bg-warning" title="Partial/Violation detected">⏸ Hold</span>
-                  <div class="small text-muted">Answered: {{ s.answered_count }}/{{ s.question_count }}</div>
-                  {% if s.fullscreen_exit_flag or s.alt_tab_flag or s.win_shift_s_flag or s.win_prtscn_flag or s.prtscn_flag %}
-                    <div class="small text-danger mt-1">
-                      <strong>Violations:</strong>
-                      {% if s.fullscreen_exit_flag %}<div>⚠️ Exited fullscreen</div>{% endif %}
-                      {% if s.alt_tab_flag %}<div>⚠️ Alt+Tab / Tab switch detected</div>{% endif %}
-                      {% if s.win_shift_s_flag %}<div>⚠️ Screenshot taken (Win+Shift+S)</div>{% endif %}
-                      {% if s.win_prtscn_flag %}<div>⚠️ Screenshot taken (Win+PrintScreen)</div>{% endif %}
-                      {% if s.prtscn_flag %}<div>⚠️ Screenshot taken (PrintScreen)</div>{% endif %}
-                    </div>
-                  {% endif %}
+                {% if s.is_flagged_cheating %}
+                <span class="badge bg-danger" title="Flagged as Cheating"><i
+                    class="fas fa-user-slash me-1"></i>CHEATING</span>
+                {% elif s.total_breaches > 10 %}
+                <span class="badge bg-danger" title="Multiple violations detected"><i
+                    class="fas fa-exclamation-triangle me-1"></i>HIGH RISK</span>
+                {% elif s.total_breaches > 0 %}
+                <span class="badge bg-warning text-dark" title="Some violations detected"><i
+                    class="fas fa-exclamation-circle me-1"></i>SUSPICIOUS</span>
+                {% else %}
+                <span class="badge bg-info text-dark" title="Incomplete but no violations">⏸ Hold</span>
                 {% endif %}
+
+                <div class="small text-muted mt-1">Breaches: {{ s.total_breaches }}</div>
+                {% if s.fullscreen_exit_flag or s.alt_tab_flag or s.tab_switch_count > 0 %}
+                <div class="small text-danger mt-1">
+                  {% if s.fullscreen_exit_count > 0 %}<div>⚠️ Exited fullscreen ({{ s.full_screen_exit_count }})</div>{%
+                  endif %}
+                  {% if s.tab_switch_count > 0 %}<div>⚠️ Tab switches ({{ s.tab_switch_count }})</div>{% endif %}
+                </div>
+                {% endif %}
+                {% endif %}
+                <div class="mt-2">
+                  <a href="{{ url_for('proctor_report', submission_id=s.id) }}"
+                    class="btn btn-sm btn-outline-primary py-0" style="font-size: 0.75rem;">
+                    <i class="fas fa-clipboard-check me-1"></i>Proctor Report
+                  </a>
+                </div>
               </td>
               <td>{{ s.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
               <td>
                 {% if s.completed %}
-                  <form method="POST" action="{{ url_for('allow_student_retake', code=quiz.code, submission_id=s.id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to allow this student to retake the quiz? This will reset their submission.');">
-                    <button type="submit" class="btn btn-sm btn-warning" title="Allow student to retake the quiz">
-                      <i class="fas fa-redo me-1"></i>Allow Retake
-                    </button>
-                  </form>
+                <form method="POST" action="{{ url_for('allow_student_retake', code=quiz.code, submission_id=s.id) }}"
+                  style="display: inline;"
+                  onsubmit="return confirm('Are you sure you want to allow this student to retake the quiz? This will reset their submission.');">
+                  <button type="submit" class="btn btn-sm btn-warning" title="Allow student to retake the quiz">
+                    <i class="fas fa-redo me-1"></i>Allow Retake
+                  </button>
+                </form>
                 {% else %}
-                  <span class="text-muted">In Progress</span>
+                <span class="text-muted">In Progress</span>
                 {% endif %}
               </td>
             </tr>
@@ -77,11 +94,9 @@
         </table>
       </div>
       {% else %}
-        <p class="text-muted mb-0">No submissions yet.</p>
+      <p class="text-muted mb-0">No submissions yet.</p>
       {% endif %}
     </div>
   </div>
 </div>
 {% endblock %}
-
-

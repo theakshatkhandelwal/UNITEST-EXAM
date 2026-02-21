@@ -420,12 +420,46 @@ class QuizSubmission(db.Model):
     win_shift_s_flag = db.Column(db.Boolean, default=False)
     win_prtscn_flag = db.Column(db.Boolean, default=False)
     prtscn_flag = db.Column(db.Boolean, default=False)
+    
+    # New Proctoring Fields
+    full_screen_exit_count = db.Column(db.Integer, default=0)
+    tab_switch_count = db.Column(db.Integer, default=0)
+    user_count_max = db.Column(db.Integer, default=0)
+    full_screen_exit_duration = db.Column(db.Integer, default=0) # Total seconds spent outside fullscreen
+    is_webcam_data_reliable = db.Column(db.Boolean, default=True)
+    assignment_open_count = db.Column(db.Integer, default=0)
+    page_unfocused_count = db.Column(db.Integer, default=0)
+    illegal_key_combination_detected = db.Column(db.Boolean, default=False)
+    system_sleep_detected = db.Column(db.Boolean, default=False)
+    total_breaches = db.Column(db.Integer, default=0)
+    different_window_detected = db.Column(db.Boolean, default=False)
+    camera_off_detected = db.Column(db.Boolean, default=False)
+    face_not_visible_detected = db.Column(db.Boolean, default=False)
+    incorrect_camera_angle_detected = db.Column(db.Boolean, default=False)
+    multiple_faces_detected = db.Column(db.Boolean, default=False)
+    talking_to_someone_detected = db.Column(db.Boolean, default=False)
+    using_other_device_detected = db.Column(db.Boolean, default=False)
+    device_id_change_detected = db.Column(db.Boolean, default=False)
+    is_flagged_cheating = db.Column(db.Boolean, default=False)
+
     # counts to determine clean vs hold
     answered_count = db.Column(db.Integer, default=0)
     question_count = db.Column(db.Integer, default=0)
     is_full_completion = db.Column(db.Boolean, default=False)
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed = db.Column(db.Boolean, default=False)
+    
+    # Relationships
+    snapshots = db.relationship('ProctoringSnapshot', backref='submission', lazy=True, cascade='all, delete-orphan')
+
+class ProctoringSnapshot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    submission_id = db.Column(db.Integer, db.ForeignKey('quiz_submission.id'), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    snapshot_type = db.Column(db.String(20))  # 'webcam' or 'screen'
+    image_path = db.Column(db.String(255))
+    breach_log = db.Column(db.Text)  # Comma separated list of breaches detected at this moment
+    is_red_flag = db.Column(db.Boolean, default=False)
 
 class QuizAnswer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -2518,7 +2552,7 @@ def take_shared_quiz(code):
         existing = QuizSubmission(quiz_id=quiz.id, student_id=current_user.id, question_count=len(q_rows))
         db.session.add(existing)
         db.session.commit()
-    return render_template('take_shared_quiz.html', quiz=quiz, questions=parsed_questions)
+    return render_template('take_shared_quiz.html', quiz=quiz, questions=parsed_questions, submission=existing)
 
 # Submit shared quiz
 @app.route('/quiz/submit/<code>', methods=['POST'])
@@ -2757,6 +2791,143 @@ def auto_submit_partial(code):
     except Exception as e:
         db.session.rollback()
         return ('', 204)
+
+# Proctoring Routes
+@app.route('/proctor/snapshot/<int:submission_id>', methods=['POST'])
+@login_required
+def proctor_snapshot(submission_id):
+    """Receive and save proctoring snapshots (webcam/screen)"""
+    try:
+        submission = db.session.get(QuizSubmission, submission_id)
+        if not submission or (submission.student_id != current_user.id and current_user.role != 'teacher'):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+            
+        data = request.get_json()
+        image_data = data.get('image')
+        snapshot_type = data.get('type') # 'webcam' or 'screen'
+        breaches = data.get('breaches', [])
+        is_red_flag = data.get('is_red_flag', False)
+        
+        if not image_data:
+            return jsonify({'success': False, 'error': 'No image data'}), 400
+            
+        # Create directory if it doesn't exist
+        snapshot_dir = os.path.join(app.root_path, 'static', 'proctoring_snapshots', str(submission_id))
+        os.makedirs(snapshot_dir, exist_ok=True)
+        
+        # Save image file
+        import base64
+        import uuid
+        filename = f"{snapshot_type}_{uuid.uuid4().hex}.jpg"
+        filepath = os.path.join(snapshot_dir, filename)
+        
+        # Strip header if present
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+        with open(filepath, 'wb') as f:
+            f.write(base64.b64decode(image_data))
+            
+        # Create database record
+        new_snapshot = ProctoringSnapshot()
+        new_snapshot.submission_id = submission_id
+        new_snapshot.snapshot_type = snapshot_type
+        new_snapshot.image_path = f"proctoring_snapshots/{submission_id}/{filename}"
+        new_snapshot.breach_log = ", ".join(breaches) if breaches else ""
+        new_snapshot.is_red_flag = is_red_flag
+        db.session.add(new_snapshot)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'path': new_snapshot.image_path})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error saving snapshot: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/proctor/heartbeat/<int:submission_id>', methods=['POST'])
+@login_required
+def proctor_heartbeat(submission_id):
+    """Update proctoring metrics periodically"""
+    try:
+        submission = db.session.get(QuizSubmission, submission_id)
+        if not submission or submission.student_id != current_user.id:
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+            
+        data = request.get_json()
+        
+        # Update metrics
+        if 'full_screen_exit_count' in data:
+            submission.full_screen_exit_count = data['full_screen_exit_count']
+        if 'tab_switch_count' in data:
+            submission.tab_switch_count = data['tab_switch_count']
+        if 'user_count_max' in data:
+            submission.user_count_max = max(submission.user_count_max or 0, data['user_count_max'])
+        if 'full_screen_exit_duration' in data:
+            submission.full_screen_exit_duration = data['full_screen_exit_duration']
+        if 'page_unfocused_count' in data:
+            submission.page_unfocused_count = data['page_unfocused_count']
+        if 'total_breaches' in data:
+            submission.total_breaches = data['total_breaches']
+            
+        # Update boolean flags
+        flags = [
+            'illegal_key_combination_detected', 'system_sleep_detected', 
+            'different_window_detected', 'camera_off_detected', 
+            'face_not_visible_detected', 'incorrect_camera_angle_detected', 
+            'multiple_faces_detected', 'talking_to_someone_detected', 
+            'using_other_device_detected', 'device_id_change_detected'
+        ]
+        for flag in flags:
+            if data.get(flag):
+                setattr(submission, flag, True)
+                
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error in heartbeat: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/proctor_report/<int:submission_id>')
+@login_required
+def proctor_report(submission_id):
+    """Display the detailed proctoring report for a teacher"""
+    guard = require_teacher()
+    if guard:
+        return guard
+        
+    submission = db.session.get(QuizSubmission, submission_id)
+    if not submission:
+        flash('Submission not found', 'error')
+        return redirect(url_for('dashboard'))
+        
+    quiz = db.session.get(Quiz, submission.quiz_id)
+    student = db.session.get(User, submission.student_id)
+    snapshots = db.session.query(ProctoringSnapshot).filter_by(submission_id=submission_id).order_by(ProctoringSnapshot.timestamp.asc()).all()
+    
+    return render_template('proctor_report.html', 
+                          submission=submission, 
+                          quiz=quiz, 
+                          student=student, 
+                          snapshots=snapshots)
+
+@app.route('/proctor/mark_cheating/<int:submission_id>', methods=['POST'])
+@login_required
+def mark_cheating(submission_id):
+    """Mark a submission as cheating"""
+    guard = require_teacher()
+    if guard:
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+        
+    submission = db.session.get(QuizSubmission, submission_id)
+    if not submission:
+        return jsonify({'success': False, 'error': 'Submission not found'}), 404
+        
+    data = request.get_json()
+    is_cheating = data.get('is_cheating', True)
+    
+    submission.is_flagged_cheating = is_cheating
+    db.session.commit()
+    
+    return jsonify({'success': True, 'status': 'cheating' if is_cheating else 'clean'})
 
 # Teacher: view results
 @app.route('/teacher/quiz/<code>/results')
@@ -3513,7 +3684,11 @@ def submit_quiz():
         passed = percentage >= 60
         final_score = f"{scored_marks:.1f}/{total_marks} marks"
     else:
-        percentage = (correct_answers / len(questions)) * 100 if questions else 0
+        total_questions = len(questions)
+        if total_questions > 0:
+            percentage = (correct_answers / total_questions) * 100
+        else:
+            percentage = 0
         passed = percentage >= 60
         final_score = f"{correct_answers}/{len(questions)}"
 

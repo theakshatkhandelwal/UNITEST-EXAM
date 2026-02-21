@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Proctor Report - {{ student.username }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1 text-white">Proctoring Report: {{ student.username }}</h2>
+            <p class="text-muted mb-0">Quiz: {{ quiz.title }} | Code: {{ quiz.code }}</p>
+        </div>
+        <div>
+            <a href="{{ url_for('teacher_quiz_results', code=quiz.code) }}" class="btn btn-outline-light">
+                <i class="fas fa-arrow-left me-2"></i>Back to Results
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Summary Stats -->
+        <div class="col-md-4">
+            <div class="card bg-dark border-secondary h-100">
+                <div class="card-header border-secondary bg-dark">
+                    <h5 class="mb-0 text-white"><i class="fas fa-shield-alt me-2 text-primary"></i>Integrity Summary
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-4 text-center">
+                        {% if submission.is_flagged_cheating %}
+                        <div class="badge bg-danger p-3 rounded-pill mb-2">
+                            <h4 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>FLAGGED AS CHEATING</h4>
+                        </div>
+                        {% elif submission.total_breaches > 10 or submission.full_screen_exit_count > 1 %}
+                        <div class="badge bg-warning text-dark p-3 rounded-pill mb-2">
+                            <h4 class="mb-0"><i class="fas fa-exclamation-circle me-2"></i>SUSPICIOUS ACTIVITY</h4>
+                        </div>
+                        {% else %}
+                        <div class="badge bg-success p-3 rounded-pill mb-2">
+                            <h4 class="mb-0"><i class="fas fa-check-circle me-2"></i>CLEAN SESSION</h4>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <ul class="list-group list-group-flush bg-transparent">
+                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
+                            <span>Total Breaches:</span>
+                            <span
+                                class="fw-bold {{ 'text-danger' if submission.total_breaches > 0 else 'text-success' }}">{{
+                                submission.total_breaches }}</span>
+                        </li>
+                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
+                            <span>Fullscreen Exits:</span>
+                            <span
+                                class="fw-bold {{ 'text-danger' if submission.full_screen_exit_count > 0 else 'text-success' }}">{{
+                                submission.full_screen_exit_count }}</span>
+                        </li>
+                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
+                            <span>Tab Switches:</span>
+                            <span
+                                class="fw-bold {{ 'text-danger' if submission.tab_switch_count > 0 else 'text-success' }}">{{
+                                submission.tab_switch_count }}</span>
+                        </li>
+                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
+                            <span>Window Blur:</span>
+                            <span
+                                class="fw-bold {{ 'text-danger' if submission.page_unfocused_count > 0 else 'text-success' }}">{{
+                                submission.page_unfocused_count }}</span>
+                        </li>
+                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
+                            <span>Max People Detected:</span>
+                            <span
+                                class="fw-bold {{ 'text-danger' if submission.user_count_max > 1 else 'text-success' }}">{{
+                                submission.user_count_max }}</span>
+                        </li>
+                    </ul>
+
+                    <div class="mt-4">
+                        <button id="markCheatingBtn"
+                            class="btn {{ 'btn-success' if submission.is_flagged_cheating else 'btn-danger' }} w-100"
+                            onclick="toggleCheating({{ submission.id }}, {{ 'false' if submission.is_flagged_cheating else 'true' }})">
+                            <i
+                                class="fas {{ 'fa-undo' if submission.is_flagged_cheating else 'fa-user-slash' }} me-2"></i>
+                            {{ 'Mark as Clean' if submission.is_flagged_cheating else 'Mark as Cheating' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Violation Log -->
+        <div class="col-md-8">
+            <div class="card bg-dark border-secondary">
+                <div class="card-header border-secondary bg-dark">
+                    <h5 class="mb-0 text-white"><i class="fas fa-clipboard-list me-2 text-warning"></i>Detected Red
+                        Flags</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div
+                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.illegal_key_combination_detected else 'bg-success-subtle border-success text-success' }}">
+                                <i
+                                    class="fas {{ 'fa-times-circle' if submission.illegal_key_combination_detected else 'fa-check-circle' }} me-2"></i>
+                                Illegal Keys (Alt+Tab, etc.)
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div
+                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.system_sleep_detected else 'bg-success-subtle border-success text-success' }}">
+                                <i
+                                    class="fas {{ 'fa-times-circle' if submission.system_sleep_detected else 'fa-check-circle' }} me-2"></i>
+                                System Sleep
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div
+                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.different_window_detected else 'bg-success-subtle border-success text-success' }}">
+                                <i
+                                    class="fas {{ 'fa-times-circle' if submission.different_window_detected else 'fa-check-circle' }} me-2"></i>
+                                Different Window
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div
+                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.camera_off_detected else 'bg-success-subtle border-success text-success' }}">
+                                <i
+                                    class="fas {{ 'fa-times-circle' if submission.camera_off_detected else 'fa-check-circle' }} me-2"></i>
+                                Camera Disabled
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div
+                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.face_not_visible_detected else 'bg-success-subtle border-success text-success' }}">
+                                <i
+                                    class="fas {{ 'fa-times-circle' if submission.face_not_visible_detected else 'fa-check-circle' }} me-2"></i>
+                                Face Not Visible
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div
+                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.multiple_faces_detected else 'bg-success-subtle border-success text-success' }}">
+                                <i
+                                    class="fas {{ 'fa-times-circle' if submission.multiple_faces_detected else 'fa-check-circle' }} me-2"></i>
+                                Multiple Faces
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div
+                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.talking_to_someone_detected else 'bg-success-subtle border-success text-success' }}">
+                                <i
+                                    class="fas {{ 'fa-times-circle' if submission.talking_to_someone_detected else 'fa-check-circle' }} me-2"></i>
+                                Talking Detection
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div
+                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.using_other_device_detected else 'bg-success-subtle border-success text-success' }}">
+                                <i
+                                    class="fas {{ 'fa-times-circle' if submission.using_other_device_detected else 'fa-check-circle' }} me-2"></i>
+                                Other Device Used
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-dark border-secondary mt-4">
+                <div class="card-header border-secondary bg-dark">
+                    <h5 class="mb-0 text-white"><i class="fas fa-camera me-2 text-info"></i>Visual Timeline</h5>
+                </div>
+                <div class="card-body">
+                    {% if snapshots %}
+                    <div id="snapshotCarousel" class="carousel slide" data-bs-ride="false">
+                        <div class="carousel-inner">
+                            {% for s in snapshots %}
+                            <div class="carousel-item {{ 'active' if loop.first else '' }}">
+                                <div class="snapshot-container text-center bg-black rounded overflow-hidden"
+                                    style="max-height: 500px;">
+                                    <img src="{{ url_for('static', filename=s.image_path) }}" class="img-fluid"
+                                        alt="Snapshot">
+                                    <div class="snapshot-overlay p-2 bg-dark text-light border-top border-secondary">
+                                        <div class="d-flex justify-content-between small">
+                                            <span><i class="fas fa-clock me-1"></i>{{ s.timestamp.strftime('%H:%M:%S')
+                                                }}</span>
+                                            <span><i
+                                                    class="fas {{ 'fa-video' if s.snapshot_type == 'webcam' else 'fa-desktop' }} me-1"></i>{{
+                                                s.snapshot_type|upper }}</span>
+                                            {% if s.is_red_flag %}
+                                            <span class="text-danger fw-bold"><i class="fas fa-flag me-1"></i>RED
+                                                FLAG</span>
+                                            {% endif %}
+                                        </div>
+                                        {% if s.breach_log %}
+                                        <div class="mt-1 text-warning small">
+                                            <strong>Breaches:</strong> {{ s.breach_log }}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <button class="carousel-control-prev" type="button" data-bs-target="#snapshotCarousel"
+                            data-bs-slide="prev">
+                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Previous</span>
+                        </button>
+                        <button class="carousel-control-next" type="button" data-bs-target="#snapshotCarousel"
+                            data-bs-slide="next">
+                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Next</span>
+                        </button>
+                    </div>
+
+                    <div class="snapshot-thumbnails mt-3 d-flex overflow-auto pb-2" style="gap: 10px;">
+                        {% for s in snapshots %}
+                        <div class="thumbnail border {{ 'border-danger' if s.is_red_flag else 'border-secondary' }} rounded cursor-pointer"
+                            onclick="bootstrap.Carousel.getOrCreateInstance('#snapshotCarousel').to({{ loop.index0 }})"
+                            style="min-width: 80px; height: 60px; overflow: hidden; opacity: 0.7; transition: 0.2s;"
+                            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">
+                            <img src="{{ url_for('static', filename=s.image_path) }}" class="w-100 h-100"
+                                style="object-fit: cover;">
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-image fa-3x mb-3"></i>
+                        <p>No snapshots captured for this session.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleCheating(submissionId, isCheating) {
+        if (confirm(isCheating ? "Mark this student as cheating? This will flag their submission." : "Revert this submission to clean status?")) {
+            fetch(`/proctor/mark_cheating/${submissionId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ is_cheating: isCheating })
+            }).then(res => res.json()).then(data => {
+                if (data.success) location.reload();
+            });
+        }
+    }
+</script>
+
+<style>
+    .bg-dark {
+        background-color: #121212 !important;
+    }
+
+    .card {
+        border-radius: 12px;
+    }
+
+    .snapshot-container {
+        min-height: 300px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    .snapshot-overlay {
+        background: rgba(0, 0, 0, 0.8) !important;
+    }
+
+    .cursor-pointer {
+        cursor: pointer;
+    }
+
+    .bg-danger-subtle {
+        background-color: rgba(220, 53, 69, 0.1) !important;
+    }
+
+    .bg-success-subtle {
+        background-color: rgba(25, 135, 84, 0.1) !important;
+    }
+</style>
+{% endblock %}

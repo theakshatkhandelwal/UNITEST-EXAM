@@ -336,9 +336,10 @@
   }
 
   function startTimer() {
-    const minutes = {{ quiz.duration_minutes or 'null' }};
+    const minutes = {{ quiz.duration_minutes or 'null' }
+  };
 
-    if (!minutes) return;
+  if (!minutes) return;
 
   console.log('Starting timer for', minutes, 'minutes');
   const endTime = Date.now() + (minutes * 60 * 1000);
@@ -627,7 +628,7 @@
   // Handle coding questions
 
 
-    const codingQuestions = {{ questions | tojson }};
+  const codingQuestions = {{ questions | tojson }};
 
 
 
@@ -1156,8 +1157,6 @@
       // Hide test results
       document.getElementById('test_results_' + questionId).style.display = 'none';
     });
-  });
-});
 </script>
 
 <style>

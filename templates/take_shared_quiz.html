@@ -338,7 +338,6 @@
   function startTimer() {
     const minutes = {{ quiz.duration_minutes or 'null' }
   };
-
   if (!minutes) return;
 
   console.log('Starting timer for', minutes, 'minutes');
@@ -1157,6 +1156,7 @@
       // Hide test results
       document.getElementById('test_results_' + questionId).style.display = 'none';
     });
+  });
 </script>
 
 <style>

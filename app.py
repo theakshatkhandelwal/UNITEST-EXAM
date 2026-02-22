@@ -4406,7 +4406,23 @@ def init_db():
                             db.session.execute(text(f"ALTER TABLE quiz ADD COLUMN {col} {defn}"))
                             db.session.commit()
 
-                    # 3. QuizSubmission table
+                    # 3. QuizQuestion table
+                    question_cols = {
+                        'test_cases_json': 'TEXT',
+                        'language_constraints': 'TEXT',
+                        'time_limit_seconds': 'INTEGER',
+                        'memory_limit_mb': 'INTEGER',
+                        'sample_input': 'TEXT',
+                        'sample_output': 'TEXT',
+                        'starter_code': 'TEXT'
+                    }
+                    for col, defn in question_cols.items():
+                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz_question' AND column_name='{col}'"))
+                        if not result.fetchone():
+                            db.session.execute(text(f"ALTER TABLE quiz_question ADD COLUMN {col} {defn}"))
+                            db.session.commit()
+
+                    # 4. QuizSubmission table
                     sub_cols = {
                         'percentage': 'FLOAT DEFAULT 0.0',
                         'passed': 'BOOLEAN DEFAULT FALSE',
@@ -4448,7 +4464,7 @@ def init_db():
                             db.session.execute(text(f"ALTER TABLE quiz_submission ADD COLUMN {col} {defn}"))
                             db.session.commit()
                     
-                    # 4. QuizAnswer table
+                    # 5. QuizAnswer table
                     answer_cols = {
                         'code_language': 'VARCHAR(20)',
                         'test_results_json': 'TEXT',
@@ -4461,7 +4477,18 @@ def init_db():
                             db.session.execute(text(f"ALTER TABLE quiz_answer ADD COLUMN {col} {defn}"))
                             db.session.commit()
                     
-                    # 5. LoginHistory table
+                    # 6. ProctoringSnapshot table
+                    snapshot_cols = {
+                        'breach_log': 'TEXT',
+                        'is_red_flag': 'BOOLEAN DEFAULT FALSE'
+                    }
+                    for col, defn in snapshot_cols.items():
+                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='proctoring_snapshot' AND column_name='{col}'"))
+                        if not result.fetchone():
+                            db.session.execute(text(f"ALTER TABLE proctoring_snapshot ADD COLUMN {col} {defn}"))
+                            db.session.commit()
+
+                    # 7. LoginHistory table
                     geo_cols = {
                         'latitude': 'FLOAT',
                         'longitude': 'FLOAT',

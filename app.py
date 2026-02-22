@@ -4499,7 +4499,12 @@ def init_db():
                         'talking_to_someone_detected': 'BOOLEAN DEFAULT FALSE',
                         'using_other_device_detected': 'BOOLEAN DEFAULT FALSE',
                         'device_id_change_detected': 'BOOLEAN DEFAULT FALSE',
-                        'is_flagged_cheating': 'BOOLEAN DEFAULT FALSE'
+                        'is_flagged_cheating': 'BOOLEAN DEFAULT FALSE',
+                        'answered_count': 'INTEGER DEFAULT 0',
+                        'question_count': 'INTEGER DEFAULT 0',
+                        'is_full_completion': 'BOOLEAN DEFAULT FALSE',
+                        'started_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+                        'completed': 'BOOLEAN DEFAULT FALSE'
                     }
                     for col, defn in proctor_cols.items():
                         result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='{col}'"))
@@ -4507,6 +4512,20 @@ def init_db():
                             db.session.execute(text(f"ALTER TABLE quiz_submission ADD COLUMN {col} {defn}"))
                             db.session.commit()
                             print(f"Added {col} column to quiz_submission table")
+                    
+                    # QuizAnswer New Columns (PostgreSQL)
+                    answer_cols = {
+                        'code_language': 'VARCHAR(20)',
+                        'test_results_json': 'TEXT',
+                        'passed_test_cases': 'INTEGER DEFAULT 0',
+                        'total_test_cases': 'INTEGER DEFAULT 0'
+                    }
+                    for col, defn in answer_cols.items():
+                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz_answer' AND column_name='{col}'"))
+                        if not result.fetchone():
+                            db.session.execute(text(f"ALTER TABLE quiz_answer ADD COLUMN {col} {defn}"))
+                            db.session.commit()
+                            print(f"Added {col} column to quiz_answer table")
                     
                     # New LoginHistory Geolocation Columns (PostgreSQL)
                     geo_cols = {

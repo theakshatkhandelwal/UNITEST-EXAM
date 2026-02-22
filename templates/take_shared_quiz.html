@@ -336,8 +336,9 @@
   }
 
   function startTimer() {
-    const minutes = {{ quiz.duration_minutes or 'null' }};
-    if (!minutes) return;
+    const minutes = {{ quiz.duration_minutes or 'null' }
+  };
+  if (!minutes) return;
 
 
 
@@ -435,8 +436,11 @@
   }
 
   let proctoringStartedAt = 0;
+  let isProctoringInitializing = false;
+
   async function initProctoring() {
     if (!proctorConfig.submissionId) return;
+    isProctoringInitializing = true;
 
     try {
       // Request Webcam only (Screen share causes focus loss and exits fullscreen)
@@ -449,8 +453,10 @@
 
       proctoringStartedAt = Date.now();
       console.log("Proctoring initialized");
+      isProctoringInitializing = false;
     } catch (e) {
       console.error("Proctoring initialization failed:", e);
+      isProctoringInitializing = false;
       // Don't alert if quiz already started, just log
     }
   }
@@ -536,7 +542,10 @@
 
   // Enhanced Event Listeners
   document.addEventListener('visibilitychange', function () {
-    if (!quizStarted) return;
+    if (!quizStarted || isProctoringInitializing) return;
+    // Also ignore short-term focus loss in the first 5 seconds
+    if (Date.now() - proctoringStartedAt < 5000) return;
+
     if (document.hidden) {
       proctorState.tab_switch_count++;
       const shouldFlag = showWarning('tab_switch', 'You switched tabs or minimized the window.');
@@ -548,7 +557,10 @@
   });
 
   window.addEventListener('blur', function () {
-    if (!quizStarted) return;
+    if (!quizStarted || isProctoringInitializing) return;
+    // Also ignore short-term focus loss in the first 5 seconds
+    if (Date.now() - proctoringStartedAt < 5000) return;
+
     proctorState.page_unfocused_count++;
     const shouldFlag = showWarning('window_blur', 'You switched to another window.');
     if (shouldFlag) {

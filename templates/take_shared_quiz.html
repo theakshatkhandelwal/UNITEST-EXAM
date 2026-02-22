@@ -338,7 +338,6 @@
   function startTimer() {
     const minutes = {{ quiz.duration_minutes or 'null' }
   };
-
   if (!minutes) return;
 
   console.log('Starting timer for', minutes, 'minutes');

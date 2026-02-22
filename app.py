@@ -2004,12 +2004,13 @@ def initialize_on_first_request_hook():
 def force_migrate():
     """Manually force database migration on live site"""
     try:
-        init_db()
-        return "✅ Database migration logic executed! <br>All tables (User, Quiz, QuizSubmission, QuizAnswer, LoginHistory) have been checked for missing columns. <br>Please try to login or access your quiz again."
+        logs = init_db()
+        log_html = "<br>".join(logs) if logs else "No missing columns found."
+        return f"<h1>✅ Database Migration Logic Executed!</h1><div style='background:#f4f4f4;padding:10px;border-radius:5px;'>{log_html}</div><br>Please try to login or access your quiz again."
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        return f"❌ Database migration failed: {str(e)} <br><br>Details:<pre>{error_details}</pre>"
+        return f"<h1>❌ Database Migration Failed</h1><p>{str(e)}</p><br><br>Details:<pre>{error_details}</pre>"
 
 @app.route('/dashboard')
 @login_required
@@ -4373,209 +4374,135 @@ def init_db():
             db.create_all()
             
             # Check database type - PostgreSQL has information_schema, SQLite doesn't
+            # Check database type
             is_sqlite = 'sqlite' in app.config.get('SQLALCHEMY_DATABASE_URI', '').lower()
-            
-            # For PostgreSQL, check and add columns if needed
-            if not is_sqlite:
-                # Check and add columns to various tables (PostgreSQL)
+            migration_logs = []
+
+            # Master schema mapping for migration
+            master_schema = {
+                'user': {
+                    'role': "VARCHAR(20) DEFAULT 'student'",
+                    'is_admin': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'last_login': 'TIMESTAMP' if not is_sqlite else 'DATETIME',
+                    'reset_token': 'VARCHAR(100)',
+                    'reset_token_expiry': 'TIMESTAMP' if not is_sqlite else 'DATETIME'
+                },
+                'quiz': {
+                    'difficulty': "VARCHAR(20) DEFAULT 'beginner'",
+                    'duration_minutes': 'INTEGER',
+                },
+                'quiz_question': {
+                    'options_json': 'TEXT',
+                    'answer': 'TEXT',
+                    'qtype': "VARCHAR(20) DEFAULT 'mcq'",
+                    'marks': 'INTEGER DEFAULT 1',
+                    'test_cases_json': 'TEXT',
+                    'language_constraints': 'TEXT',
+                    'time_limit_seconds': 'INTEGER',
+                    'memory_limit_mb': 'INTEGER',
+                    'sample_input': 'TEXT',
+                    'sample_output': 'TEXT',
+                    'starter_code': 'TEXT'
+                },
+                'quiz_submission': {
+                    'score': 'FLOAT DEFAULT 0.0',
+                    'total': 'FLOAT DEFAULT 0.0',
+                    'percentage': 'FLOAT DEFAULT 0.0',
+                    'passed': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'submitted_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' if not is_sqlite else 'DATETIME',
+                    'review_unlocked_at': 'TIMESTAMP' if not is_sqlite else 'DATETIME',
+                    'fullscreen_exit_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'alt_tab_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'win_shift_s_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'win_prtscn_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'prtscn_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'full_screen_exit_count': 'INTEGER DEFAULT 0',
+                    'tab_switch_count': 'INTEGER DEFAULT 0',
+                    'user_count_max': 'INTEGER DEFAULT 0',
+                    'full_screen_exit_duration': 'INTEGER DEFAULT 0',
+                    'is_webcam_data_reliable': 'BOOLEAN DEFAULT TRUE' if not is_sqlite else 'BOOLEAN DEFAULT 1',
+                    'assignment_open_count': 'INTEGER DEFAULT 0',
+                    'page_unfocused_count': 'INTEGER DEFAULT 0',
+                    'illegal_key_combination_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'system_sleep_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'total_breaches': 'INTEGER DEFAULT 0',
+                    'different_window_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'camera_off_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'face_not_visible_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'incorrect_camera_angle_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'multiple_faces_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'talking_to_someone_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'using_other_device_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'device_id_change_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'is_flagged_cheating': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'answered_count': 'INTEGER DEFAULT 0',
+                    'question_count': 'INTEGER DEFAULT 0',
+                    'is_full_completion': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'started_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' if not is_sqlite else 'DATETIME',
+                    'completed': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0'
+                },
+                'quiz_answer': {
+                    'code_language': 'VARCHAR(20)',
+                    'test_results_json': 'TEXT',
+                    'passed_test_cases': 'INTEGER DEFAULT 0',
+                    'total_test_cases': 'INTEGER DEFAULT 0'
+                },
+                'proctoring_snapshot': {
+                    'breach_log': 'TEXT',
+                    'is_red_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0'
+                },
+                'login_history': {
+                    'latitude': 'FLOAT',
+                    'longitude': 'FLOAT',
+                    'city': 'VARCHAR(100)',
+                    'country': 'VARCHAR(100)',
+                    'region': 'VARCHAR(100)',
+                    'ip_address': 'VARCHAR(45)',
+                    'user_agent': 'VARCHAR(255)'
+                }
+            }
+
+            from sqlalchemy import text
+            for table, cols in master_schema.items():
                 try:
-                    from sqlalchemy import text
+                    # Table name quoting for PostgreSQL (reserved words like 'user')
+                    table_quoted = f'"{table}"' if not is_sqlite else table
                     
-                    # 1. User table
-                    user_cols = {
-                        'role': "VARCHAR(20) DEFAULT 'student'",
-                        'is_admin': 'BOOLEAN DEFAULT FALSE',
-                        'last_login': 'TIMESTAMP',
-                        'reset_token': 'VARCHAR(100)',
-                        'reset_token_expiry': 'TIMESTAMP'
-                    }
-                    for col, defn in user_cols.items():
-                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='{col}'"))
-                        if not result.fetchone():
-                            db.session.execute(text(f"ALTER TABLE \"user\" ADD COLUMN {col} {defn}"))
-                            db.session.commit()
-                    
-                    # 2. Quiz table
-                    quiz_cols = {
-                        'difficulty': "VARCHAR(20) DEFAULT 'beginner'",
-                        'duration_minutes': 'INTEGER'
-                    }
-                    for col, defn in quiz_cols.items():
-                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz' AND column_name='{col}'"))
-                        if not result.fetchone():
-                            db.session.execute(text(f"ALTER TABLE quiz ADD COLUMN {col} {defn}"))
-                            db.session.commit()
+                    if not is_sqlite:
+                        # PostgreSQL: Get actual columns
+                        check_query = text(f"SELECT column_name FROM information_schema.columns WHERE table_name=:table")
+                        result = db.session.execute(check_query, {"table": table})
+                        existing_cols = [row[0].lower() for row in result.fetchall()]
+                        
+                        if not existing_cols:
+                            migration_logs.append(f"Table {table} does not exist in information_schema, skipping column check.")
+                            continue
 
-                    # 3. QuizQuestion table
-                    question_cols = {
-                        'test_cases_json': 'TEXT',
-                        'language_constraints': 'TEXT',
-                        'time_limit_seconds': 'INTEGER',
-                        'memory_limit_mb': 'INTEGER',
-                        'sample_input': 'TEXT',
-                        'sample_output': 'TEXT',
-                        'starter_code': 'TEXT'
-                    }
-                    for col, defn in question_cols.items():
-                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz_question' AND column_name='{col}'"))
-                        if not result.fetchone():
-                            db.session.execute(text(f"ALTER TABLE quiz_question ADD COLUMN {col} {defn}"))
-                            db.session.commit()
-
-                    # 4. QuizSubmission table
-                    sub_cols = {
-                        'percentage': 'FLOAT DEFAULT 0.0',
-                        'passed': 'BOOLEAN DEFAULT FALSE',
-                        'submitted_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
-                        'review_unlocked_at': 'TIMESTAMP',
-                        'fullscreen_exit_flag': 'BOOLEAN DEFAULT FALSE',
-                        'alt_tab_flag': 'BOOLEAN DEFAULT FALSE',
-                        'win_shift_s_flag': 'BOOLEAN DEFAULT FALSE',
-                        'win_prtscn_flag': 'BOOLEAN DEFAULT FALSE',
-                        'prtscn_flag': 'BOOLEAN DEFAULT FALSE',
-                        'full_screen_exit_count': 'INTEGER DEFAULT 0',
-                        'tab_switch_count': 'INTEGER DEFAULT 0',
-                        'user_count_max': 'INTEGER DEFAULT 0',
-                        'full_screen_exit_duration': 'INTEGER DEFAULT 0',
-                        'is_webcam_data_reliable': 'BOOLEAN DEFAULT TRUE',
-                        'assignment_open_count': 'INTEGER DEFAULT 0',
-                        'page_unfocused_count': 'INTEGER DEFAULT 0',
-                        'illegal_key_combination_detected': 'BOOLEAN DEFAULT FALSE',
-                        'system_sleep_detected': 'BOOLEAN DEFAULT FALSE',
-                        'total_breaches': 'INTEGER DEFAULT 0',
-                        'different_window_detected': 'BOOLEAN DEFAULT FALSE',
-                        'camera_off_detected': 'BOOLEAN DEFAULT FALSE',
-                        'face_not_visible_detected': 'BOOLEAN DEFAULT FALSE',
-                        'incorrect_camera_angle_detected': 'BOOLEAN DEFAULT FALSE',
-                        'multiple_faces_detected': 'BOOLEAN DEFAULT FALSE',
-                        'talking_to_someone_detected': 'BOOLEAN DEFAULT FALSE',
-                        'using_other_device_detected': 'BOOLEAN DEFAULT FALSE',
-                        'device_id_change_detected': 'BOOLEAN DEFAULT FALSE',
-                        'is_flagged_cheating': 'BOOLEAN DEFAULT FALSE',
-                        'answered_count': 'INTEGER DEFAULT 0',
-                        'question_count': 'INTEGER DEFAULT 0',
-                        'is_full_completion': 'BOOLEAN DEFAULT FALSE',
-                        'started_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
-                        'completed': 'BOOLEAN DEFAULT FALSE'
-                    }
-                    for col, defn in sub_cols.items():
-                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='{col}'"))
-                        if not result.fetchone():
-                            db.session.execute(text(f"ALTER TABLE quiz_submission ADD COLUMN {col} {defn}"))
-                            db.session.commit()
-                    
-                    # 5. QuizAnswer table
-                    answer_cols = {
-                        'code_language': 'VARCHAR(20)',
-                        'test_results_json': 'TEXT',
-                        'passed_test_cases': 'INTEGER DEFAULT 0',
-                        'total_test_cases': 'INTEGER DEFAULT 0'
-                    }
-                    for col, defn in answer_cols.items():
-                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz_answer' AND column_name='{col}'"))
-                        if not result.fetchone():
-                            db.session.execute(text(f"ALTER TABLE quiz_answer ADD COLUMN {col} {defn}"))
-                            db.session.commit()
-                    
-                    # 6. ProctoringSnapshot table
-                    snapshot_cols = {
-                        'breach_log': 'TEXT',
-                        'is_red_flag': 'BOOLEAN DEFAULT FALSE'
-                    }
-                    for col, defn in snapshot_cols.items():
-                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='proctoring_snapshot' AND column_name='{col}'"))
-                        if not result.fetchone():
-                            db.session.execute(text(f"ALTER TABLE proctoring_snapshot ADD COLUMN {col} {defn}"))
-                            db.session.commit()
-
-                    # 7. LoginHistory table
-                    geo_cols = {
-                        'latitude': 'FLOAT',
-                        'longitude': 'FLOAT',
-                        'city': 'VARCHAR(100)',
-                        'country': 'VARCHAR(100)',
-                        'region': 'VARCHAR(100)',
-                        'ip_address': 'VARCHAR(45)',
-                        'user_agent': 'VARCHAR(255)'
-                    }
-                    for col, defn in geo_cols.items():
-                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='login_history' AND column_name='{col}'"))
-                        if not result.fetchone():
-                            db.session.execute(text(f"ALTER TABLE login_history ADD COLUMN {col} {defn}"))
-                            db.session.commit()
+                        for col, defn in cols.items():
+                            if col.lower() not in existing_cols:
+                                migration_logs.append(f"Adding column {col} to {table}...")
+                                db.session.execute(text(f"ALTER TABLE {table_quoted} ADD COLUMN {col} {defn}"))
+                                db.session.commit()
+                                migration_logs.append(f"✅ Added {col}")
+                    else:
+                        # SQLite: Get actual columns
+                        res = db.session.execute(text(f"PRAGMA table_info({table});"))
+                        existing_cols = [row[1].lower() for row in res.fetchall()]
+                        
+                        for col, defn in cols.items():
+                            if col.lower() not in existing_cols:
+                                migration_logs.append(f"Adding column {col} to {table}...")
+                                sq_defn = defn.replace('TIMESTAMP', 'DATETIME').replace('VARCHAR(20)', 'VARCHAR').replace('VARCHAR(100)', 'VARCHAR').replace('VARCHAR(255)', 'VARCHAR').replace('VARCHAR(45)', 'VARCHAR')
+                                db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {sq_defn}"))
+                                db.session.commit()
+                                migration_logs.append(f"✅ Added {col}")
+                                
                 except Exception as e:
-                    print(f"PostgreSQL migration check/add failed: {e}")
-            else:
-                # For SQLite, we need to manually add columns to existing tables
-                try:
-                    from sqlalchemy import text
-                    with db.engine.begin() as conn:
-                        # Check quiz_submission table columns
-                        res = conn.execute(text("PRAGMA table_info(quiz_submission);"))
-                        cols = [str(r[1]) for r in res]
-                        
-                        # Add violation flag columns if missing
-                        if 'alt_tab_flag' not in cols:
-                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN alt_tab_flag BOOLEAN DEFAULT 0;"))
-                            print("✅ Added alt_tab_flag column to quiz_submission")
-                        if 'win_shift_s_flag' not in cols:
-                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_shift_s_flag BOOLEAN DEFAULT 0;"))
-                            print("✅ Added win_shift_s_flag column to quiz_submission")
-                        if 'win_prtscn_flag' not in cols:
-                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_prtscn_flag BOOLEAN DEFAULT 0;"))
-                            print("✅ Added win_prtscn_flag column to quiz_submission")
-                        if 'prtscn_flag' not in cols:
-                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN prtscn_flag BOOLEAN DEFAULT 0;"))
-                            print("✅ Added prtscn_flag column to quiz_submission")
-                        
-                        # New Proctoring Columns (SQLite)
-                        proctor_cols = {
-                            'full_screen_exit_count': 'INTEGER DEFAULT 0',
-                            'tab_switch_count': 'INTEGER DEFAULT 0',
-                            'user_count_max': 'INTEGER DEFAULT 0',
-                            'full_screen_exit_duration': 'INTEGER DEFAULT 0',
-                            'is_webcam_data_reliable': 'BOOLEAN DEFAULT 1',
-                            'assignment_open_count': 'INTEGER DEFAULT 0',
-                            'page_unfocused_count': 'INTEGER DEFAULT 0',
-                            'illegal_key_combination_detected': 'BOOLEAN DEFAULT 0',
-                            'system_sleep_detected': 'BOOLEAN DEFAULT 0',
-                            'total_breaches': 'INTEGER DEFAULT 0',
-                            'different_window_detected': 'BOOLEAN DEFAULT 0',
-                            'camera_off_detected': 'BOOLEAN DEFAULT 0',
-                            'face_not_visible_detected': 'BOOLEAN DEFAULT 0',
-                            'incorrect_camera_angle_detected': 'BOOLEAN DEFAULT 0',
-                            'multiple_faces_detected': 'BOOLEAN DEFAULT 0',
-                            'talking_to_someone_detected': 'BOOLEAN DEFAULT 0',
-                            'using_other_device_detected': 'BOOLEAN DEFAULT 0',
-                            'device_id_change_detected': 'BOOLEAN DEFAULT 0',
-                            'is_flagged_cheating': 'BOOLEAN DEFAULT 0'
-                        }
-                        for col, defn in proctor_cols.items():
-                            if col not in cols:
-                                conn.execute(text(f"ALTER TABLE quiz_submission ADD COLUMN {col} {defn};"))
-                                print(f"✅ Added {col} to quiz_submission")
-                        
-                        # Add geolocation columns to login_history if missing (SQLite in init_db fallback)
-                        res = conn.execute(text("PRAGMA table_info(login_history);"))
-                        lh_cols = [str(r[1]) for r in res]
-                        for col, defn in [('latitude', 'FLOAT'), ('longitude', 'FLOAT'), ('city', 'VARCHAR(100)'), ('country', 'VARCHAR(100)'), ('region', 'VARCHAR(100)'), ('ip_address', 'VARCHAR(45)'), ('user_agent', 'VARCHAR(255)')]:
-                            if col not in lh_cols:
-                                conn.execute(text(f"ALTER TABLE login_history ADD COLUMN {col} {defn};"))
-                                print(f"✅ Added {col} to login_history")
-                except Exception as e:
-                    print(f"SQLite migration check failed (may already exist): {e}")
-                
-                print("Using SQLite database - all tables created by db.create_all()")
-            
-            # Create login_history table if it doesn't exist
-            try:
-                db.create_all()
-                print("Created login_history table if it didn't exist")
-            except Exception as e:
-                print(f"Login history table creation failed (may already exist): {e}")
-            
-            print("Database tables created successfully!")
-            print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")
+                    migration_logs.append(f"❌ Error migrating {table}: {str(e)}")
+
+            print("\n".join(migration_logs))
+            db.create_all() # Final safety check
+            return migration_logs
     except Exception as e:
         print(f"Database initialization error: {str(e)}")
         # Continue running the app even if database fails

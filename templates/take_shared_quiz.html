@@ -336,9 +336,9 @@
   }
 
   function startTimer() {
-    const minutes = {{ quiz.duration_minutes or 'null' }};
-    if (!minutes) return;
-
+    const minutes = {{ quiz.duration_minutes or 'null' }
+  };
+  if (!minutes) return;
 
   console.log('Starting timer for', minutes, 'minutes');
   const endTime = Date.now() + (minutes * 60 * 1000);
@@ -371,7 +371,7 @@
       countdownEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
   }, 1000);
-}
+  }
 
   // Flag to track intentional submission (prevents logout on fullscreen exit during confirmation dialog)
   window.isSubmittingQuiz = false;
@@ -596,6 +596,19 @@
       if (shouldFlag) exitQuiz();
       return false;
     }
+    // DevTools (Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) {
+      console.log('⚠️ Developer Tools shortcut detected');
+      e.preventDefault();
+      return false;
+    }
+
+    // Detect F12 (Developer Tools)
+    if (e.key === 'F12' || e.keyCode === 123) {
+      console.log('⚠️ F12 (Developer Tools) detected');
+      e.preventDefault();
+      return false;
+    }
   });
 
   document.addEventListener('fullscreenchange', function () {
@@ -605,18 +618,6 @@
       exitQuiz();
     }
   });
-  console.log('⚠️ Developer Tools shortcut detected');
-  e.preventDefault();
-  return false;
-  }
-
-  // Detect F12 (Developer Tools)
-  if (e.key === 'F12' || e.keyCode === 123) {
-    console.log('⚠️ F12 (Developer Tools) detected');
-    e.preventDefault();
-    return false;
-  }
-});
 
   // Disable text selection on body (but CSS allows it in code editors)
   document.body.style.userSelect = 'none';
@@ -636,8 +637,8 @@
   // Handle coding questions
   document.addEventListener('DOMContentLoaded', function () {
     // Load test cases for each coding question from the page
-    const codingQuestions = {{ questions| tojson
-  }};
+    const codingQuestions = {{ questions | tojson }};
+
 
   // Store test cases in a map
   const testCasesMap = {};

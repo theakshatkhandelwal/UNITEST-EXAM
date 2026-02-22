@@ -2005,7 +2005,7 @@ def force_migrate():
     """Manually force database migration on live site"""
     try:
         init_db()
-        return "✅ Database migration completed successfully! <br>The new columns have been added to QuizSubmission and LoginHistory. <br>Please try to login or access your dashboard again."
+        return "✅ Database migration logic executed! <br>All tables (User, Quiz, QuizSubmission, QuizAnswer, LoginHistory) have been checked for missing columns. <br>Please try to login or access your quiz again."
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
@@ -4377,110 +4377,46 @@ def init_db():
             
             # For PostgreSQL, check and add columns if needed
             if not is_sqlite:
-                # Check if we need to add the role column to existing user table
+                # Check and add columns to various tables (PostgreSQL)
                 try:
                     from sqlalchemy import text
-                    # Check if role column exists
-                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='role'"))
-                    if not result.fetchone():
-                        # Add role column if it doesn't exist
-                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN role VARCHAR(20) DEFAULT 'student'"))
-                        db.session.commit()
-                        print("Added role column to user table")
-                except Exception as e:
-                    print(f"Role column check/add failed (may already exist): {e}")
-            
-                # Check if we need to update password_hash column length
-                try:
-                    from sqlalchemy import text
-                    # Check current password_hash column length
-                    result = db.session.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name='user' AND column_name='password_hash'"))
-                    row = result.fetchone()
-                    if row and row[0] < 255:
-                        # Update password_hash column to be longer
-                        db.session.execute(text("ALTER TABLE \"user\" ALTER COLUMN password_hash TYPE VARCHAR(255)"))
-                        db.session.commit()
-                        print("Updated password_hash column length to 255")
-                except Exception as e:
-                    print(f"Password hash column update failed (may already be correct): {e}")
-                
-                # Check if is_admin column exists, if not add it
-                try:
-                    from sqlalchemy import text
-                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='is_admin'"))
-                    if not result.fetchone():
-                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
-                        db.session.commit()
-                        print("Added is_admin column to user table")
-                except Exception as e:
-                    print(f"is_admin column check/add failed (may already exist): {e}")
-                
-                # Check if last_login column exists, if not add it
-                try:
-                    from sqlalchemy import text
-                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='last_login'"))
-                    if not result.fetchone():
-                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN last_login TIMESTAMP"))
-                        db.session.commit()
-                        print("Added last_login column to user table")
-                except Exception as e:
-                    print(f"last_login column check/add failed (may already exist): {e}")
-                
-                # Check if reset_token column exists, if not add it
-                try:
-                    from sqlalchemy import text
-                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token'"))
-                    if not result.fetchone():
-                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token VARCHAR(100) UNIQUE"))
-                        db.session.commit()
-                        print("Added reset_token column to user table")
-                except Exception as e:
-                    print(f"reset_token column check/add failed (may already exist): {e}")
-                
-                # Check if reset_token_expiry column exists, if not add it
-                try:
-                    from sqlalchemy import text
-                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token_expiry'"))
-                    if not result.fetchone():
-                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token_expiry TIMESTAMP"))
-                        db.session.commit()
-                        print("Added reset_token_expiry column to user table")
-                except Exception as e:
-                    print(f"reset_token_expiry column check/add failed (may already exist): {e}")
-                
-                # Check and add violation flag columns to quiz_submission table (PostgreSQL)
-                try:
-                    from sqlalchemy import text
-                    # Check if alt_tab_flag column exists
-                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='alt_tab_flag'"))
-                    if not result.fetchone():
-                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN alt_tab_flag BOOLEAN DEFAULT FALSE"))
-                        db.session.commit()
-                        print("Added alt_tab_flag column to quiz_submission table")
                     
-                    # Check if win_shift_s_flag column exists
-                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='win_shift_s_flag'"))
-                    if not result.fetchone():
-                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_shift_s_flag BOOLEAN DEFAULT FALSE"))
-                        db.session.commit()
-                        print("Added win_shift_s_flag column to quiz_submission table")
+                    # 1. User table
+                    user_cols = {
+                        'role': "VARCHAR(20) DEFAULT 'student'",
+                        'is_admin': 'BOOLEAN DEFAULT FALSE',
+                        'last_login': 'TIMESTAMP',
+                        'reset_token': 'VARCHAR(100)',
+                        'reset_token_expiry': 'TIMESTAMP'
+                    }
+                    for col, defn in user_cols.items():
+                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='{col}'"))
+                        if not result.fetchone():
+                            db.session.execute(text(f"ALTER TABLE \"user\" ADD COLUMN {col} {defn}"))
+                            db.session.commit()
                     
-                    # Check if win_prtscn_flag column exists
-                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='win_prtscn_flag'"))
-                    if not result.fetchone():
-                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_prtscn_flag BOOLEAN DEFAULT FALSE"))
-                        db.session.commit()
-                        print("Added win_prtscn_flag column to quiz_submission table")
-                    
-                    # Check if prtscn_flag column exists
-                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='prtscn_flag'"))
-                    if not result.fetchone():
-                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN prtscn_flag BOOLEAN DEFAULT FALSE"))
-                        db.session.commit()
-                        print("Added prtscn_flag column to quiz_submission table")
-                    
-                    # New Proctoring Columns (PostgreSQL)
-                    proctor_cols = {
+                    # 2. Quiz table
+                    quiz_cols = {
+                        'difficulty': "VARCHAR(20) DEFAULT 'beginner'",
+                        'duration_minutes': 'INTEGER'
+                    }
+                    for col, defn in quiz_cols.items():
+                        result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz' AND column_name='{col}'"))
+                        if not result.fetchone():
+                            db.session.execute(text(f"ALTER TABLE quiz ADD COLUMN {col} {defn}"))
+                            db.session.commit()
+
+                    # 3. QuizSubmission table
+                    sub_cols = {
+                        'percentage': 'FLOAT DEFAULT 0.0',
+                        'passed': 'BOOLEAN DEFAULT FALSE',
+                        'submitted_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+                        'review_unlocked_at': 'TIMESTAMP',
+                        'fullscreen_exit_flag': 'BOOLEAN DEFAULT FALSE',
+                        'alt_tab_flag': 'BOOLEAN DEFAULT FALSE',
+                        'win_shift_s_flag': 'BOOLEAN DEFAULT FALSE',
+                        'win_prtscn_flag': 'BOOLEAN DEFAULT FALSE',
+                        'prtscn_flag': 'BOOLEAN DEFAULT FALSE',
                         'full_screen_exit_count': 'INTEGER DEFAULT 0',
                         'tab_switch_count': 'INTEGER DEFAULT 0',
                         'user_count_max': 'INTEGER DEFAULT 0',
@@ -4506,14 +4442,13 @@ def init_db():
                         'started_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
                         'completed': 'BOOLEAN DEFAULT FALSE'
                     }
-                    for col, defn in proctor_cols.items():
+                    for col, defn in sub_cols.items():
                         result = db.session.execute(text(f"SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='{col}'"))
                         if not result.fetchone():
                             db.session.execute(text(f"ALTER TABLE quiz_submission ADD COLUMN {col} {defn}"))
                             db.session.commit()
-                            print(f"Added {col} column to quiz_submission table")
                     
-                    # QuizAnswer New Columns (PostgreSQL)
+                    # 4. QuizAnswer table
                     answer_cols = {
                         'code_language': 'VARCHAR(20)',
                         'test_results_json': 'TEXT',
@@ -4525,9 +4460,8 @@ def init_db():
                         if not result.fetchone():
                             db.session.execute(text(f"ALTER TABLE quiz_answer ADD COLUMN {col} {defn}"))
                             db.session.commit()
-                            print(f"Added {col} column to quiz_answer table")
                     
-                    # New LoginHistory Geolocation Columns (PostgreSQL)
+                    # 5. LoginHistory table
                     geo_cols = {
                         'latitude': 'FLOAT',
                         'longitude': 'FLOAT',
@@ -4542,9 +4476,8 @@ def init_db():
                         if not result.fetchone():
                             db.session.execute(text(f"ALTER TABLE login_history ADD COLUMN {col} {defn}"))
                             db.session.commit()
-                            print(f"Added {col} column to login_history table")
                 except Exception as e:
-                    print(f"Violation flag or login history columns check/add failed: {e}")
+                    print(f"PostgreSQL migration check/add failed: {e}")
             else:
                 # For SQLite, we need to manually add columns to existing tables
                 try:

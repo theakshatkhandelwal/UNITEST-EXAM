@@ -25,7 +25,7 @@
       <h3 class="mb-3">🔒 Enter Fullscreen to Start Quiz</h3>
       <p class="mb-3">You must be in fullscreen mode to take this test.</p>
       <p class="mb-3">Exiting fullscreen will end your session.</p>
-      <button id="startQuizBtn" class="btn btn-primary btn-lg"
+      <button id="startQuizBtn" class="btn btn-primary btn-lg" onclick="startQuiz()"
         style="cursor:pointer;pointer-events:auto;position:relative;z-index:100001;min-width:200px;padding:12px 24px;font-size:1.1rem;">
         Enter Fullscreen & Start
       </button>
@@ -336,8 +336,9 @@
   }
 
   function startTimer() {
-    const minutes = {{ quiz.duration_minutes or 'null' }};
+    const minutes = {{ quiz.duration_minutes or 'null' }
   };
+
   if (!minutes) return;
 
   console.log('Starting timer for', minutes, 'minutes');

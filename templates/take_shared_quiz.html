@@ -336,8 +336,7 @@
   }
 
   function startTimer() {
-    const minutes = {{ quiz.duration_minutes or 'null' }
-  };
+    const minutes = {{ quiz.duration_minutes or 'null' }};
   if (!minutes) return;
 
   console.log('Starting timer for', minutes, 'minutes');
@@ -627,8 +626,7 @@
   // Handle coding questions
   document.addEventListener('DOMContentLoaded', function () {
     // Load test cases for each coding question from the page
-    const codingQuestions = {{ questions | tojson
-  }};
+    const codingQuestions = {{ questions | tojson }};
 
 
   // Store test cases in a map

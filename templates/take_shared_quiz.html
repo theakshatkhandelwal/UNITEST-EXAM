@@ -336,9 +336,8 @@
   }
 
   function startTimer() {
-    const minutes = {{ quiz.duration_minutes or 'null' }
-  };
-  if (!minutes) return;
+    const minutes = {{ quiz.duration_minutes or 'null' }};
+    if (!minutes) return;
 
   console.log('Starting timer for', minutes, 'minutes');
   const endTime = Date.now() + (minutes * 60 * 1000);

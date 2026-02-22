@@ -60,18 +60,6 @@
                                 class="fw-bold {{ 'text-danger' if submission.tab_switch_count > 0 else 'text-success' }}">{{
                                 submission.tab_switch_count }}</span>
                         </li>
-                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
-                            <span>Window Blur:</span>
-                            <span
-                                class="fw-bold {{ 'text-danger' if submission.page_unfocused_count > 0 else 'text-success' }}">{{
-                                submission.page_unfocused_count }}</span>
-                        </li>
-                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
-                            <span>Max People Detected:</span>
-                            <span
-                                class="fw-bold {{ 'text-danger' if submission.user_count_max > 1 else 'text-success' }}">{{
-                                submission.user_count_max }}</span>
-                        </li>
                     </ul>
 
                     <div class="mt-4">
@@ -96,68 +84,12 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-2">
-                        <div class="col-md-6">
-                            <div
-                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.illegal_key_combination_detected else 'bg-success-subtle border-success text-success' }}">
-                                <i
-                                    class="fas {{ 'fa-times-circle' if submission.illegal_key_combination_detected else 'fa-check-circle' }} me-2"></i>
-                                Illegal Keys (Alt+Tab, etc.)
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div
-                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.system_sleep_detected else 'bg-success-subtle border-success text-success' }}">
-                                <i
-                                    class="fas {{ 'fa-times-circle' if submission.system_sleep_detected else 'fa-check-circle' }} me-2"></i>
-                                System Sleep
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div
-                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.different_window_detected else 'bg-success-subtle border-success text-success' }}">
-                                <i
-                                    class="fas {{ 'fa-times-circle' if submission.different_window_detected else 'fa-check-circle' }} me-2"></i>
-                                Different Window
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div
-                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.camera_off_detected else 'bg-success-subtle border-success text-success' }}">
-                                <i
-                                    class="fas {{ 'fa-times-circle' if submission.camera_off_detected else 'fa-check-circle' }} me-2"></i>
-                                Camera Disabled
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div
-                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.face_not_visible_detected else 'bg-success-subtle border-success text-success' }}">
-                                <i
-                                    class="fas {{ 'fa-times-circle' if submission.face_not_visible_detected else 'fa-check-circle' }} me-2"></i>
-                                Face Not Visible
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div
-                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.multiple_faces_detected else 'bg-success-subtle border-success text-success' }}">
-                                <i
-                                    class="fas {{ 'fa-times-circle' if submission.multiple_faces_detected else 'fa-check-circle' }} me-2"></i>
-                                Multiple Faces
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div
-                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.talking_to_someone_detected else 'bg-success-subtle border-success text-success' }}">
-                                <i
-                                    class="fas {{ 'fa-times-circle' if submission.talking_to_someone_detected else 'fa-check-circle' }} me-2"></i>
-                                Talking Detection
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div
-                                class="p-2 border rounded {{ 'bg-danger-subtle border-danger text-danger' if submission.using_other_device_detected else 'bg-success-subtle border-success text-success' }}">
-                                <i
-                                    class="fas {{ 'fa-times-circle' if submission.using_other_device_detected else 'fa-check-circle' }} me-2"></i>
-                                Other Device Used
+                        <div class="col-12">
+                            <div class="alert alert-info bg-dark border-info text-info mb-0"
+                                style="background: #1a2a3a; border-left: 4px solid #00bcd4;">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Detailed violation flags are currently restricted to core breaches (Fullscreen, Tab
+                                Switching). Visual evidence is available in the timeline below.
                             </div>
                         </div>
                     </div>

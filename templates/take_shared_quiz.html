@@ -336,8 +336,9 @@
   }
 
   function startTimer() {
-    const minutes = {{ quiz.duration_minutes or 'null' }};
-    if (!minutes) return;
+    const minutes = {{ quiz.duration_minutes or 'null' }
+  };
+  if (!minutes) return;
 
   console.log('Starting timer for', minutes, 'minutes');
   const endTime = Date.now() + (minutes * 60 * 1000);
@@ -401,7 +402,7 @@
       console.error('Failed to send answers:', e);
     }
 
-    window.location.href = '/logout';
+    window.location.href = "{{ url_for('student_dashboard') }}";
   }
 
   // --- New Proctoring System ---
@@ -416,10 +417,7 @@
   let proctorState = {
     full_screen_exit_count: 0,
     tab_switch_count: 0,
-    page_unfocused_count: 0,
-    total_breaches: 0,
-    illegal_key_combination_detected: false,
-    user_count_max: 1
+    total_breaches: 0
   };
 
   const WARNING_KEY = 'quiz_violation_warnings';
@@ -435,31 +433,24 @@
     console.warn('Could not load warnings from localStorage:', e);
   }
 
+  let proctoringStartedAt = 0;
   async function initProctoring() {
     if (!proctorConfig.submissionId) return;
 
     try {
-      // Request Webcam
+      // Request Webcam only (Screen share causes focus loss and exits fullscreen)
       const webcamStream = await navigator.mediaDevices.getUserMedia({ video: true });
       document.getElementById('proctorWebcam').srcObject = webcamStream;
 
-      // Request Screen (Optional but recommended for high integrity)
-      try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        document.getElementById('proctorScreen').srcObject = screenStream;
-      } catch (e) {
-        console.warn("Screen share denied or not supported");
-      }
-
       // Start Loops
       setInterval(() => takeSnapshot('webcam'), proctorConfig.snapshotInterval);
-      setInterval(() => takeSnapshot('screen'), proctorConfig.snapshotInterval + 5000);
       setInterval(sendHeartbeat, proctorConfig.heartbeatInterval);
 
+      proctoringStartedAt = Date.now();
       console.log("Proctoring initialized");
     } catch (e) {
       console.error("Proctoring initialization failed:", e);
-      alert("Camera access is required for this quiz. Please enable it and refresh.");
+      // Don't alert if quiz already started, just log
     }
   }
 
@@ -611,9 +602,9 @@
   });
 
   document.addEventListener('fullscreenchange', function () {
-    if (!document.fullscreenElement && quizStarted) {
+    // Only trigger if quiz has been running for at least 3 seconds (grace period)
+    if (!document.fullscreenElement && quizStarted && (Date.now() - proctoringStartedAt > 3000)) {
       proctorState.full_screen_exit_count++;
-      proctorState.last_exit_time = Date.now();
       exitQuiz();
     }
   });
@@ -636,7 +627,8 @@
   // Handle coding questions
   document.addEventListener('DOMContentLoaded', function () {
     // Load test cases for each coding question from the page
-    const codingQuestions = {{ questions | tojson }};
+    const codingQuestions = {{ questions | tojson
+  }};
 
 
   // Store test cases in a map

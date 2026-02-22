@@ -424,22 +424,7 @@ class QuizSubmission(db.Model):
     # New Proctoring Fields
     full_screen_exit_count = db.Column(db.Integer, default=0)
     tab_switch_count = db.Column(db.Integer, default=0)
-    user_count_max = db.Column(db.Integer, default=0)
-    full_screen_exit_duration = db.Column(db.Integer, default=0) # Total seconds spent outside fullscreen
-    is_webcam_data_reliable = db.Column(db.Boolean, default=True)
-    assignment_open_count = db.Column(db.Integer, default=0)
-    page_unfocused_count = db.Column(db.Integer, default=0)
-    illegal_key_combination_detected = db.Column(db.Boolean, default=False)
-    system_sleep_detected = db.Column(db.Boolean, default=False)
     total_breaches = db.Column(db.Integer, default=0)
-    different_window_detected = db.Column(db.Boolean, default=False)
-    camera_off_detected = db.Column(db.Boolean, default=False)
-    face_not_visible_detected = db.Column(db.Boolean, default=False)
-    incorrect_camera_angle_detected = db.Column(db.Boolean, default=False)
-    multiple_faces_detected = db.Column(db.Boolean, default=False)
-    talking_to_someone_detected = db.Column(db.Boolean, default=False)
-    using_other_device_detected = db.Column(db.Boolean, default=False)
-    device_id_change_detected = db.Column(db.Boolean, default=False)
     is_flagged_cheating = db.Column(db.Boolean, default=False)
 
     # counts to determine clean vs hold
@@ -2883,26 +2868,11 @@ def proctor_heartbeat(submission_id):
             submission.full_screen_exit_count = data['full_screen_exit_count']
         if 'tab_switch_count' in data:
             submission.tab_switch_count = data['tab_switch_count']
-        if 'user_count_max' in data:
-            submission.user_count_max = max(submission.user_count_max or 0, data['user_count_max'])
-        if 'full_screen_exit_duration' in data:
-            submission.full_screen_exit_duration = data['full_screen_exit_duration']
-        if 'page_unfocused_count' in data:
-            submission.page_unfocused_count = data['page_unfocused_count']
         if 'total_breaches' in data:
             submission.total_breaches = data['total_breaches']
-            
-        # Update boolean flags
-        flags = [
-            'illegal_key_combination_detected', 'system_sleep_detected', 
-            'different_window_detected', 'camera_off_detected', 
-            'face_not_visible_detected', 'incorrect_camera_angle_detected', 
-            'multiple_faces_detected', 'talking_to_someone_detected', 
-            'using_other_device_detected', 'device_id_change_detected'
-        ]
-        for flag in flags:
-            if data.get(flag):
-                setattr(submission, flag, True)
+        
+        db.session.commit()
+        return jsonify({'success': True})
                 
         db.session.commit()
         return jsonify({'success': True})
@@ -4418,22 +4388,8 @@ def init_db():
                     'prtscn_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
                     'full_screen_exit_count': 'INTEGER DEFAULT 0',
                     'tab_switch_count': 'INTEGER DEFAULT 0',
-                    'user_count_max': 'INTEGER DEFAULT 0',
-                    'full_screen_exit_duration': 'INTEGER DEFAULT 0',
-                    'is_webcam_data_reliable': 'BOOLEAN DEFAULT TRUE' if not is_sqlite else 'BOOLEAN DEFAULT 1',
-                    'assignment_open_count': 'INTEGER DEFAULT 0',
-                    'page_unfocused_count': 'INTEGER DEFAULT 0',
-                    'illegal_key_combination_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'system_sleep_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
                     'total_breaches': 'INTEGER DEFAULT 0',
-                    'different_window_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'camera_off_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'face_not_visible_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'incorrect_camera_angle_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'multiple_faces_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'talking_to_someone_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'using_other_device_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'device_id_change_detected': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
+                    'is_flagged_cheating': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
                     'is_flagged_cheating': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
                     'answered_count': 'INTEGER DEFAULT 0',
                     'question_count': 'INTEGER DEFAULT 0',

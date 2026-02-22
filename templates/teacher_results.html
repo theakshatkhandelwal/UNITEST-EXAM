@@ -61,7 +61,8 @@
                 <div class="small text-muted mt-1">Breaches: {{ s.total_breaches }}</div>
                 {% if s.fullscreen_exit_flag or s.alt_tab_flag or s.tab_switch_count > 0 %}
                 <div class="small text-danger mt-1">
-                  {% if s.fullscreen_exit_count > 0 %}<div>⚠️ Exited fullscreen ({{ s.full_screen_exit_count }})</div>{%
+                  {% if s.full_screen_exit_count > 0 %}<div>⚠️ Exited fullscreen ({{ s.full_screen_exit_count }})</div>
+                  {%
                   endif %}
                   {% if s.tab_switch_count > 0 %}<div>⚠️ Tab switches ({{ s.tab_switch_count }})</div>{% endif %}
                 </div>

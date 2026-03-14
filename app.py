@@ -397,8 +397,6 @@ class QuizQuestion(db.Model):
     answer = db.Column(db.Text)  # For MCQ store letter like 'A'; for subjective can store sample answer (Text for long answers)
     qtype = db.Column(db.String(20), default='mcq')  # 'mcq', 'subjective', or 'coding'
     marks = db.Column(db.Integer, default=1)
-    # Optional image associated with the question (diagram, graph, formula screenshot, etc.)
-    image_url = db.Column(db.Text)
     # For coding questions
     test_cases_json = db.Column(db.Text)  # JSON array of test cases: [{"input": "...", "expected_output": "...", "is_hidden": false}]
     language_constraints = db.Column(db.Text)  # JSON array of allowed languages: ["python", "java", "cpp", "c"]
@@ -407,6 +405,7 @@ class QuizQuestion(db.Model):
     sample_input = db.Column(db.Text)  # Sample input for display
     sample_output = db.Column(db.Text)  # Sample output for display
     starter_code = db.Column(db.Text)  # JSON object with starter code per language
+    image_url = db.Column(db.Text)
 
 class QuizSubmission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -426,31 +425,31 @@ class QuizSubmission(db.Model):
     win_shift_s_flag = db.Column(db.Boolean, default=False)
     win_prtscn_flag = db.Column(db.Boolean, default=False)
     prtscn_flag = db.Column(db.Boolean, default=False)
-    
-    # New Proctoring Fields
-    full_screen_exit_count = db.Column(db.Integer, default=0)
-    tab_switch_count = db.Column(db.Integer, default=0)
-    total_breaches = db.Column(db.Integer, default=0)
-    is_flagged_cheating = db.Column(db.Boolean, default=False)
-
     # counts to determine clean vs hold
     answered_count = db.Column(db.Integer, default=0)
     question_count = db.Column(db.Integer, default=0)
     is_full_completion = db.Column(db.Boolean, default=False)
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed = db.Column(db.Boolean, default=False)
-    
-    # Relationships
-    snapshots = db.relationship('ProctoringSnapshot', backref='submission', lazy=True, cascade='all, delete-orphan')
+    device_fingerprint = db.Column(db.String(512), nullable=True)
+    marked_as_cheating = db.Column(db.Boolean, default=False)
+    proctor_notes = db.Column(db.Text, nullable=True)
 
 class ProctoringSnapshot(db.Model):
+    __tablename__ = 'proctoring_snapshot'
     id = db.Column(db.Integer, primary_key=True)
     submission_id = db.Column(db.Integer, db.ForeignKey('quiz_submission.id'), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    snapshot_type = db.Column(db.String(20))  # 'webcam' or 'screen'
-    image_path = db.Column(db.String(255))
-    breach_log = db.Column(db.Text)  # Comma separated list of breaches detected at this moment
-    is_red_flag = db.Column(db.Boolean, default=False)
+    snapshot_type = db.Column(db.String(20), nullable=False)
+    image_data = db.Column(db.Text, nullable=True)
+    captured_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+class ProctoringBreach(db.Model):
+    __tablename__ = 'proctoring_breach'
+    id = db.Column(db.Integer, primary_key=True)
+    submission_id = db.Column(db.Integer, db.ForeignKey('quiz_submission.id'), nullable=False)
+    breach_type = db.Column(db.String(80), nullable=False)
+    occurred_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    metadata = db.Column(db.Text, nullable=True)
 
 class QuizAnswer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -1225,7 +1224,8 @@ Return output in valid JSON format ONLY (no explanations, no markdown):
 [
     {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq"}},
     ...
-]"""
+]
+            """
         elif question_type == "coding":
             prompt = f"""
 CRITICAL: You MUST generate exactly {num_questions} coding programming problems{f' based on the provided PDF content' if pdf_content else f' on the topic: {topic}'}
@@ -1265,7 +1265,8 @@ EXAMPLE FORMAT (follow this EXACT structure):
         "test_cases": [
             {{"input": "3\\n1 2 3", "expected_output": "3", "is_hidden": false}},
             {{"input": "4\\n10 5 8 12", "expected_output": "12", "is_hidden": false}},
-            {{"input": "5\\n-1 -5 -3 -2 -4", "expected_output": "-1", "is_hidden": true}}
+            {{"input": "5\\n-1 -5 -3 -2 -4", "expected_output": "-1", "is_hidden": true}},
+            {{"input": "1\\n42", "expected_output": "42", "is_hidden": true}}
         ],
         "time_limit_seconds": 2,
         "memory_limit_mb": 256,
@@ -1301,7 +1302,8 @@ Return output in valid JSON format ONLY (no explanations, no markdown):
 [
     {{"question": "Explain the concept of AI and its applications", "answer": "Sample answer explaining AI...", "type": "subjective", "marks": 10}},
     ...
-]"""
+]
+            """
 
         response = model.generate_content(prompt)
 
@@ -1778,13 +1780,6 @@ def signup():
                 flash('Passwords do not match', 'error')
                 return redirect(url_for('signup'))
 
-            # Check password strength
-            pwd_strength = check_password_strength(password)
-            if pwd_strength['score'] < 3:
-                suggestions = ', '.join(pwd_strength['suggestions'])
-                flash(f'Password is too weak. Suggestions: {suggestions}', 'warning')
-                return redirect(url_for('signup'))
-
             # Check if user exists
             existing_user = db.session.query(User).filter_by(username=username).first()
             if existing_user:
@@ -1863,6 +1858,8 @@ def login():
             db.session.rollback()
             flash(f'Login error: {str(e)}', 'error')
             return redirect(url_for('login'))
+
+    return render_template('login.html')
 
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
@@ -1981,30 +1978,6 @@ def logout():
     logout_user()
     return redirect(url_for('home'))
 
-_db_initialized = False
-
-@app.before_request
-def initialize_on_first_request_hook():
-    global _db_initialized
-    if not _db_initialized:
-        # Only run automatically on live environments (Vercel/Production)
-        # Local env handles it differently at the bottom of the file
-        if os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'):
-            initialize_on_first_request()
-            _db_initialized = True
-
-@app.route('/migrate')
-def force_migrate():
-    """Manually force database migration on live site"""
-    try:
-        logs = init_db()
-        log_html = "<br>".join(logs) if logs else "No missing columns found."
-        return f"<h1>✅ Database Migration Logic Executed!</h1><div style='background:#f4f4f4;padding:10px;border-radius:5px;'>{log_html}</div><br>Please try to login or access your quiz again."
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        return f"<h1>❌ Database Migration Failed</h1><p>{str(e)}</p><br><br>Details:<pre>{error_details}</pre>"
-
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -2056,7 +2029,7 @@ def teacher_create_quiz():
             quiz = Quiz(title=title, code=code, created_by=current_user.id)
             db.session.add(quiz)
             db.session.flush()  # get quiz.id
-            
+
             for q in questions:
                 qtype = q.get('type', 'mcq')
                 opts = q.get('options', []) if qtype == 'mcq' else []
@@ -2508,6 +2481,7 @@ def join_quiz():
         if not quiz:
             flash('Invalid quiz code', 'error')
             return redirect(url_for('join_quiz'))
+        return redirect(url_for('take_shared_quiz', code=code))
     return render_template('join_quiz.html')
 
 # Take shared quiz
@@ -2571,7 +2545,62 @@ def take_shared_quiz(code):
         existing = QuizSubmission(quiz_id=quiz.id, student_id=current_user.id, question_count=len(q_rows))
         db.session.add(existing)
         db.session.commit()
-    return render_template('take_shared_quiz.html', quiz=quiz, questions=parsed_questions, submission=existing)
+    return render_template('take_shared_quiz.html', quiz=quiz, questions=parsed_questions)
+
+# Proctoring: record snapshot
+@app.route('/api/proctoring/snapshot/<code>', methods=['POST'])
+@login_required
+def api_proctoring_snapshot(code):
+    quiz = db.session.query(Quiz).filter_by(code=code.upper()).first()
+    if not quiz:
+        return jsonify({'error': 'Quiz not found'}), 404
+    submission = db.session.query(QuizSubmission).filter_by(quiz_id=quiz.id, student_id=current_user.id, completed=False).first()
+    if not submission:
+        return jsonify({'error': 'No active attempt'}), 400
+    data = request.get_json(silent=True) or {}
+    snapshot_type = (data.get('type') or 'webcam').lower()
+    if snapshot_type not in ('screen', 'webcam'):
+        snapshot_type = 'webcam'
+    image_data = data.get('image')
+    captured_at = datetime.utcnow()
+    if data.get('captured_at'):
+        try:
+            captured_at = datetime.fromisoformat(str(data['captured_at']).replace('Z', '+00:00'))
+        except Exception:
+            pass
+    device_fp = data.get('device_fingerprint')
+    if device_fp and not submission.device_fingerprint:
+        submission.device_fingerprint = device_fp[:512]
+    elif device_fp and submission.device_fingerprint and submission.device_fingerprint != device_fp[:512]:
+        db.session.add(ProctoringBreach(submission_id=submission.id, breach_type='DEVICE_ID_CHANGE_DETECTED', occurred_at=captured_at))
+        submission.device_fingerprint = device_fp[:512]
+    if image_data and len(image_data) > 300000:
+        image_data = None
+    db.session.add(ProctoringSnapshot(submission_id=submission.id, snapshot_type=snapshot_type, image_data=image_data, captured_at=captured_at))
+    db.session.commit()
+    return jsonify({'ok': True})
+
+# Proctoring: record breach
+@app.route('/api/proctoring/breach/<code>', methods=['POST'])
+@login_required
+def api_proctoring_breach(code):
+    quiz = db.session.query(Quiz).filter_by(code=code.upper()).first()
+    if not quiz:
+        return jsonify({'error': 'Quiz not found'}), 404
+    submission = db.session.query(QuizSubmission).filter_by(quiz_id=quiz.id, student_id=current_user.id, completed=False).first()
+    if not submission:
+        return jsonify({'error': 'No active attempt'}), 400
+    data = request.get_json(silent=True) or {}
+    breach_type = (data.get('breach_type') or data.get('type') or 'UNKNOWN').upper().replace(' ', '_')[:80]
+    occurred_at = datetime.utcnow()
+    if data.get('occurred_at'):
+        try:
+            occurred_at = datetime.fromisoformat(str(data['occurred_at']).replace('Z', '+00:00'))
+        except Exception:
+            pass
+    db.session.add(ProctoringBreach(submission_id=submission.id, breach_type=breach_type, occurred_at=occurred_at))
+    db.session.commit()
+    return jsonify({'ok': True})
 
 # Submit shared quiz
 @app.route('/quiz/submit/<code>', methods=['POST'])
@@ -2811,128 +2840,6 @@ def auto_submit_partial(code):
         db.session.rollback()
         return ('', 204)
 
-# Proctoring Routes
-@app.route('/proctor/snapshot/<int:submission_id>', methods=['POST'])
-@login_required
-def proctor_snapshot(submission_id):
-    """Receive and save proctoring snapshots (webcam/screen)"""
-    try:
-        submission = db.session.get(QuizSubmission, submission_id)
-        if not submission or (submission.student_id != current_user.id and current_user.role != 'teacher'):
-            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-            
-        data = request.get_json()
-        image_data = data.get('image')
-        snapshot_type = data.get('type') # 'webcam' or 'screen'
-        breaches = data.get('breaches', [])
-        is_red_flag = data.get('is_red_flag', False)
-        
-        if not image_data:
-            return jsonify({'success': False, 'error': 'No image data'}), 400
-            
-        # Create directory if it doesn't exist
-        snapshot_dir = os.path.join(app.root_path, 'static', 'proctoring_snapshots', str(submission_id))
-        os.makedirs(snapshot_dir, exist_ok=True)
-        
-        # Save image file
-        import base64
-        import uuid
-        filename = f"{snapshot_type}_{uuid.uuid4().hex}.jpg"
-        filepath = os.path.join(snapshot_dir, filename)
-        
-        # Strip header if present
-        if ',' in image_data:
-            image_data = image_data.split(',')[1]
-        with open(filepath, 'wb') as f:
-            f.write(base64.b64decode(image_data))
-            
-        # Create database record
-        new_snapshot = ProctoringSnapshot()
-        new_snapshot.submission_id = submission_id
-        new_snapshot.snapshot_type = snapshot_type
-        new_snapshot.image_path = f"proctoring_snapshots/{submission_id}/{filename}"
-        new_snapshot.breach_log = ", ".join(breaches) if breaches else ""
-        new_snapshot.is_red_flag = is_red_flag
-        db.session.add(new_snapshot)
-        db.session.commit()
-        
-        return jsonify({'success': True, 'path': new_snapshot.image_path})
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error saving snapshot: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/proctor/heartbeat/<int:submission_id>', methods=['POST'])
-@login_required
-def proctor_heartbeat(submission_id):
-    """Update proctoring metrics periodically"""
-    try:
-        submission = db.session.get(QuizSubmission, submission_id)
-        if not submission or submission.student_id != current_user.id:
-            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-            
-        data = request.get_json()
-        
-        # Update metrics
-        if 'full_screen_exit_count' in data:
-            submission.full_screen_exit_count = data['full_screen_exit_count']
-        if 'tab_switch_count' in data:
-            submission.tab_switch_count = data['tab_switch_count']
-        if 'total_breaches' in data:
-            submission.total_breaches = data['total_breaches']
-        
-        db.session.commit()
-        return jsonify({'success': True})
-                
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        print(f"Error in heartbeat: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/proctor_report/<int:submission_id>')
-@login_required
-def proctor_report(submission_id):
-    """Display the detailed proctoring report for a teacher"""
-    guard = require_teacher()
-    if guard:
-        return guard
-        
-    submission = db.session.get(QuizSubmission, submission_id)
-    if not submission:
-        flash('Submission not found', 'error')
-        return redirect(url_for('dashboard'))
-        
-    quiz = db.session.get(Quiz, submission.quiz_id)
-    student = db.session.get(User, submission.student_id)
-    snapshots = db.session.query(ProctoringSnapshot).filter_by(submission_id=submission_id).order_by(ProctoringSnapshot.timestamp.asc()).all()
-    
-    return render_template('proctor_report.html', 
-                          submission=submission, 
-                          quiz=quiz, 
-                          student=student, 
-                          snapshots=snapshots)
-
-@app.route('/proctor/mark_cheating/<int:submission_id>', methods=['POST'])
-@login_required
-def mark_cheating(submission_id):
-    """Mark a submission as cheating"""
-    guard = require_teacher()
-    if guard:
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-        
-    submission = db.session.get(QuizSubmission, submission_id)
-    if not submission:
-        return jsonify({'success': False, 'error': 'Submission not found'}), 404
-        
-    data = request.get_json()
-    is_cheating = data.get('is_cheating', True)
-    
-    submission.is_flagged_cheating = is_cheating
-    db.session.commit()
-    
-    return jsonify({'success': True, 'status': 'cheating' if is_cheating else 'clean'})
-
 # Teacher: view results
 @app.route('/teacher/quiz/<code>/results')
 @login_required
@@ -2949,7 +2856,7 @@ def teacher_quiz_results(code):
     student_map = {u.id: u for u in db.session.query(User).filter(User.id.in_([s.student_id for s in submissions])).all()}
     return render_template('teacher_results.html', quiz=quiz, submissions=submissions, student_map=student_map)
 
-# Teacher: download quiz results as CSV or Excel
+# Teacher: download results as CSV or Excel
 @app.route('/teacher/quiz/<code>/results/download/<format>')
 @login_required
 def download_quiz_results(code, format):
@@ -2960,79 +2867,84 @@ def download_quiz_results(code, format):
     if not quiz:
         flash('Quiz not found', 'error')
         return redirect(url_for('dashboard'))
-
     submissions = db.session.query(QuizSubmission).filter_by(quiz_id=quiz.id).order_by(QuizSubmission.submitted_at.desc()).all()
     student_map = {u.id: u for u in db.session.query(User).filter(User.id.in_([s.student_id for s in submissions])).all()}
-
-    # Common rows
-    rows = []
     header = ['Student', 'Score', 'Total', 'Percentage', 'Passed', 'Submitted At']
+    rows = []
     for s in submissions:
         student = student_map.get(s.student_id)
         name = student.username if student else f'ID {s.student_id}'
-        submitted_str = s.submitted_at.strftime('%Y-%m-%d %H:%M') if s.submitted_at else ''
-        rows.append([
-            name,
-            f'{s.score:.1f}',
-            f'{s.total:.1f}',
-            f'{s.percentage:.1f}',
-            'Yes' if s.passed else 'No',
-            submitted_str
-        ])
-
-    filename_base = f'{quiz.code}_results'
+        rows.append([name, f'{s.score:.1f}', f'{s.total:.1f}', f'{s.percentage:.1f}', 'Yes' if s.passed else 'No', s.submitted_at.strftime('%Y-%m-%d %H:%M') if s.submitted_at else ''])
+    fn = f'{quiz.code}_results'
     fmt = (format or 'csv').lower()
-
     if fmt == 'xlsx':
-        # Build Excel file in memory using openpyxl
         output = io.BytesIO()
         wb = Workbook()
         ws = wb.active
         ws.title = 'Results'
-
-        # Header
-        header_font = Font(bold=True, color='FFFFFF')
-        header_fill = PatternFill(start_color='4F81BD', end_color='4F81BD', fill_type='solid')
-        for col_idx, col_name in enumerate(header, start=1):
-            cell = ws.cell(row=1, column=col_idx, value=col_name)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = Alignment(horizontal='center')
-
-        # Data rows
-        for row_idx, row in enumerate(rows, start=2):
-            for col_idx, value in enumerate(row, start=1):
-                cell = ws.cell(row=row_idx, column=col_idx, value=value)
-                if col_idx in (2, 3, 4):  # numeric columns
-                    cell.alignment = Alignment(horizontal='center')
-
-        # Autosize columns
-        for col_idx, col_name in enumerate(header, start=1):
-            column_letter = get_column_letter(col_idx)
-            max_length = max((len(str(col_name)),) + tuple(len(str(ws.cell(row=row_idx, column=col_idx).value or '')) for row_idx in range(2, len(rows) + 2)))
-            ws.column_dimensions[column_letter].width = max_length + 2
-
+        for c, h in enumerate(header, 1):
+            cell = ws.cell(row=1, column=c, value=h)
+            cell.font = Font(bold=True, color='FFFFFF')
+            cell.fill = PatternFill(start_color='4F81BD', end_color='4F81BD', fill_type='solid')
+        for r, row in enumerate(rows, 2):
+            for c, v in enumerate(row, 1):
+                ws.cell(row=r, column=c, value=v)
         wb.save(output)
         output.seek(0)
-        return send_file(
-            output,
-            as_attachment=True,
-            download_name=f'{filename_base}.xlsx',
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        )
-
-    # Default: CSV
+        return send_file(output, as_attachment=True, download_name=f'{fn}.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(header)
     writer.writerows(rows)
-    csv_bytes = output.getvalue().encode('utf-8-sig')
-    return send_file(
-        io.BytesIO(csv_bytes),
-        as_attachment=True,
-        download_name=f'{filename_base}.csv',
-        mimetype='text/csv'
-    )
+    return send_file(io.BytesIO(output.getvalue().encode('utf-8-sig')), as_attachment=True, download_name=f'{fn}.csv', mimetype='text/csv')
+
+# Teacher: proctor report
+@app.route('/teacher/quiz/<code>/proctor-report/<int:submission_id>')
+@login_required
+def teacher_proctor_report(code, submission_id):
+    guard = require_teacher()
+    if guard:
+        return guard
+    quiz = db.session.query(Quiz).filter_by(code=code.upper(), created_by=current_user.id).first()
+    if not quiz:
+        flash('Quiz not found', 'error')
+        return redirect(url_for('dashboard'))
+    submission = db.session.query(QuizSubmission).filter_by(id=submission_id, quiz_id=quiz.id).first()
+    if not submission:
+        flash('Submission not found', 'error')
+        return redirect(url_for('teacher_quiz_results', code=code))
+    student = db.session.query(User).filter_by(id=submission.student_id).first()
+    snapshots = db.session.query(ProctoringSnapshot).filter_by(submission_id=submission.id).order_by(ProctoringSnapshot.captured_at).all()
+    breaches = db.session.query(ProctoringBreach).filter_by(submission_id=submission.id).order_by(ProctoringBreach.occurred_at).all()
+    breach_counts = {}
+    for b in breaches:
+        breach_counts[b.breach_type] = breach_counts.get(b.breach_type, 0) + 1
+    return render_template('proctor_report.html', quiz=quiz, submission=submission, student=student, snapshots=snapshots, breaches=breaches, breach_counts=breach_counts, total_breaches=len(breaches), default_thresholds={'TOTAL_BREACHES': 30, 'TAB_SWITCH_COUNT': 20, 'FULLSCREEN_EXIT_COUNT': 20, 'CAMERA_OFF_DETECTED': 5})
+
+# Teacher: proctor report actions
+@app.route('/teacher/quiz/<code>/proctor-report/<int:submission_id>/action', methods=['POST'])
+@login_required
+def teacher_proctor_report_action(code, submission_id):
+    guard = require_teacher()
+    if guard:
+        return guard
+    quiz = db.session.query(Quiz).filter_by(code=code.upper(), created_by=current_user.id).first()
+    if not quiz:
+        return redirect(url_for('dashboard'))
+    submission = db.session.query(QuizSubmission).filter_by(id=submission_id, quiz_id=quiz.id).first()
+    if not submission:
+        return redirect(url_for('teacher_quiz_results', code=code))
+    action = request.form.get('action')
+    if action == 'mark_cheating':
+        submission.marked_as_cheating = True
+    elif action == 'unmark_cheating':
+        submission.marked_as_cheating = False
+    elif action == 'add_note':
+        note = request.form.get('proctor_note', '').strip()
+        if note:
+            submission.proctor_notes = (submission.proctor_notes or '') + '\n' + note
+    db.session.commit()
+    return redirect(url_for('teacher_proctor_report', code=code, submission_id=submission_id))
 
 # Student: view quiz result (after 15 minutes)
 @app.route('/quiz/result/<int:submission_id>')
@@ -3357,52 +3269,8 @@ def dev_migrate():
                     conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN started_at DATETIME;"))
                 if 'completed' not in cols:
                     conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN completed BOOLEAN DEFAULT 0;"))
-                
-                # New Proctoring Columns
-                proctor_cols = {
-                    'full_screen_exit_count': 'INTEGER DEFAULT 0',
-                    'tab_switch_count': 'INTEGER DEFAULT 0',
-                    'user_count_max': 'INTEGER DEFAULT 0',
-                    'full_screen_exit_duration': 'INTEGER DEFAULT 0',
-                    'is_webcam_data_reliable': 'BOOLEAN DEFAULT 1',
-                    'assignment_open_count': 'INTEGER DEFAULT 0',
-                    'page_unfocused_count': 'INTEGER DEFAULT 0',
-                    'illegal_key_combination_detected': 'BOOLEAN DEFAULT 0',
-                    'system_sleep_detected': 'BOOLEAN DEFAULT 0',
-                    'total_breaches': 'INTEGER DEFAULT 0',
-                    'different_window_detected': 'BOOLEAN DEFAULT 0',
-                    'camera_off_detected': 'BOOLEAN DEFAULT 0',
-                    'face_not_visible_detected': 'BOOLEAN DEFAULT 0',
-                    'incorrect_camera_angle_detected': 'BOOLEAN DEFAULT 0',
-                    'multiple_faces_detected': 'BOOLEAN DEFAULT 0',
-                    'talking_to_someone_detected': 'BOOLEAN DEFAULT 0',
-                    'using_other_device_detected': 'BOOLEAN DEFAULT 0',
-                    'device_id_change_detected': 'BOOLEAN DEFAULT 0',
-                    'is_flagged_cheating': 'BOOLEAN DEFAULT 0'
-                }
-                for col, defn in proctor_cols.items():
-                    if col not in cols:
-                        conn.execute(text(f"ALTER TABLE quiz_submission ADD COLUMN {col} {defn};"))
-                        print(f"✅ Added {col} column to quiz_submission")
-                
-                # Geolocation columns for login_history (SQLite)
-                res = conn.execute(text("PRAGMA table_info(login_history);"))
-                cols = [str(r[1]) for r in res]
-                geo_cols = {
-                    'latitude': 'FLOAT',
-                    'longitude': 'FLOAT',
-                    'city': 'VARCHAR(100)',
-                    'country': 'VARCHAR(100)',
-                    'region': 'VARCHAR(100)',
-                    'ip_address': 'VARCHAR(45)',
-                    'user_agent': 'VARCHAR(255)'
-                }
-                for col, defn in geo_cols.items():
-                    if col not in cols:
-                        conn.execute(text(f"ALTER TABLE login_history ADD COLUMN {col} {defn};"))
-                        print(f"✅ Added {col} to login_history")
             except Exception as e:
-                print(f"Database migration (extra tables/columns) failed: {e}")
+                print(f"ALTER TABLE quiz_submission add columns failed (may exist): {e}")
 
         # Create any new tables
         db.create_all()
@@ -3606,7 +3474,7 @@ def quiz():
                     try:
                         import tempfile
                         import os
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', dir=temp_dir) as tmp_file:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
                             file.save(tmp_file.name)
                             pdf_file_paths.append(tmp_file.name)
                             print(f'Saved PDF: {file.filename} to {tmp_file.name}')
@@ -3639,7 +3507,7 @@ def quiz():
                     # Provide more helpful error message
                     error_msg = 'Could not extract content from PDF(s). '
                     error_msg += 'This may happen if the PDF is scanned/image-based and OCR services are unavailable. '
-                    error_msg += 'Please try again or enter a topic manually.'
+                    error_msg += 'Please try again or enter a topic manually to generate questions.'
                     flash(error_msg, 'error')
                     # Clean up temp files
                     import os
@@ -3817,11 +3685,7 @@ def submit_quiz():
         passed = percentage >= 60
         final_score = f"{scored_marks:.1f}/{total_marks} marks"
     else:
-        total_questions = len(questions)
-        if total_questions > 0:
-            percentage = (correct_answers / total_questions) * 100
-        else:
-            percentage = 0
+        percentage = (correct_answers / len(questions)) * 100 if questions else 0
         passed = percentage >= 60
         final_score = f"{correct_answers}/{len(questions)}"
 
@@ -4439,122 +4303,174 @@ def init_db():
             db.create_all()
             
             # Check database type - PostgreSQL has information_schema, SQLite doesn't
-            # Check database type
             is_sqlite = 'sqlite' in app.config.get('SQLALCHEMY_DATABASE_URI', '').lower()
-            migration_logs = []
-
-            # Master schema mapping for migration
-            master_schema = {
-                'user': {
-                    'role': "VARCHAR(20) DEFAULT 'student'",
-                    'is_admin': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'last_login': 'TIMESTAMP' if not is_sqlite else 'DATETIME',
-                    'reset_token': 'VARCHAR(100)',
-                    'reset_token_expiry': 'TIMESTAMP' if not is_sqlite else 'DATETIME'
-                },
-                'quiz': {
-                    'difficulty': "VARCHAR(20) DEFAULT 'beginner'",
-                    'duration_minutes': 'INTEGER',
-                },
-                'quiz_question': {
-                    'options_json': 'TEXT',
-                    'answer': 'TEXT',
-                    'qtype': "VARCHAR(20) DEFAULT 'mcq'",
-                    'marks': 'INTEGER DEFAULT 1',
-                    'image_url': 'TEXT',
-                    'test_cases_json': 'TEXT',
-                    'language_constraints': 'TEXT',
-                    'time_limit_seconds': 'INTEGER',
-                    'memory_limit_mb': 'INTEGER',
-                    'sample_input': 'TEXT',
-                    'sample_output': 'TEXT',
-                    'starter_code': 'TEXT'
-                },
-                'quiz_submission': {
-                    'score': 'FLOAT DEFAULT 0.0',
-                    'total': 'FLOAT DEFAULT 0.0',
-                    'percentage': 'FLOAT DEFAULT 0.0',
-                    'passed': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'submitted_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' if not is_sqlite else 'DATETIME',
-                    'review_unlocked_at': 'TIMESTAMP' if not is_sqlite else 'DATETIME',
-                    'fullscreen_exit_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'alt_tab_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'win_shift_s_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'win_prtscn_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'prtscn_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'full_screen_exit_count': 'INTEGER DEFAULT 0',
-                    'tab_switch_count': 'INTEGER DEFAULT 0',
-                    'total_breaches': 'INTEGER DEFAULT 0',
-                    'is_flagged_cheating': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'is_flagged_cheating': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'answered_count': 'INTEGER DEFAULT 0',
-                    'question_count': 'INTEGER DEFAULT 0',
-                    'is_full_completion': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0',
-                    'started_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP' if not is_sqlite else 'DATETIME',
-                    'completed': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0'
-                },
-                'quiz_answer': {
-                    'code_language': 'VARCHAR(20)',
-                    'test_results_json': 'TEXT',
-                    'passed_test_cases': 'INTEGER DEFAULT 0',
-                    'total_test_cases': 'INTEGER DEFAULT 0'
-                },
-                'proctoring_snapshot': {
-                    'breach_log': 'TEXT',
-                    'is_red_flag': 'BOOLEAN DEFAULT FALSE' if not is_sqlite else 'BOOLEAN DEFAULT 0'
-                },
-                'login_history': {
-                    'latitude': 'FLOAT',
-                    'longitude': 'FLOAT',
-                    'city': 'VARCHAR(100)',
-                    'country': 'VARCHAR(100)',
-                    'region': 'VARCHAR(100)',
-                    'ip_address': 'VARCHAR(45)',
-                    'user_agent': 'VARCHAR(255)'
-                }
-            }
-
-            from sqlalchemy import text
-            for table, cols in master_schema.items():
+            
+            # For PostgreSQL, check and add columns if needed
+            if not is_sqlite:
+                # Check if we need to add the role column to existing user table
                 try:
-                    # Table name quoting for PostgreSQL (reserved words like 'user')
-                    table_quoted = f'"{table}"' if not is_sqlite else table
-                    
-                    if not is_sqlite:
-                        # PostgreSQL: Get actual columns
-                        check_query = text(f"SELECT column_name FROM information_schema.columns WHERE table_name=:table")
-                        result = db.session.execute(check_query, {"table": table})
-                        existing_cols = [row[0].lower() for row in result.fetchall()]
-                        
-                        if not existing_cols:
-                            migration_logs.append(f"Table {table} does not exist in information_schema, skipping column check.")
-                            continue
-
-                        for col, defn in cols.items():
-                            if col.lower() not in existing_cols:
-                                migration_logs.append(f"Adding column {col} to {table}...")
-                                db.session.execute(text(f"ALTER TABLE {table_quoted} ADD COLUMN {col} {defn}"))
-                                db.session.commit()
-                                migration_logs.append(f"✅ Added {col}")
-                    else:
-                        # SQLite: Get actual columns
-                        res = db.session.execute(text(f"PRAGMA table_info({table});"))
-                        existing_cols = [row[1].lower() for row in res.fetchall()]
-                        
-                        for col, defn in cols.items():
-                            if col.lower() not in existing_cols:
-                                migration_logs.append(f"Adding column {col} to {table}...")
-                                sq_defn = defn.replace('TIMESTAMP', 'DATETIME').replace('VARCHAR(20)', 'VARCHAR').replace('VARCHAR(100)', 'VARCHAR').replace('VARCHAR(255)', 'VARCHAR').replace('VARCHAR(45)', 'VARCHAR')
-                                db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {sq_defn}"))
-                                db.session.commit()
-                                migration_logs.append(f"✅ Added {col}")
-                                
+                    from sqlalchemy import text
+                    # Check if role column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='role'"))
+                    if not result.fetchone():
+                        # Add role column if it doesn't exist
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN role VARCHAR(20) DEFAULT 'student'"))
+                        db.session.commit()
+                        print("Added role column to user table")
                 except Exception as e:
-                    migration_logs.append(f"❌ Error migrating {table}: {str(e)}")
-
-            print("\n".join(migration_logs))
-            db.create_all() # Final safety check
-            return migration_logs
+                    print(f"Role column check/add failed (may already exist): {e}")
+            
+                # Check if we need to update password_hash column length
+                try:
+                    from sqlalchemy import text
+                    # Check current password_hash column length
+                    result = db.session.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name='user' AND column_name='password_hash'"))
+                    row = result.fetchone()
+                    if row and row[0] < 255:
+                        # Update password_hash column to be longer
+                        db.session.execute(text("ALTER TABLE \"user\" ALTER COLUMN password_hash TYPE VARCHAR(255)"))
+                        db.session.commit()
+                        print("Updated password_hash column length to 255")
+                except Exception as e:
+                    print(f"Password hash column update failed (may already be correct): {e}")
+                
+                # Check if is_admin column exists, if not add it
+                try:
+                    from sqlalchemy import text
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='is_admin'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added is_admin column to user table")
+                except Exception as e:
+                    print(f"is_admin column check/add failed (may already exist): {e}")
+                
+                # Check if last_login column exists, if not add it
+                try:
+                    from sqlalchemy import text
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='last_login'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN last_login TIMESTAMP"))
+                        db.session.commit()
+                        print("Added last_login column to user table")
+                except Exception as e:
+                    print(f"last_login column check/add failed (may already exist): {e}")
+                
+                # Check if reset_token column exists, if not add it
+                try:
+                    from sqlalchemy import text
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token VARCHAR(100) UNIQUE"))
+                        db.session.commit()
+                        print("Added reset_token column to user table")
+                except Exception as e:
+                    print(f"reset_token column check/add failed (may already exist): {e}")
+                
+                # Check if reset_token_expiry column exists, if not add it
+                try:
+                    from sqlalchemy import text
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name='reset_token_expiry'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE \"user\" ADD COLUMN reset_token_expiry TIMESTAMP"))
+                        db.session.commit()
+                        print("Added reset_token_expiry column to user table")
+                except Exception as e:
+                    print(f"reset_token_expiry column check/add failed (may already exist): {e}")
+                
+                # Check and add violation flag columns to quiz_submission table (PostgreSQL)
+                try:
+                    from sqlalchemy import text
+                    # Check if alt_tab_flag column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='alt_tab_flag'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN alt_tab_flag BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added alt_tab_flag column to quiz_submission table")
+                    
+                    # Check if win_shift_s_flag column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='win_shift_s_flag'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_shift_s_flag BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added win_shift_s_flag column to quiz_submission table")
+                    
+                    # Check if win_prtscn_flag column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='win_prtscn_flag'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_prtscn_flag BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added win_prtscn_flag column to quiz_submission table")
+                    
+                    # Check if prtscn_flag column exists
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='prtscn_flag'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN prtscn_flag BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added prtscn_flag column to quiz_submission table")
+                    for col, defn in [('device_fingerprint','VARCHAR(512)'),('marked_as_cheating','BOOLEAN DEFAULT FALSE'),('proctor_notes','TEXT')]:
+                        result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_submission' AND column_name='"+col+"'"))
+                        if not result.fetchone():
+                            db.session.execute(text("ALTER TABLE quiz_submission ADD COLUMN "+col+" "+defn))
+                            db.session.commit()
+                            print("Added "+col+" to quiz_submission")
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz_question' AND column_name='image_url'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz_question ADD COLUMN image_url TEXT"))
+                        db.session.commit()
+                        print("Added image_url to quiz_question")
+                except Exception as e:
+                    print(f"Violation flag columns check/add failed (may already exist): {e}")
+            else:
+                # For SQLite, we need to manually add columns to existing tables
+                try:
+                    from sqlalchemy import text
+                    with db.engine.begin() as conn:
+                        # Check quiz_submission table columns
+                        res = conn.execute(text("PRAGMA table_info(quiz_submission);"))
+                        cols = [str(r[1]) for r in res]
+                        
+                        # Add violation flag columns if missing
+                        if 'alt_tab_flag' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN alt_tab_flag BOOLEAN DEFAULT 0;"))
+                            print("✅ Added alt_tab_flag column to quiz_submission")
+                        if 'win_shift_s_flag' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_shift_s_flag BOOLEAN DEFAULT 0;"))
+                            print("✅ Added win_shift_s_flag column to quiz_submission")
+                        if 'win_prtscn_flag' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN win_prtscn_flag BOOLEAN DEFAULT 0;"))
+                            print("✅ Added win_prtscn_flag column to quiz_submission")
+                        if 'prtscn_flag' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN prtscn_flag BOOLEAN DEFAULT 0;"))
+                            print("✅ Added prtscn_flag column to quiz_submission")
+                        if 'device_fingerprint' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN device_fingerprint VARCHAR(512);"))
+                            print("✅ Added device_fingerprint to quiz_submission")
+                        if 'marked_as_cheating' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN marked_as_cheating BOOLEAN DEFAULT 0;"))
+                            print("✅ Added marked_as_cheating to quiz_submission")
+                        if 'proctor_notes' not in cols:
+                            conn.execute(text("ALTER TABLE quiz_submission ADD COLUMN proctor_notes TEXT;"))
+                            print("✅ Added proctor_notes to quiz_submission")
+                        res2 = conn.execute(text("PRAGMA table_info(quiz_question);"))
+                        qcols = [str(r[1]) for r in res2]
+                        if 'image_url' not in qcols:
+                            conn.execute(text("ALTER TABLE quiz_question ADD COLUMN image_url TEXT;"))
+                            print("✅ Added image_url to quiz_question")
+                except Exception as e:
+                    print(f"SQLite migration check failed (may already exist): {e}")
+                
+                print("Using SQLite database - all tables created by db.create_all()")
+            
+            # Create login_history table if it doesn't exist
+            try:
+                db.create_all()
+                print("Created login_history table if it didn't exist")
+            except Exception as e:
+                print(f"Login history table creation failed (may already exist): {e}")
+            
+            print("Database tables created successfully!")
+            print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")
     except Exception as e:
         print(f"Database initialization error: {str(e)}")
         # Continue running the app even if database fails
@@ -4570,15 +4486,28 @@ def initialize_on_first_request():
         print(f"Warning: Database initialization failed: {e}")
         # Don't crash - continue without initialization
 
+# Ensure migrations/db init actually runs in serverless (Flask 3 removed before_first_request)
+_db_initialized = False
+
+@app.before_request
+def _ensure_db_initialized():
+    global _db_initialized
+    if _db_initialized:
+        return
+    initialize_on_first_request()
+    _db_initialized = True
+
+# For Vercel/serverless: Don't initialize at import time
+# Initialize will happen on first request via @app.before_first_request or similar
 if os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'):
-    # Serverless/Production: Hook into before_request (handled by initialize_on_first_request_hook above)
+    # Serverless: Initialize lazily
     pass
 else:
-    # Local: Initialize immediately on startup
+    # Local: Initialize immediately
     try:
         init_db()
     except Exception as e:
-        print(f"Warning: Local database initialization failed: {e}")
+        print(f"Warning: Database initialization failed: {e}")
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
@@ -4590,3 +4519,4 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
 
 # Deployment trigger - commit 82835ee reverted to stable state
+

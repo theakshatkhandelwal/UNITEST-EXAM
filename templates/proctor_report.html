@@ -1,216 +1,77 @@
 {% extends "base.html" %}
-
-{% block title %}Proctor Report - {{ student.username }}{% endblock %}
-
+{% block title %}Proctoring Report - {{ quiz.title }}{% endblock %}
 {% block content %}
-<div class="container py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="mb-1 text-white">Proctoring Report: {{ student.username }}</h2>
-            <p class="text-muted mb-0">Quiz: {{ quiz.title }} | Code: {{ quiz.code }}</p>
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0">PROCTORING REPORT</h2>
+    <a class="btn btn-outline-secondary" href="{{ url_for('teacher_quiz_results', code=quiz.code) }}"><i class="fas fa-arrow-left me-1"></i>Back to Results</a>
+  </div>
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card" style="background:#1e1e1e;border:1px solid #3e3e42;">
+        <div class="card-body">
+          <h5 class="text-white mb-3">Student & Quiz</h5>
+          <p class="text-secondary mb-1"><strong>Student:</strong> {{ student.username if student else 'N/A' }}</p>
+          <p class="text-secondary mb-1"><strong>Quiz:</strong> {{ quiz.title }} [{{ quiz.code }}]</p>
+          <p class="text-secondary mb-1"><strong>Start:</strong> {{ submission.started_at.strftime('%d %B %Y | %I:%M %p') if submission.started_at else 'N/A' }}</p>
+          <p class="text-secondary mb-1"><strong>End:</strong> {{ submission.submitted_at.strftime('%d %B %Y | %I:%M %p') if submission.submitted_at else 'N/A' }}</p>
+          <p class="text-secondary mb-3"><strong>Completed:</strong> {{ 'Yes' if submission.completed else 'No' }}</p>
+          <h6 class="text-white mt-3 mb-2">Red Flags: <span class="badge {% if total_breaches > 0 %}bg-danger{% else %}bg-success{% endif %}">{{ total_breaches }}</span></h6>
+          {% if submission.marked_as_cheating %}<span class="badge bg-dark">Marked as Cheating</span>{% endif %}
+          <div class="mt-3">
+            <form method="POST" action="{{ url_for('teacher_proctor_report_action', code=quiz.code, submission_id=submission.id) }}" class="d-inline">
+              <input type="hidden" name="action" value="{% if submission.marked_as_cheating %}unmark_cheating{% else %}mark_cheating{% endif %}">
+              <button type="submit" class="btn btn-sm {% if submission.marked_as_cheating %}btn-outline-warning{% else %}btn-warning{% endif %}">{% if submission.marked_as_cheating %}Unmark{% else %}Mark as Cheating{% endif %}</button>
+            </form>
+            <form method="POST" action="{{ url_for('teacher_proctor_report_action', code=quiz.code, submission_id=submission.id) }}" class="d-inline ms-2">
+              <input type="hidden" name="action" value="add_note">
+              <input type="text" name="proctor_note" class="form-control form-control-sm d-inline-block" style="width:180px" placeholder="Add note">
+              <button type="submit" class="btn btn-sm btn-outline-secondary">Add</button>
+            </form>
+          </div>
+          {% if submission.proctor_notes %}<div class="small text-secondary mt-2"><strong>Notes:</strong><pre class="mb-0">{{ submission.proctor_notes }}</pre></div>{% endif %}
+          <h6 class="text-white mt-4 mb-2">Breach Log</h6>
+          <select id="breachFilter" class="form-select form-select-sm mb-2" style="max-width:220px">
+            <option value="">All ({{ breaches|length }})</option>
+            {% for btype, count in breach_counts.items() %}<option value="{{ btype }}">{{ btype }} ({{ count }})</option>{% endfor %}
+          </select>
+          <div class="overflow-auto" style="max-height:220px">
+            {% for b in breaches %}
+            <div class="breach-row border-bottom border-secondary py-2 small" data-breach-type="{{ b.breach_type }}">
+              <span class="badge bg-danger me-2">Event</span>{{ b.breach_type }} — {{ b.occurred_at.strftime('%d %B %Y | %I:%M %p') }}
+            </div>
+            {% endfor %}
+            {% if not breaches %}<p class="text-secondary small mb-0">No breaches recorded.</p>{% endif %}
+          </div>
         </div>
-        <div>
-            <a href="{{ url_for('teacher_quiz_results', code=quiz.code) }}" class="btn btn-outline-light">
-                <i class="fas fa-arrow-left me-2"></i>Back to Results
-            </a>
-        </div>
+      </div>
     </div>
-
-    <div class="row g-4">
-        <!-- Summary Stats -->
-        <div class="col-md-4">
-            <div class="card bg-dark border-secondary h-100">
-                <div class="card-header border-secondary bg-dark">
-                    <h5 class="mb-0 text-white"><i class="fas fa-shield-alt me-2 text-primary"></i>Integrity Summary
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-4 text-center">
-                        {% if submission.is_flagged_cheating %}
-                        <div class="badge bg-danger p-3 rounded-pill mb-2">
-                            <h4 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>FLAGGED AS CHEATING</h4>
-                        </div>
-                        {% elif submission.total_breaches > 10 or submission.full_screen_exit_count > 1 %}
-                        <div class="badge bg-warning text-dark p-3 rounded-pill mb-2">
-                            <h4 class="mb-0"><i class="fas fa-exclamation-circle me-2"></i>SUSPICIOUS ACTIVITY</h4>
-                        </div>
-                        {% else %}
-                        <div class="badge bg-success p-3 rounded-pill mb-2">
-                            <h4 class="mb-0"><i class="fas fa-check-circle me-2"></i>CLEAN SESSION</h4>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    <ul class="list-group list-group-flush bg-transparent">
-                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
-                            <span>Total Breaches:</span>
-                            <span
-                                class="fw-bold {{ 'text-danger' if submission.total_breaches > 0 else 'text-success' }}">{{
-                                submission.total_breaches }}</span>
-                        </li>
-                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
-                            <span>Fullscreen Exits:</span>
-                            <span
-                                class="fw-bold {{ 'text-danger' if submission.full_screen_exit_count > 0 else 'text-success' }}">{{
-                                submission.full_screen_exit_count }}</span>
-                        </li>
-                        <li class="list-group-item bg-transparent text-light d-flex justify-content-between">
-                            <span>Tab Switches:</span>
-                            <span
-                                class="fw-bold {{ 'text-danger' if submission.tab_switch_count > 0 else 'text-success' }}">{{
-                                submission.tab_switch_count }}</span>
-                        </li>
-                    </ul>
-
-                    <div class="mt-4">
-                        <button id="markCheatingBtn"
-                            class="btn {{ 'btn-success' if submission.is_flagged_cheating else 'btn-danger' }} w-100"
-                            onclick="toggleCheating({{ submission.id }}, {{ 'false' if submission.is_flagged_cheating else 'true' }})">
-                            <i
-                                class="fas {{ 'fa-undo' if submission.is_flagged_cheating else 'fa-user-slash' }} me-2"></i>
-                            {{ 'Mark as Clean' if submission.is_flagged_cheating else 'Mark as Cheating' }}
-                        </button>
-                    </div>
-                </div>
+    <div class="col-lg-7">
+      <div class="card" style="background:#1e1e1e;border:1px solid #3e3e42;">
+        <div class="card-header"><h5 class="text-white mb-0">Snapshots (Screen & Webcam)</h5></div>
+        <div class="card-body">
+          {% if not snapshots %}<p class="text-secondary">No snapshots recorded.</p>
+          {% else %}
+          <div class="row g-3">
+            {% for snap in snapshots %}
+            <div class="col-12 col-md-6">
+              <div class="border rounded p-2" style="background:#252526">
+                <div class="small text-secondary mb-1">{{ snap.captured_at.strftime('%d %B %Y | %I:%M:%S') }} — {{ snap.snapshot_type }}</div>
+                {% if snap.image_data %}<img src="{{ snap.image_data }}" alt="Snapshot" class="img-fluid rounded" style="max-height:200px;object-fit:contain">{% else %}<div class="rounded bg-dark text-secondary d-flex align-items-center justify-content-center" style="height:150px">No image</div>{% endif %}
+              </div>
             </div>
+            {% endfor %}
+          </div>
+          {% endif %}
         </div>
-
-        <!-- Violation Log -->
-        <div class="col-md-8">
-            <div class="card bg-dark border-secondary">
-                <div class="card-header border-secondary bg-dark">
-                    <h5 class="mb-0 text-white"><i class="fas fa-clipboard-list me-2 text-warning"></i>Detected Red
-                        Flags</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row g-2">
-                        <div class="col-12">
-                            <div class="alert alert-info bg-dark border-info text-info mb-0"
-                                style="background: #1a2a3a; border-left: 4px solid #00bcd4;">
-                                <i class="fas fa-info-circle me-2"></i>
-                                Detailed violation flags are currently restricted to core breaches (Fullscreen, Tab
-                                Switching). Visual evidence is available in the timeline below.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card bg-dark border-secondary mt-4">
-                <div class="card-header border-secondary bg-dark">
-                    <h5 class="mb-0 text-white"><i class="fas fa-camera me-2 text-info"></i>Visual Timeline</h5>
-                </div>
-                <div class="card-body">
-                    {% if snapshots %}
-                    <div id="snapshotCarousel" class="carousel slide" data-bs-ride="false">
-                        <div class="carousel-inner">
-                            {% for s in snapshots %}
-                            <div class="carousel-item {{ 'active' if loop.first else '' }}">
-                                <div class="snapshot-container text-center bg-black rounded overflow-hidden"
-                                    style="max-height: 500px;">
-                                    <img src="{{ url_for('static', filename=s.image_path) }}" class="img-fluid"
-                                        alt="Snapshot">
-                                    <div class="snapshot-overlay p-2 bg-dark text-light border-top border-secondary">
-                                        <div class="d-flex justify-content-between small">
-                                            <span><i class="fas fa-clock me-1"></i>{{ s.timestamp.strftime('%H:%M:%S')
-                                                }}</span>
-                                            <span><i
-                                                    class="fas {{ 'fa-video' if s.snapshot_type == 'webcam' else 'fa-desktop' }} me-1"></i>{{
-                                                s.snapshot_type|upper }}</span>
-                                            {% if s.is_red_flag %}
-                                            <span class="text-danger fw-bold"><i class="fas fa-flag me-1"></i>RED
-                                                FLAG</span>
-                                            {% endif %}
-                                        </div>
-                                        {% if s.breach_log %}
-                                        <div class="mt-1 text-warning small">
-                                            <strong>Breaches:</strong> {{ s.breach_log }}
-                                        </div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <button class="carousel-control-prev" type="button" data-bs-target="#snapshotCarousel"
-                            data-bs-slide="prev">
-                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                            <span class="visually-hidden">Previous</span>
-                        </button>
-                        <button class="carousel-control-next" type="button" data-bs-target="#snapshotCarousel"
-                            data-bs-slide="next">
-                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                            <span class="visually-hidden">Next</span>
-                        </button>
-                    </div>
-
-                    <div class="snapshot-thumbnails mt-3 d-flex overflow-auto pb-2" style="gap: 10px;">
-                        {% for s in snapshots %}
-                        <div class="thumbnail border {{ 'border-danger' if s.is_red_flag else 'border-secondary' }} rounded cursor-pointer"
-                            onclick="bootstrap.Carousel.getOrCreateInstance('#snapshotCarousel').to({{ loop.index0 }})"
-                            style="min-width: 80px; height: 60px; overflow: hidden; opacity: 0.7; transition: 0.2s;"
-                            onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">
-                            <img src="{{ url_for('static', filename=s.image_path) }}" class="w-100 h-100"
-                                style="object-fit: cover;">
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% else %}
-                    <div class="text-center py-5 text-muted">
-                        <i class="fas fa-image fa-3x mb-3"></i>
-                        <p>No snapshots captured for this session.</p>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+      </div>
     </div>
+  </div>
 </div>
-
 <script>
-    function toggleCheating(submissionId, isCheating) {
-        if (confirm(isCheating ? "Mark this student as cheating? This will flag their submission." : "Revert this submission to clean status?")) {
-            fetch(`/proctor/mark_cheating/${submissionId}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_cheating: isCheating })
-            }).then(res => res.json()).then(data => {
-                if (data.success) location.reload();
-            });
-        }
-    }
+document.getElementById('breachFilter').addEventListener('change', function(){
+  var f = this.value;
+  document.querySelectorAll('.breach-row').forEach(function(r){ r.style.display = (!f || r.getAttribute('data-breach-type')===f) ? '' : 'none'; });
+});
 </script>
-
-<style>
-    .bg-dark {
-        background-color: #121212 !important;
-    }
-
-    .card {
-        border-radius: 12px;
-    }
-
-    .snapshot-container {
-        min-height: 300px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-
-    .snapshot-overlay {
-        background: rgba(0, 0, 0, 0.8) !important;
-    }
-
-    .cursor-pointer {
-        cursor: pointer;
-    }
-
-    .bg-danger-subtle {
-        background-color: rgba(220, 53, 69, 0.1) !important;
-    }
-
-    .bg-success-subtle {
-        background-color: rgba(25, 135, 84, 0.1) !important;
-    }
-</style>
 {% endblock %}

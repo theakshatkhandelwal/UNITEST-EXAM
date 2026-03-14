@@ -14,30 +14,20 @@
 
   <div class="card mb-3">
     <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
-      <div>
-        <strong>Download Results:</strong>
-      </div>
-      <div class="d-flex gap-2">
-        <a href="{{ url_for('download_quiz_results', code=quiz.code, format='csv') }}" class="btn btn-sm btn-primary">
-          <i class="fas fa-file-csv me-1"></i>CSV
-        </a>
-        <a href="{{ url_for('download_quiz_results', code=quiz.code, format='xlsx') }}" class="btn btn-sm btn-success">
-          <i class="fas fa-file-excel me-1"></i>Excel
-        </a>
-      </div>
-      <div class="ms-auto">
-        <label for="sort-by" class="me-1 mb-0"><strong>Sort by:</strong></label>
-        <select id="sort-by" class="form-select form-select-sm d-inline-block" style="width: 220px;" onchange="sortResults(this.value)">
-          <option value="date-desc">Date (Newest First)</option>
-          <option value="date-asc">Date (Oldest First)</option>
-          <option value="score-desc">Score (Highest First)</option>
-          <option value="score-asc">Score (Lowest First)</option>
-          <option value="percentage-desc">Percentage (Highest First)</option>
-          <option value="percentage-asc">Percentage (Lowest First)</option>
-          <option value="name-asc">Student Name A–Z</option>
-          <option value="name-desc">Student Name Z–A</option>
-        </select>
-      </div>
+      <strong>Download:</strong>
+      <a href="{{ url_for('download_quiz_results', code=quiz.code, format='csv') }}" class="btn btn-sm btn-primary"><i class="fas fa-file-csv me-1"></i>CSV</a>
+      <a href="{{ url_for('download_quiz_results', code=quiz.code, format='xlsx') }}" class="btn btn-sm btn-success"><i class="fas fa-file-excel me-1"></i>Excel</a>
+      <label for="sort-by" class="mb-0 me-1"><strong>Sort:</strong></label>
+      <select id="sort-by" class="form-select form-select-sm d-inline-block" style="width:200px" onchange="sortResults(this.value)">
+        <option value="date-desc">Date (Newest)</option>
+        <option value="date-asc">Date (Oldest)</option>
+        <option value="score-desc">Score (Highest)</option>
+        <option value="score-asc">Score (Lowest)</option>
+        <option value="percentage-desc">% (Highest)</option>
+        <option value="percentage-asc">% (Lowest)</option>
+        <option value="name-asc">Name A–Z</option>
+        <option value="name-desc">Name Z–A</option>
+      </select>
     </div>
   </div>
 
@@ -52,24 +42,17 @@
               <th>Score</th>
               <th>Percentage</th>
               <th>Status</th>
+              <th>Integrity</th>
               <th>Submitted At</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {% for s in submissions %}
-            <tr class="result-row"
-                data-date="{{ s.submitted_at.timestamp() if s.submitted_at else 0 }}"
-                data-score="{{ s.score }}"
-                data-percentage="{{ s.percentage }}"
-                data-student="{{ student_map.get(s.student_id).username if student_map.get(s.student_id) else s.student_id }}">
+            <tr class="result-row" data-date="{{ s.submitted_at.timestamp() if s.submitted_at else 0 }}" data-score="{{ s.score }}" data-percentage="{{ s.percentage }}" data-student="{{ student_map.get(s.student_id).username if student_map.get(s.student_id) else s.student_id }}">
               <td>{{ student_map.get(s.student_id).username if student_map.get(s.student_id) else s.student_id }}</td>
-              <td><strong>{{ '%.1f'|format(s.score) }}/{{ '%.1f'|format(s.total) }}</strong></td>
-              <td>
-                <span class="badge {% if s.percentage >= 70 %}bg-success{% else %}bg-danger{% endif %}">
-                  {{ '%.1f'|format(s.percentage) }}%
-                </span>
-              </td>
+              <td>{{ '%.1f'|format(s.score) }}/{{ '%.1f'|format(s.total) }}</td>
+              <td>{{ '%.0f'|format(s.percentage) }}%</td>
               <td>
                 {% if s.passed %}
                   <span class="badge bg-success">Passed</span>
@@ -77,14 +60,30 @@
                   <span class="badge bg-danger">Failed</span>
                 {% endif %}
               </td>
-              <td>{{ s.submitted_at.strftime('%Y-%m-%d %H:%M') if s.submitted_at else 'N/A' }}</td>
+              <td>
+                {% if s.is_full_completion %}
+                  <span class="badge bg-success" title="Completed all questions in fullscreen">✅ Clean</span>
+                {% else %}
+                  <span class="badge bg-warning" title="Partial/Violation detected">⏸ Hold</span>
+                  <div class="small text-muted">Answered: {{ s.answered_count }}/{{ s.question_count }}</div>
+                  {% if s.fullscreen_exit_flag or s.alt_tab_flag or s.win_shift_s_flag or s.win_prtscn_flag or s.prtscn_flag %}
+                    <div class="small text-danger mt-1">
+                      <strong>Violations:</strong>
+                      {% if s.fullscreen_exit_flag %}<div>⚠️ Exited fullscreen</div>{% endif %}
+                      {% if s.alt_tab_flag %}<div>⚠️ Alt+Tab / Tab switch detected</div>{% endif %}
+                      {% if s.win_shift_s_flag %}<div>⚠️ Screenshot taken (Win+Shift+S)</div>{% endif %}
+                      {% if s.win_prtscn_flag %}<div>⚠️ Screenshot taken (Win+PrintScreen)</div>{% endif %}
+                      {% if s.prtscn_flag %}<div>⚠️ Screenshot taken (PrintScreen)</div>{% endif %}
+                    </div>
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td>{{ s.submitted_at.strftime('%Y-%m-%d %H:%M') }}</td>
               <td>
                 {% if s.completed %}
-                  <a href="{{ url_for('teacher_proctor_report', code=quiz.code, submission_id=s.id) }}" class="btn btn-sm btn-outline-primary me-1">
-                    <i class="fas fa-video me-1"></i>Proctor Report
-                  </a>
-                  <form method="POST" action="{{ url_for('allow_student_retake', code=quiz.code, submission_id=s.id) }}" style="display: inline;" onsubmit="return confirm('Allow this student to retake the quiz? This will reset their submission.');">
-                    <button type="submit" class="btn btn-sm btn-warning">
+                  <a href="{{ url_for('teacher_proctor_report', code=quiz.code, submission_id=s.id) }}" class="btn btn-sm btn-outline-primary me-1"><i class="fas fa-video me-1"></i>Proctor Report</a>
+                  <form method="POST" action="{{ url_for('allow_student_retake', code=quiz.code, submission_id=s.id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to allow this student to retake the quiz? This will reset their submission.');">
+                    <button type="submit" class="btn btn-sm btn-warning" title="Allow student to retake the quiz">
                       <i class="fas fa-redo me-1"></i>Allow Retake
                     </button>
                   </form>
@@ -103,44 +102,31 @@
     </div>
   </div>
 </div>
-
 <script>
 function sortResults(sortBy) {
-  const table = document.getElementById('results-table');
-  if (!table) return;
-  const rows = Array.from(table.querySelectorAll('tbody tr'));
-
-  rows.sort((a, b) => {
-    let aVal, bVal;
-    switch (sortBy) {
-      case 'date-desc':
-        aVal = parseFloat(b.dataset.date); bVal = parseFloat(a.dataset.date); break;
-      case 'date-asc':
-        aVal = parseFloat(a.dataset.date); bVal = parseFloat(b.dataset.date); break;
-      case 'score-desc':
-        aVal = parseFloat(b.dataset.score); bVal = parseFloat(a.dataset.score); break;
-      case 'score-asc':
-        aVal = parseFloat(a.dataset.score); bVal = parseFloat(b.dataset.score); break;
-      case 'percentage-desc':
-        aVal = parseFloat(b.dataset.percentage); bVal = parseFloat(a.dataset.percentage); break;
-      case 'percentage-asc':
-        aVal = parseFloat(a.dataset.percentage); bVal = parseFloat(b.dataset.percentage); break;
-      case 'name-asc':
-        aVal = (a.dataset.student || '').toLowerCase(); bVal = (b.dataset.student || '').toLowerCase(); break;
-      case 'name-desc':
-        aVal = (b.dataset.student || '').toLowerCase(); bVal = (a.dataset.student || '').toLowerCase(); break;
-      default:
-        return 0;
+  var t = document.getElementById('results-table');
+  if (!t) return;
+  var rows = Array.from(t.querySelectorAll('tbody tr'));
+  rows.sort(function(a, b) {
+    var av, bv;
+    switch(sortBy) {
+      case 'date-desc': av = parseFloat(b.dataset.date); bv = parseFloat(a.dataset.date); break;
+      case 'date-asc': av = parseFloat(a.dataset.date); bv = parseFloat(b.dataset.date); break;
+      case 'score-desc': av = parseFloat(b.dataset.score); bv = parseFloat(a.dataset.score); break;
+      case 'score-asc': av = parseFloat(a.dataset.score); bv = parseFloat(b.dataset.score); break;
+      case 'percentage-desc': av = parseFloat(b.dataset.percentage); bv = parseFloat(a.dataset.percentage); break;
+      case 'percentage-asc': av = parseFloat(a.dataset.percentage); bv = parseFloat(b.dataset.percentage); break;
+      case 'name-asc': av = (a.dataset.student || '').toLowerCase(); bv = (b.dataset.student || '').toLowerCase(); break;
+      case 'name-desc': av = (b.dataset.student || '').toLowerCase(); bv = (a.dataset.student || '').toLowerCase(); break;
+      default: return 0;
     }
-    if (aVal < bVal) return -1;
-    if (aVal > bVal) return 1;
-    return 0;
+    if (av < bv) return -1; if (av > bv) return 1; return 0;
   });
-
-  const tbody = table.querySelector('tbody');
-  tbody.innerHTML = '';
-  rows.forEach(row => tbody.appendChild(row));
+  var tb = t.querySelector('tbody');
+  tb.innerHTML = '';
+  rows.forEach(function(r){ tb.appendChild(r); });
 }
 </script>
 {% endblock %}
+
 

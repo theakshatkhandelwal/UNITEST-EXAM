@@ -118,7 +118,7 @@ function addQuestion(index) {
     <div class="mb-3">
       <label class="form-label">Image URL (optional)</label>
       <input type="url" class="form-control" name="question_${index}_image_url" placeholder="https://example.com/diagram.png">
-      <small class="form-text text-muted">Use this for diagrams, graphs, formulas (as images), etc.</small>
+      <small class="form-text text-muted">For diagrams, graphs, formulas (as images)</small>
     </div>
     
     <div class="mb-3">
@@ -251,9 +251,7 @@ document.getElementById('quizForm').addEventListener('submit', function(e) {
       type: type,
       marks: marks
     };
-    if (imageUrl) {
-      question.image_url = imageUrl;
-    }
+    if (imageUrl) question.image_url = imageUrl;
     
     if (type === 'mcq') {
       const options = [

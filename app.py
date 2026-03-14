@@ -1300,7 +1300,6 @@ Return output in valid JSON format ONLY (no explanations, no markdown):
     {{"question": "Explain the concept of AI and its applications", "answer": "Sample answer explaining AI...", "type": "subjective", "marks": 10}},
     ...
 ]"""
-            """
 
         response = model.generate_content(prompt)
 

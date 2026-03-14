@@ -1,72 +1,176 @@
 {% extends "base.html" %}
 
-{% block title %}Sign Up - UniTest{% endblock %}
-
 {% block content %}
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-6">
-            <div class="card shadow">
-                <div class="card-body p-5">
-                    <div class="text-center mb-4">
-                        <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
-                        <h2 class="fw-bold text-primary">Create Account</h2>
-                        <p class="text-muted">Join UniTest and start your AI-powered learning journey</p>
-                    </div>
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h1 class="auth-title">Create Your Account</h1>
+            <p class="auth-subtitle">Join UNITEST - AI-Powered Quiz Platform</p>
+        </div>
 
-                    <form method="POST">
-                        <div class="mb-3">
-                            <label for="username" class="form-label fw-bold">
-                                <i class="fas fa-user me-2"></i>Username
-                            </label>
-                            <input type="text" class="form-control" id="username" name="username" required>
-                        </div>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
 
-                        <div class="mb-3">
-                            <label for="email" class="form-label fw-bold">
-                                <i class="fas fa-envelope me-2"></i>Email
-                            </label>
-                            <input type="email" class="form-control" id="email" name="email" required>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="password" class="form-label fw-bold">
-                                <i class="fas fa-lock me-2"></i>Password
-                            </label>
-                            <input type="password" class="form-control" id="password" name="password" required>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="role" class="form-label fw-bold">
-                                <i class="fas fa-user-tag me-2"></i>Account Type
-                            </label>
-                            <select id="role" name="role" class="form-select">
-                                <option value="student" selected>Student</option>
-                                <option value="teacher">Teacher</option>
-                            </select>
-                        </div>
-
-                        <div class="mb-4">
-                            <label for="confirm_password" class="form-label fw-bold">
-                                <i class="fas fa-lock me-2"></i>Confirm Password
-                            </label>
-                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary w-100 btn-lg mb-3">
-                            <i class="fas fa-user-plus me-2"></i>Create Account
-                        </button>
-                    </form>
-
-                    <div class="text-center">
-                        <p class="text-muted mb-0">Already have an account?</p>
-                        <a href="{{ url_for('login') }}" class="text-primary text-decoration-none fw-bold">
-                            <i class="fas fa-sign-in-alt me-1"></i>Login here
-                        </a>
-                    </div>
-                </div>
+        <form method="POST" class="auth-form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required placeholder="Choose a username">
             </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required placeholder="your@email.com">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="Create a strong password">
+                <div id="strength-meter" style="display: none;">
+                    <div class="password-strength-meter">
+                        <div class="password-strength-bar"></div>
+                    </div>
+                    <div class="password-strength-text"></div>
+                </div>
+                <div id="strength-suggestions"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required placeholder="Confirm your password">
+            </div>
+
+            <div class="form-group">
+                <label for="role">I am a:</label>
+                <select id="role" name="role" required>
+                    <option value="student">Student</option>
+                    <option value="teacher">Teacher</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Sign Up</button>
+        </form>
+
+        <div class="auth-links">
+            Already have an account? <a href="{{ url_for('login') }}">Sign In</a>
         </div>
     </div>
 </div>
+
+<style>
+    .password-strength-meter {
+        height: 6px;
+        background-color: #e0e0e0;
+        border-radius: 3px;
+        margin: 10px 0;
+        overflow: hidden;
+    }
+    
+    .password-strength-bar {
+        height: 100%;
+        width: 0%;
+        transition: width 0.3s, background-color 0.3s;
+        border-radius: 3px;
+    }
+    
+    .strength-weak { background-color: #f44336; }
+    .strength-good { background-color: #ff9800; }
+    .strength-strong { background-color: #4caf50; }
+    
+    .password-strength-text {
+        font-size: 12px;
+        margin-bottom: 10px;
+        font-weight: 600;
+    }
+    
+    .strength-suggestions {
+        font-size: 12px;
+        color: #666;
+        margin-top: 8px;
+    }
+    
+    .suggestion-item {
+        display: flex;
+        align-items: center;
+        margin: 5px 0;
+    }
+    
+    .suggestion-item.met {
+        color: #4caf50;
+    }
+    
+    .suggestion-item.unmet {
+        color: #f44336;
+    }
+    
+    .suggestion-icon {
+        margin-right: 8px;
+        font-size: 14px;
+    }
+</style>
+
+<script>
+function checkPasswordStrength() {
+    const passwordInput = document.getElementById('password');
+    const password = passwordInput.value;
+    
+    if (!password) {
+        document.getElementById('strength-meter').style.display = 'none';
+        document.getElementById('strength-suggestions').innerHTML = '';
+        return;
+    }
+    
+    fetch('/api/check_password_strength', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password: password})
+    })
+    .then(r => r.json())
+    .then(data => {
+        const score = data.score;
+        const strength = data.strength;
+        
+        // Update strength meter
+        const meter = document.querySelector('.password-strength-bar');
+        const text = document.querySelector('.password-strength-text');
+        const width = (score / 5) * 100;
+        
+        meter.style.width = width + '%';
+        meter.className = 'password-strength-bar strength-' + strength.toLowerCase();
+        text.textContent = 'Strength: ' + strength;
+        
+        // Update suggestions
+        let suggestionsHtml = '<div class="strength-suggestions">';
+        
+        const checks = [
+            {text: 'At least 8 characters', met: password.length >= 8},
+            {text: 'Uppercase letter (A-Z)', met: /[A-Z]/.test(password)},
+            {text: 'Lowercase letter (a-z)', met: /[a-z]/.test(password)},
+            {text: 'Number (0-9)', met: /[0-9]/.test(password)},
+            {text: 'Special character (!@#$%)', met: /[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(password)}
+        ];
+        
+        checks.forEach(check => {
+            const className = check.met ? 'suggestion-item met' : 'suggestion-item unmet';
+            const icon = check.met ? '✓' : '○';
+            suggestionsHtml += `<div class="${className}"><span class="suggestion-icon">${icon}</span>${check.text}</div>`;
+        });
+        
+        suggestionsHtml += '</div>';
+        document.getElementById('strength-suggestions').innerHTML = suggestionsHtml;
+        document.getElementById('strength-meter').style.display = 'block';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const passwordInput = document.getElementById('password');
+    if (passwordInput) {
+        passwordInput.addEventListener('input', checkPasswordStrength);
+    }
+});
+</script>
 {% endblock %}

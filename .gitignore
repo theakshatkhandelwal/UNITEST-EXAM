@@ -1,9 +1,11 @@
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+env/
+venv/
+ENV/
 build/
 develop-eggs/
 dist/
@@ -16,15 +18,26 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual Environment
-venv/
-ENV/
-env/
+# Virtual environments
 .venv
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
 # Environment variables
 .env
@@ -35,50 +48,30 @@ env/
 *.db
 *.sqlite
 *.sqlite3
-unittest.db
-unittest_local.db
+instance/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Temporary files
+*.tmp
+*.log
+*.pot
+temp/
+tmp/
+
+# Node modules (if using any frontend build tools)
+node_modules/
+npm-debug.log
+yarn-error.log
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Flask
-instance/
-.webassets-cache
-
 # Testing
-.pytest_cache/
 .coverage
+.pytest_cache/
 htmlcov/
 
-# Logs
-*.log
-logs/
-
-# Temporary files
-*.tmp
-*.temp
-tmp/
-temp/
-
-# Local development files
-local_test/
-test_data/
-
-# Personal reference docs (not for repo)
-EXAM_PREP_DOC.md
-PROJECT_DIARY_ENTRIES.md
-PROJECT_REPORT_DESCRIPTIONS.md
-RESUME_PROJECT_DESCRIPTION.md
-TECH_STACK_EXPLANATION.md
-UNIQUE_FEATURES_ROADMAP.md
-VIVA_PREPARATION_GUIDE.md
-FEATURE_IMPLEMENTATION_PLAN.md
-GEMINI_API_MONITORING_GUIDE.md
+# Build artifacts
+build/
+dist/
+*.whl

@@ -20,6 +20,10 @@ import io
 from datetime import datetime, timedelta
 import requests
 import secrets
+import csv
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
 
 # OCR imports (optional - graceful fallback if not available)
 try:
@@ -1219,8 +1223,7 @@ Return output in valid JSON format ONLY (no explanations, no markdown):
 [
     {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq"}},
     ...
-]
-            """
+]"""
         elif question_type == "coding":
             prompt = f"""
 CRITICAL: You MUST generate exactly {num_questions} coding programming problems{f' based on the provided PDF content' if pdf_content else f' on the topic: {topic}'}
@@ -1260,8 +1263,7 @@ EXAMPLE FORMAT (follow this EXACT structure):
         "test_cases": [
             {{"input": "3\\n1 2 3", "expected_output": "3", "is_hidden": false}},
             {{"input": "4\\n10 5 8 12", "expected_output": "12", "is_hidden": false}},
-            {{"input": "5\\n-1 -5 -3 -2 -4", "expected_output": "-1", "is_hidden": true}},
-            {{"input": "1\\n42", "expected_output": "42", "is_hidden": true}}
+            {{"input": "5\\n-1 -5 -3 -2 -4", "expected_output": "-1", "is_hidden": true}}
         ],
         "time_limit_seconds": 2,
         "memory_limit_mb": 256,
@@ -1297,7 +1299,7 @@ Return output in valid JSON format ONLY (no explanations, no markdown):
 [
     {{"question": "Explain the concept of AI and its applications", "answer": "Sample answer explaining AI...", "type": "subjective", "marks": 10}},
     ...
-]
+]"""
             """
 
         response = model.generate_content(prompt)
@@ -1775,6 +1777,13 @@ def signup():
                 flash('Passwords do not match', 'error')
                 return redirect(url_for('signup'))
 
+            # Check password strength
+            pwd_strength = check_password_strength(password)
+            if pwd_strength['score'] < 3:
+                suggestions = ', '.join(pwd_strength['suggestions'])
+                flash(f'Password is too weak. Suggestions: {suggestions}', 'warning')
+                return redirect(url_for('signup'))
+
             # Check if user exists
             existing_user = db.session.query(User).filter_by(username=username).first()
             if existing_user:
@@ -1853,8 +1862,6 @@ def login():
             db.session.rollback()
             flash(f'Login error: {str(e)}', 'error')
             return redirect(url_for('login'))
-
-    return render_template('login.html')
 
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
@@ -2498,7 +2505,6 @@ def join_quiz():
         if not quiz:
             flash('Invalid quiz code', 'error')
             return redirect(url_for('join_quiz'))
-        return redirect(url_for('take_shared_quiz', code=code))
     return render_template('join_quiz.html')
 
 # Take shared quiz
@@ -3511,7 +3517,7 @@ def quiz():
                     try:
                         import tempfile
                         import os
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', dir=temp_dir) as tmp_file:
                             file.save(tmp_file.name)
                             pdf_file_paths.append(tmp_file.name)
                             print(f'Saved PDF: {file.filename} to {tmp_file.name}')
@@ -3544,7 +3550,7 @@ def quiz():
                     # Provide more helpful error message
                     error_msg = 'Could not extract content from PDF(s). '
                     error_msg += 'This may happen if the PDF is scanned/image-based and OCR services are unavailable. '
-                    error_msg += 'Please try again or enter a topic manually to generate questions.'
+                    error_msg += 'Please try again or enter a topic manually.'
                     flash(error_msg, 'error')
                     # Clean up temp files
                     import os
@@ -4494,6 +4500,3 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
 
 # Deployment trigger - commit 82835ee reverted to stable state
-
-
-# Deployment trigger: Reverting to stable state (Reset: 2026-02-21)

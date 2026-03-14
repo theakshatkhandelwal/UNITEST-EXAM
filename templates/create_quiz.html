@@ -116,6 +116,12 @@ function addQuestion(index) {
     </div>
     
     <div class="mb-3">
+      <label class="form-label">Image URL (optional)</label>
+      <input type="url" class="form-control" name="question_${index}_image_url" placeholder="https://example.com/diagram.png">
+      <small class="form-text text-muted">Use this for diagrams, graphs, formulas (as images), etc.</small>
+    </div>
+    
+    <div class="mb-3">
       <label class="form-label">Marks</label>
       <input type="number" class="form-control" name="question_${index}_marks" min="1" value="1" required>
     </div>
@@ -236,6 +242,7 @@ document.getElementById('quizForm').addEventListener('submit', function(e) {
     const type = formData.get(`question_${index}_type`);
     const text = formData.get(`question_${index}_text`);
     const marks = parseInt(formData.get(`question_${index}_marks`)) || 1;
+    const imageUrl = formData.get(`question_${index}_image_url`);
     
     if (!text) return; // Skip empty questions
     
@@ -244,6 +251,9 @@ document.getElementById('quizForm').addEventListener('submit', function(e) {
       type: type,
       marks: marks
     };
+    if (imageUrl) {
+      question.image_url = imageUrl;
+    }
     
     if (type === 'mcq') {
       const options = [

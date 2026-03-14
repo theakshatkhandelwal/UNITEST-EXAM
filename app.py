@@ -397,6 +397,8 @@ class QuizQuestion(db.Model):
     answer = db.Column(db.Text)  # For MCQ store letter like 'A'; for subjective can store sample answer (Text for long answers)
     qtype = db.Column(db.String(20), default='mcq')  # 'mcq', 'subjective', or 'coding'
     marks = db.Column(db.Integer, default=1)
+    # Optional image associated with the question (diagram, graph, formula screenshot, etc.)
+    image_url = db.Column(db.Text)
     # For coding questions
     test_cases_json = db.Column(db.Text)  # JSON array of test cases: [{"input": "...", "expected_output": "...", "is_hidden": false}]
     language_constraints = db.Column(db.Text)  # JSON array of allowed languages: ["python", "java", "cpp", "c"]
@@ -2054,7 +2056,7 @@ def teacher_create_quiz():
             quiz = Quiz(title=title, code=code, created_by=current_user.id)
             db.session.add(quiz)
             db.session.flush()  # get quiz.id
-
+            
             for q in questions:
                 qtype = q.get('type', 'mcq')
                 opts = q.get('options', []) if qtype == 'mcq' else []
@@ -2064,7 +2066,8 @@ def teacher_create_quiz():
                     options_json=json.dumps(opts) if opts else None,
                     answer=q.get('answer', ''),
                     qtype=qtype,
-                    marks=int(q.get('marks', 1))
+                    marks=int(q.get('marks', 1)),
+                    image_url=q.get('image_url')
                 )
                 db.session.add(qq)
 
@@ -2462,7 +2465,8 @@ def teacher_quiz_finalize():
                 options_json=json.dumps(opts) if opts else None,
                 answer=q.get('answer', ''),
                 qtype=qtype,
-                marks=int(q.get('marks', 1))
+                marks=int(q.get('marks', 1)),
+                image_url=q.get('image_url')
             )
             
             # Handle coding questions
@@ -2540,6 +2544,7 @@ def take_shared_quiz(code):
             'question': q.question,
             'qtype': q.qtype,
             'marks': q.marks,
+            'image_url': getattr(q, 'image_url', None),
             'options': options,
         }
         
@@ -2943,6 +2948,91 @@ def teacher_quiz_results(code):
     # Join with users
     student_map = {u.id: u for u in db.session.query(User).filter(User.id.in_([s.student_id for s in submissions])).all()}
     return render_template('teacher_results.html', quiz=quiz, submissions=submissions, student_map=student_map)
+
+# Teacher: download quiz results as CSV or Excel
+@app.route('/teacher/quiz/<code>/results/download/<format>')
+@login_required
+def download_quiz_results(code, format):
+    guard = require_teacher()
+    if guard:
+        return guard
+    quiz = db.session.query(Quiz).filter_by(code=code.upper(), created_by=current_user.id).first()
+    if not quiz:
+        flash('Quiz not found', 'error')
+        return redirect(url_for('dashboard'))
+
+    submissions = db.session.query(QuizSubmission).filter_by(quiz_id=quiz.id).order_by(QuizSubmission.submitted_at.desc()).all()
+    student_map = {u.id: u for u in db.session.query(User).filter(User.id.in_([s.student_id for s in submissions])).all()}
+
+    # Common rows
+    rows = []
+    header = ['Student', 'Score', 'Total', 'Percentage', 'Passed', 'Submitted At']
+    for s in submissions:
+        student = student_map.get(s.student_id)
+        name = student.username if student else f'ID {s.student_id}'
+        submitted_str = s.submitted_at.strftime('%Y-%m-%d %H:%M') if s.submitted_at else ''
+        rows.append([
+            name,
+            f'{s.score:.1f}',
+            f'{s.total:.1f}',
+            f'{s.percentage:.1f}',
+            'Yes' if s.passed else 'No',
+            submitted_str
+        ])
+
+    filename_base = f'{quiz.code}_results'
+    fmt = (format or 'csv').lower()
+
+    if fmt == 'xlsx':
+        # Build Excel file in memory using openpyxl
+        output = io.BytesIO()
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Results'
+
+        # Header
+        header_font = Font(bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='4F81BD', end_color='4F81BD', fill_type='solid')
+        for col_idx, col_name in enumerate(header, start=1):
+            cell = ws.cell(row=1, column=col_idx, value=col_name)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+
+        # Data rows
+        for row_idx, row in enumerate(rows, start=2):
+            for col_idx, value in enumerate(row, start=1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                if col_idx in (2, 3, 4):  # numeric columns
+                    cell.alignment = Alignment(horizontal='center')
+
+        # Autosize columns
+        for col_idx, col_name in enumerate(header, start=1):
+            column_letter = get_column_letter(col_idx)
+            max_length = max((len(str(col_name)),) + tuple(len(str(ws.cell(row=row_idx, column=col_idx).value or '')) for row_idx in range(2, len(rows) + 2)))
+            ws.column_dimensions[column_letter].width = max_length + 2
+
+        wb.save(output)
+        output.seek(0)
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=f'{filename_base}.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+    # Default: CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(header)
+    writer.writerows(rows)
+    csv_bytes = output.getvalue().encode('utf-8-sig')
+    return send_file(
+        io.BytesIO(csv_bytes),
+        as_attachment=True,
+        download_name=f'{filename_base}.csv',
+        mimetype='text/csv'
+    )
 
 # Student: view quiz result (after 15 minutes)
 @app.route('/quiz/result/<int:submission_id>')
@@ -4371,6 +4461,7 @@ def init_db():
                     'answer': 'TEXT',
                     'qtype': "VARCHAR(20) DEFAULT 'mcq'",
                     'marks': 'INTEGER DEFAULT 1',
+                    'image_url': 'TEXT',
                     'test_cases_json': 'TEXT',
                     'language_constraints': 'TEXT',
                     'time_limit_seconds': 'INTEGER',

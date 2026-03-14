@@ -87,7 +87,13 @@
             </div>
             {% endif %}
 
-            {% if q.qtype == 'mcq' %}
+              {% if q.image_url %}
+              <div class="mb-3 text-center">
+                <img src="{{ q.image_url }}" alt="Question image {{ loop.index }}" class="img-fluid rounded" style="max-height: 260px; object-fit: contain;">
+              </div>
+              {% endif %}
+              
+              {% if q.qtype == 'mcq' %}
             {% for opt in q.options %}
             <div class="form-check mb-2">
               <input class="form-check-input" type="radio" name="q_{{ q.id }}" value="{{ opt }}"
@@ -104,6 +110,11 @@
                 style="background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; overflow-y: auto; max-height: 600px;">
                 <div style="margin-bottom: 20px;">
                   <h4 style="color: #fff; margin-bottom: 10px;">Q{{ loop.index }}. {{ q.question }}</h4>
+                  {% if q.image_url %}
+                  <div class="mb-3 text-center">
+                    <img src="{{ q.image_url }}" alt="Question image {{ loop.index }}" class="img-fluid rounded" style="max-height: 260px; object-fit: contain; background: #000;">
+                  </div>
+                  {% endif %}
                   <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                     <span class="badge" style="background: #26a69a; padding: 4px 12px; border-radius: 4px;">Easy</span>
                     <span class="badge" style="background: #555; padding: 4px 12px; border-radius: 4px;">Topics</span>

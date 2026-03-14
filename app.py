@@ -449,7 +449,9 @@ class ProctoringBreach(db.Model):
     submission_id = db.Column(db.Integer, db.ForeignKey('quiz_submission.id'), nullable=False)
     breach_type = db.Column(db.String(80), nullable=False)
     occurred_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    metadata = db.Column(db.Text, nullable=True)
+    # Column name kept as "metadata" in the database for backward compatibility,
+    # but attribute renamed because "metadata" is reserved by SQLAlchemy's Declarative API.
+    details_json = db.Column('metadata', db.Text, nullable=True)
 
 class QuizAnswer(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -150,6 +150,7 @@ def extract_pdf_content_with_cloud_ocr(file_path):
     try:
         import base64
         import io
+        ocr_api_key = os.environ.get('OCR_SPACE_API_KEY', '')
         
         # Check if file exists and get size
         if not os.path.exists(file_path):
@@ -175,7 +176,6 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                     }
                     
                     # Check for OCR.space API key (optional, improves rate limits)
-                    ocr_api_key = os.environ.get('OCR_SPACE_API_KEY', '')
                     headers = {}
                     
                     if ocr_api_key:
@@ -187,15 +187,15 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                         print("WARNING: OCR_SPACE_API_KEY not found in environment variables")
                         print("Available env vars starting with OCR: " + str([k for k in os.environ.keys() if 'OCR' in k.upper()]))
                     
-                    # Build URL with API key as query parameter (alternative method)
-                    api_url = "https://api.ocr.space/parse/pdf"
+                    # OCR.space supports file upload at /parse/image (PDF/Image both accepted)
+                    api_url = "https://api.ocr.space/parse/image"
                     if ocr_api_key:
                         api_url += f"?apikey={ocr_api_key}"
                     
                     print(f"Uploading PDF to OCR.space API (size: {file_size} bytes)...")
                     print(f"API URL: {api_url.split('?')[0]}")  # Don't log full URL with key
                     try:
-                        # Try the /parse/pdf endpoint with API key in multiple places
+                        # Upload PDF file directly using the supported endpoint
                         response = requests.post(api_url, files=files, data=payload, headers=headers, timeout=120)
                         print(f"OCR.space API response status: {response.status_code}")
                         print(f"OCR.space API response headers: {dict(response.headers)}")

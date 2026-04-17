@@ -316,6 +316,62 @@
         .theme-toggle i {
             font-size: 1rem;
         }
+
+        /* Floating WhatsApp Contact */
+        .whatsapp-float {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            z-index: 1050;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            text-decoration: none;
+            background: #06a96c;
+            color: #ffffff;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            max-width: 320px;
+        }
+
+        .whatsapp-float:hover {
+            color: #ffffff;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+        }
+
+        .whatsapp-float .wa-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #25d366;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex: 0 0 auto;
+        }
+
+        .whatsapp-float .wa-text {
+            line-height: 1.25;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        @media (max-width: 576px) {
+            .whatsapp-float {
+                right: 10px;
+                bottom: 10px;
+                max-width: calc(100vw - 20px);
+                padding: 10px 12px;
+            }
+            .whatsapp-float .wa-text {
+                font-size: 0.92rem;
+            }
+        }
         
         /* Dark mode specific styles */
         .navbar {
@@ -455,6 +511,18 @@
 
         {% block content %}{% endblock %}
     </main>
+
+    <a
+        class="whatsapp-float"
+        href="https://wa.me/917255881443?text=Hi%20UniTest%2C%20I%20have%20a%20question."
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Chat on WhatsApp"
+        title="Chat on WhatsApp"
+    >
+        <span class="wa-icon"><i class="fab fa-whatsapp"></i></span>
+        <span class="wa-text">Have questions regarding the programme?</span>
+    </a>
 
     <footer class="text-light py-4 mt-5" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
         <div class="container text-center">

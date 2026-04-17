@@ -58,9 +58,23 @@
               <div class="border rounded p-2" style="background:#252526">
                 <div class="small text-secondary mb-1">{{ snap.captured_at.strftime('%d %B %Y | %I:%M:%S') }} — {{ snap.snapshot_type }}</div>
                 {% if snap.image_data %}
-                  {% if snap.image_data.startswith('http') or snap.image_data.startswith('data:') %}
+                  {% if snap.image_data.startswith('http') %}
+                    <div class="mb-2 d-flex align-items-center gap-2">
+                      <span class="badge bg-info text-dark">Cloud URL</span>
+                      <a href="{{ snap.image_data }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-light">Open Snapshot</a>
+                    </div>
+                    <img src="{{ snap.image_data }}" alt="Snapshot" class="img-fluid rounded" style="max-height:200px;object-fit:contain">
+                  {% elif snap.image_data.startswith('data:') %}
+                    <div class="mb-2 d-flex align-items-center gap-2">
+                      <span class="badge bg-secondary">Base64</span>
+                      <a href="{{ snap.image_data }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-light">Open Snapshot</a>
+                    </div>
                     <img src="{{ snap.image_data }}" alt="Snapshot" class="img-fluid rounded" style="max-height:200px;object-fit:contain">
                   {% else %}
+                    <div class="mb-2 d-flex align-items-center gap-2">
+                      <span class="badge bg-warning text-dark">Local Static</span>
+                      <a href="{{ url_for('static', filename=snap.image_data) }}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-light">Open Snapshot</a>
+                    </div>
                     <img src="{{ url_for('static', filename=snap.image_data) }}" alt="Snapshot" class="img-fluid rounded" style="max-height:200px;object-fit:contain">
                   {% endif %}
                 {% else %}

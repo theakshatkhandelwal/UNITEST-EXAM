@@ -61,7 +61,7 @@
           if (maxW && w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
           c.width = w; c.height = h;
           c.getContext('2d').drawImage(v, 0, 0, w, h);
-          resolve(c.toDataURL('image/jpeg', 0.6));
+          resolve(c.toDataURL('image/jpeg', 0.35));
         } catch (e) {
           resolve(null);
         }
@@ -84,8 +84,8 @@
         // Ask permissions before join and capture initial proof snapshots.
         let camStream = await navigator.mediaDevices.getUserMedia({ video: true });
         let screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        let camShot = await captureToDataUrl(camStream, 400);
-        let screenShot = await captureToDataUrl(screenStream, 800);
+        let camShot = await captureToDataUrl(camStream, 320);
+        let screenShot = await captureToDataUrl(screenStream, 640);
         let capturedAt = new Date().toISOString();
         try {
           sessionStorage.setItem('prejoin_cam_snapshot', camShot || '');

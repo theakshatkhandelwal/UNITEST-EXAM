@@ -109,7 +109,8 @@ def persist_proctoring_image(image_data, submission_id, snapshot_type, captured_
     api_secret = os.environ.get('CLOUDINARY_API_SECRET')
 
     if not (cloud_name and api_key and api_secret):
-        return _save_local_snapshot()
+        local_ref = _save_local_snapshot()
+        return local_ref if local_ref else image_data
 
     try:
         ts = int(time.time())
@@ -140,8 +141,8 @@ def persist_proctoring_image(image_data, submission_id, snapshot_type, captured_
     except Exception as e:
         print(f"Cloudinary upload error: {e}")
 
-    # Never return raw base64 to DB because legacy schema may be VARCHAR(255).
-    return _save_local_snapshot()
+    local_ref = _save_local_snapshot()
+    return local_ref if local_ref else image_data
 
 # Cloud OCR API support (works in serverless environments like Vercel)
 def extract_pdf_content_with_cloud_ocr(file_path):
@@ -4524,6 +4525,13 @@ def init_db():
                         db.session.execute(text("ALTER TABLE quiz_question ADD COLUMN image_url TEXT"))
                         db.session.commit()
                         print("Added image_url to quiz_question")
+                    # Ensure legacy proctoring column can hold full base64 fallback data.
+                    try:
+                        db.session.execute(text("ALTER TABLE proctoring_snapshot ALTER COLUMN image_path TYPE TEXT"))
+                        db.session.commit()
+                        print("Ensured proctoring_snapshot.image_path is TEXT")
+                    except Exception as e:
+                        print(f"image_path type migration skipped/failed: {e}")
                 except Exception as e:
                     print(f"Violation flag columns check/add failed (may already exist): {e}")
             else:

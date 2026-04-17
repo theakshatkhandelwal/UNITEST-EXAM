@@ -3074,13 +3074,21 @@ def allow_student_retake(code, submission_id):
     student = db.session.query(User).filter_by(id=submission.student_id).first()
     student_name = student.username if student else f"Student {submission.student_id}"
     
-    # Delete all answers
-    db.session.query(QuizAnswer).filter_by(submission_id=submission.id).delete()
-    
-    # Delete submission
-    db.session.delete(submission)
-    db.session.commit()
-    
+    try:
+        # Delete dependent child rows first to satisfy foreign key constraints.
+        db.session.query(QuizAnswer).filter_by(submission_id=submission.id).delete()
+        db.session.query(ProctoringSnapshot).filter_by(submission_id=submission.id).delete()
+        db.session.query(ProctoringBreach).filter_by(submission_id=submission.id).delete()
+
+        # Delete submission
+        db.session.delete(submission)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error allowing retake for submission {submission.id}: {str(e)}")
+        flash('Could not reset this submission. Please try again.', 'error')
+        return redirect(url_for('teacher_quiz_results', code=code))
+
     flash(f'Successfully allowed {student_name} to retake the quiz. Their previous submission has been reset.', 'success')
     return redirect(url_for('teacher_quiz_results', code=code))
 

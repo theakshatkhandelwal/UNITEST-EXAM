@@ -150,6 +150,7 @@ def extract_pdf_content_with_cloud_ocr(file_path):
     try:
         import base64
         import io
+        import tempfile
         ocr_api_key = os.environ.get('OCR_SPACE_API_KEY', '')
         
         # Check if file exists and get size
@@ -161,6 +162,7 @@ def extract_pdf_content_with_cloud_ocr(file_path):
         print(f"Processing PDF with cloud OCR (file size: {file_size} bytes)")
         
         # Method 1: Try direct PDF upload to OCR.space (works without pdf2image/Poppler)
+        direct_pdf_error_text = ""
         try:
             if file_size > 10 * 1024 * 1024:  # 10MB limit for free tier
                 print(f"PDF file too large ({file_size} bytes). Will try page-by-page processing...")
@@ -224,6 +226,7 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                                     exit_code = result.get('OCRExitCode', 'Unknown')
                                     error_msg = result.get('ErrorMessage', f"OCR Exit Code: {exit_code}")
                                     print(f"OCR.space API error: {error_msg}")
+                                    direct_pdf_error_text = str(error_msg)
                                     print(f"Full response: {result}")
                                     # Check if it's a rate limit issue
                                     if 'rate limit' in str(error_msg).lower() or 'quota' in str(error_msg).lower():
@@ -243,23 +246,91 @@ def extract_pdf_content_with_cloud_ocr(file_path):
                         elif response.status_code == 400:
                             print("OCR.space API: Bad request - check file format")
                             print(f"Response: {response.text[:500]}")
+                            direct_pdf_error_text = response.text[:500]
                         else:
                             print(f"OCR.space API returned status code: {response.status_code}")
                             try:
                                 error_detail = response.text[:1000]
                                 print(f"Error detail: {error_detail}")
+                                direct_pdf_error_text = error_detail
                             except:
                                 pass
                     except requests.exceptions.Timeout:
                         print("OCR.space API request timed out after 120 seconds")
                     except requests.exceptions.RequestException as req_error:
                         print(f"OCR.space API request error: {req_error}")
+                        direct_pdf_error_text = str(req_error)
                         import traceback
                         traceback.print_exc()
         except Exception as pdf_api_error:
             print(f"Error with direct PDF OCR API: {pdf_api_error}")
+            direct_pdf_error_text = str(pdf_api_error)
             import traceback
             traceback.print_exc()
+
+        # Method 1B: If direct upload fails due file-size validation, split PDF per page and OCR each page.
+        # This avoids poppler dependency and works in serverless when multi-page PDF exceeds OCR size limits.
+        size_limit_hit = ('maximum permissible file size limit' in direct_pdf_error_text.lower()) or ('exceeds' in direct_pdf_error_text.lower() and 'kb' in direct_pdf_error_text.lower())
+        if size_limit_hit or file_size > 1024 * 1024:
+            try:
+                print("Direct PDF OCR hit size constraints. Trying page-wise PDF splitting fallback...")
+                split_ocr_text = ""
+                page_count = 0
+                with open(file_path, 'rb') as src_pdf:
+                    pdf_reader = PyPDF2.PdfReader(src_pdf)
+                    page_count = len(pdf_reader.pages)
+                    print(f"Splitting PDF into {page_count} single-page files for OCR...")
+
+                    for page_index in range(page_count):
+                        try:
+                            page_writer = PyPDF2.PdfWriter()
+                            page_writer.add_page(pdf_reader.pages[page_index])
+
+                            with tempfile.NamedTemporaryFile(delete=True, suffix='.pdf') as tmp_page_pdf:
+                                page_writer.write(tmp_page_pdf)
+                                tmp_page_pdf.flush()
+
+                                page_size = os.path.getsize(tmp_page_pdf.name)
+                                if page_size > 1024 * 1024:
+                                    print(f"Page {page_index + 1} still exceeds 1MB ({page_size} bytes); skipping this page in split fallback")
+                                    continue
+
+                                with open(tmp_page_pdf.name, 'rb') as page_file:
+                                    page_files = {'file': (f'page_{page_index + 1}.pdf', page_file, 'application/pdf')}
+                                    page_payload = {
+                                        'language': 'eng',
+                                        'isOverlayRequired': False,
+                                        'detectOrientation': True,
+                                        'scale': True,
+                                        'OCREngine': 2
+                                    }
+                                    page_headers = {}
+                                    page_api_url = "https://api.ocr.space/parse/image"
+                                    if ocr_api_key:
+                                        page_payload['apikey'] = ocr_api_key
+                                        page_headers['apikey'] = ocr_api_key
+                                        page_api_url += f"?apikey={ocr_api_key}"
+
+                                    page_resp = requests.post(page_api_url, files=page_files, data=page_payload, headers=page_headers, timeout=90)
+                                    if page_resp.status_code != 200:
+                                        print(f"OCR page {page_index + 1} failed with status {page_resp.status_code}")
+                                        continue
+
+                                    page_result = page_resp.json()
+                                    if page_result.get('ParsedResults') and len(page_result['ParsedResults']) > 0:
+                                        page_text = page_result['ParsedResults'][0].get('ParsedText', '')
+                                        if page_text and page_text.strip():
+                                            split_ocr_text += f"\n--- Page {page_index + 1} ---\n{page_text}\n"
+                                            print(f"Split OCR extracted page {page_index + 1} ({len(page_text)} chars)")
+                        except Exception as split_page_error:
+                            print(f"Split fallback error on page {page_index + 1}: {split_page_error}")
+                            continue
+
+                if split_ocr_text.strip():
+                    print(f"Split-page OCR extracted total {len(split_ocr_text)} characters")
+                    return split_ocr_text.strip()
+            except Exception as split_error:
+                print(f"Split-page OCR fallback failed: {split_error}")
         
         # Method 2: Try PDF as base64 to image endpoint (works without pdf2image)
         # This is a fallback if direct PDF upload failed

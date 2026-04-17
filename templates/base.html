@@ -359,6 +359,30 @@
             color: #111827;
         }
 
+        .motion-toggle-nav {
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.26);
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            line-height: 1;
+            min-width: 98px;
+            transition: all 0.2s ease;
+        }
+
+        .motion-toggle-nav:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .motion-toggle-nav:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.45);
+        }
+
         [data-color-scheme="purple"] {
             --primary-color: #7c3aed;
             --secondary-color: #06b6d4;
@@ -587,6 +611,11 @@
                             <option value="emerald">Emerald</option>
                         </select>
                     </li>
+                    <li class="nav-item d-flex align-items-center me-2">
+                        <button class="motion-toggle-nav" id="motionToggleNav" title="Toggle motion effects" aria-pressed="true">
+                            Motion: On
+                        </button>
+                    </li>
                     <li class="nav-item d-flex align-items-center">
                         <button class="theme-toggle" id="themeToggle" title="Toggle Dark/Light Mode">
                             <i class="fas fa-sun" id="themeIcon"></i>
@@ -650,15 +679,20 @@
             const themeToggle = document.getElementById('themeToggle');
             const themeIcon = document.getElementById('themeIcon');
             const themeScheme = document.getElementById('themeScheme');
+            const motionToggleNav = document.getElementById('motionToggleNav');
             const body = document.body;
+            const motionStorageKey = 'unitestMotionEnabled';
             
             // Get saved theme or default to light
             const savedTheme = localStorage.getItem('theme') || 'light';
             const savedScheme = localStorage.getItem('colorScheme') || 'default';
+            const savedMotion = localStorage.getItem(motionStorageKey);
+            const initialMotionEnabled = savedMotion === null ? true : savedMotion === 'true';
             
             // Apply saved theme
             applyTheme(savedTheme);
             applyColorScheme(savedScheme);
+            applyMotionPreference(initialMotionEnabled);
             if (themeScheme) {
                 themeScheme.value = savedScheme;
             }
@@ -679,6 +713,14 @@
                     localStorage.setItem('colorScheme', nextScheme);
                 });
             }
+
+            if (motionToggleNav) {
+                motionToggleNav.addEventListener('click', function() {
+                    const enabled = body.classList.contains('motion-disabled');
+                    applyMotionPreference(enabled);
+                    localStorage.setItem(motionStorageKey, String(enabled));
+                });
+            }
             
             function applyTheme(theme) {
                 body.setAttribute('data-theme', theme);
@@ -694,6 +736,17 @@
 
             function applyColorScheme(scheme) {
                 body.setAttribute('data-color-scheme', scheme);
+            }
+
+            function applyMotionPreference(enabled) {
+                body.classList.toggle('motion-disabled', !enabled);
+                if (motionToggleNav) {
+                    motionToggleNav.textContent = enabled ? 'Motion: On' : 'Motion: Off';
+                    motionToggleNav.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+                }
+                window.dispatchEvent(new CustomEvent('motionPreferenceChanged', {
+                    detail: { enabled: enabled }
+                }));
             }
         });
     </script>

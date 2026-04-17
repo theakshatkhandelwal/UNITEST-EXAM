@@ -5,13 +5,93 @@
 {% block extra_css %}
 <style>
     /* Modern Landing Page Styles */
+    :root {
+        --home-bg-1: #0b1220;
+        --home-bg-2: #111c2f;
+        --home-bg-3: #1a2a44;
+        --home-glass: rgba(255, 255, 255, 0.08);
+        --home-glass-border: rgba(255, 255, 255, 0.14);
+        --home-text-1: #e2e8f0;
+        --home-text-2: #94a3b8;
+    }
+
+    body[data-theme="light"] {
+        --home-bg-1: #f6f9ff;
+        --home-bg-2: #eaf2ff;
+        --home-bg-3: #dde9ff;
+        --home-glass: rgba(255, 255, 255, 0.75);
+        --home-glass-border: rgba(33, 55, 99, 0.16);
+        --home-text-1: #1a2a44;
+        --home-text-2: #3f5272;
+    }
+
+    body[data-color-scheme="default"] {
+        --home-bg-1: #0f172a;
+        --home-bg-2: #1e293b;
+        --home-bg-3: #334155;
+    }
+
+    body[data-color-scheme="purple"] {
+        --home-bg-1: #1e103a;
+        --home-bg-2: #2d1458;
+        --home-bg-3: #3f1f78;
+    }
+
+    body[data-color-scheme="ocean"] {
+        --home-bg-1: #062339;
+        --home-bg-2: #0b3b5f;
+        --home-bg-3: #0f5f7a;
+    }
+
+    body[data-color-scheme="emerald"] {
+        --home-bg-1: #052018;
+        --home-bg-2: #0a3a2b;
+        --home-bg-3: #0f5c42;
+    }
+
     .landing-hero {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        background: linear-gradient(135deg, var(--home-bg-1) 0%, var(--home-bg-2) 50%, var(--home-bg-3) 100%);
         min-height: 90vh;
         display: flex;
         align-items: center;
         position: relative;
         overflow: hidden;
+        animation: gradientShift 12s ease-in-out infinite alternate;
+    }
+
+    .hero-glow-blob {
+        position: absolute;
+        width: 340px;
+        height: 340px;
+        border-radius: 50%;
+        filter: blur(55px);
+        opacity: 0.4;
+        pointer-events: none;
+        z-index: 0;
+        animation: blobDrift 14s ease-in-out infinite alternate;
+        will-change: transform;
+    }
+
+    .hero-glow-blob.blob-one {
+        top: 12%;
+        left: 12%;
+        background: color-mix(in srgb, var(--primary-color) 65%, transparent);
+    }
+
+    .hero-glow-blob.blob-two {
+        right: 10%;
+        top: 16%;
+        background: color-mix(in srgb, var(--secondary-color) 60%, transparent);
+        animation-duration: 17s;
+    }
+
+    .hero-glow-blob.blob-three {
+        bottom: 10%;
+        left: 48%;
+        width: 280px;
+        height: 280px;
+        background: color-mix(in srgb, var(--gradient-bg) 58%, transparent);
+        animation-duration: 20s;
     }
     
     .landing-hero::before {
@@ -21,14 +101,17 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: radial-gradient(circle at 20% 50%, rgba(66, 133, 244, 0.1) 0%, transparent 50%),
-                    radial-gradient(circle at 80% 80%, rgba(52, 168, 83, 0.1) 0%, transparent 50%);
+        background: radial-gradient(circle at 20% 50%, color-mix(in srgb, var(--primary-color) 22%, transparent) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 80%, color-mix(in srgb, var(--secondary-color) 20%, transparent) 0%, transparent 50%);
         pointer-events: none;
     }
     
     .hero-content {
         position: relative;
         z-index: 1;
+        animation: floatUp 0.9s ease-out;
+        transition: transform 0.25s ease-out;
+        will-change: transform;
     }
     
     .hero-title {
@@ -40,18 +123,19 @@
         background-clip: text;
         margin-bottom: 1.5rem;
         line-height: 1.1;
+        text-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
     }
     
     .hero-subtitle {
         font-size: 1.5rem;
-        color: #cbd5e1;
+        color: var(--home-text-1);
         margin-bottom: 2rem;
         font-weight: 300;
     }
     
     .hero-description {
         font-size: 1.1rem;
-        color: #94a3b8;
+        color: var(--home-text-2);
         max-width: 700px;
         margin: 0 auto 3rem;
         line-height: 1.7;
@@ -65,7 +149,7 @@
     }
     
     .btn-hero-primary {
-        background: linear-gradient(135deg, #4285f4 0%, #1a73e8 100%);
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--gradient-bg) 100%);
         border: none;
         padding: 1rem 2.5rem;
         font-size: 1.1rem;
@@ -73,12 +157,12 @@
         border-radius: 12px;
         color: white;
         transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(66, 133, 244, 0.4);
+        box-shadow: 0 4px 15px color-mix(in srgb, var(--primary-color) 45%, transparent);
     }
     
     .btn-hero-primary:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(66, 133, 244, 0.6);
+        box-shadow: 0 6px 20px color-mix(in srgb, var(--primary-color) 60%, transparent);
         color: white;
     }
     
@@ -102,7 +186,7 @@
     }
     
     .feature-cards-section {
-        background: #0f172a;
+        background: linear-gradient(180deg, var(--home-bg-1), var(--home-bg-2));
         padding: 5rem 0;
         position: relative;
     }
@@ -117,7 +201,7 @@
     
     .section-subtitle {
         font-size: 1.2rem;
-        color: #94a3b8;
+        color: var(--home-text-2);
         text-align: center;
         margin-bottom: 4rem;
         max-width: 600px;
@@ -126,14 +210,15 @@
     }
     
     .feature-card-large {
-        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--home-bg-2) 88%, white 12%) 0%, color-mix(in srgb, var(--home-bg-3) 80%, black 20%) 100%);
         border-radius: 20px;
         padding: 2.5rem;
         height: 100%;
         transition: all 0.4s ease;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--home-glass-border);
         position: relative;
         overflow: hidden;
+        backdrop-filter: blur(4px);
     }
     
     .feature-card-large::before {
@@ -143,7 +228,7 @@
         left: 0;
         right: 0;
         height: 4px;
-        background: linear-gradient(90deg, #4285f4, #34a853);
+        background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
         transform: scaleX(0);
         transition: transform 0.4s ease;
     }
@@ -151,7 +236,7 @@
     .feature-card-large:hover {
         transform: translateY(-10px);
         box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-        border-color: rgba(66, 133, 244, 0.5);
+        border-color: color-mix(in srgb, var(--primary-color) 60%, transparent);
     }
     
     .feature-card-large:hover::before {
@@ -167,7 +252,7 @@
         justify-content: center;
         font-size: 2.5rem;
         margin-bottom: 1.5rem;
-        background: linear-gradient(135deg, rgba(66, 133, 244, 0.2), rgba(52, 168, 83, 0.2));
+        background: linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 24%, transparent), color-mix(in srgb, var(--secondary-color) 24%, transparent));
     }
     
     .feature-title {
@@ -178,13 +263,13 @@
     }
     
     .feature-description {
-        color: #cbd5e1;
+        color: var(--home-text-1);
         line-height: 1.7;
         font-size: 1rem;
     }
     
     .stats-section {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        background: linear-gradient(135deg, var(--home-bg-2) 0%, var(--home-bg-1) 100%);
         padding: 4rem 0;
     }
     
@@ -196,7 +281,7 @@
     .stat-number {
         font-size: 3rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #4285f4, #34a853);
+        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -204,34 +289,34 @@
     }
     
     .stat-label {
-        color: #94a3b8;
+        color: var(--home-text-2);
         font-size: 1.1rem;
         font-weight: 500;
     }
     
     .trending-section {
-        background: #0f172a;
+        background: linear-gradient(180deg, var(--home-bg-1), var(--home-bg-2));
         padding: 5rem 0;
     }
     
     .trending-card {
-        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        background: linear-gradient(135deg, color-mix(in srgb, var(--home-bg-2) 88%, white 12%) 0%, color-mix(in srgb, var(--home-bg-3) 80%, black 20%) 100%);
         border-radius: 16px;
         padding: 2rem;
         transition: all 0.3s ease;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--home-glass-border);
         height: 100%;
     }
     
     .trending-card:hover {
         transform: translateY(-5px);
         box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
-        border-color: rgba(66, 133, 244, 0.5);
+        border-color: color-mix(in srgb, var(--primary-color) 60%, transparent);
     }
     
     .trending-badge {
         display: inline-block;
-        background: linear-gradient(135deg, #4285f4, #34a853);
+        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
         color: white;
         padding: 0.5rem 1rem;
         border-radius: 20px;
@@ -241,20 +326,20 @@
     }
     
     .how-it-works-section {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        background: linear-gradient(135deg, var(--home-bg-2) 0%, var(--home-bg-1) 100%);
         padding: 5rem 0;
     }
     
     .step-card {
-        background: rgba(255, 255, 255, 0.05);
+        background: var(--home-glass);
         border-radius: 16px;
         padding: 2rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--home-glass-border);
         transition: all 0.3s ease;
     }
     
     .step-card:hover {
-        background: rgba(255, 255, 255, 0.08);
+        background: color-mix(in srgb, var(--home-glass) 70%, white 30%);
         transform: translateX(10px);
     }
     
@@ -262,7 +347,7 @@
         width: 50px;
         height: 50px;
         border-radius: 12px;
-        background: linear-gradient(135deg, #4285f4, #34a853);
+        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
         color: white;
         display: flex;
         align-items: center;
@@ -295,11 +380,89 @@
     
     /* Light text for better visibility */
     .text-light-custom {
-        color: #e2e8f0 !important; /* Light grey/white for better visibility */
+        color: var(--home-text-1) !important; /* Light grey/white for better visibility */
     }
     
     .text-light-muted {
-        color: #cbd5e1 !important; /* Lighter grey for better visibility */
+        color: var(--home-text-2) !important; /* Lighter grey for better visibility */
+    }
+
+    body[data-theme="light"] .hero-title,
+    body[data-theme="light"] .section-title,
+    body[data-theme="light"] .feature-title,
+    body[data-theme="light"] h3.text-white,
+    body[data-theme="light"] h4.text-white,
+    body[data-theme="light"] span.text-white {
+        color: #12213c !important;
+        -webkit-text-fill-color: initial;
+        text-shadow: none;
+    }
+
+    body[data-theme="light"] .hero-title {
+        background: linear-gradient(135deg, #12213c 0%, #2d4f88 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    body[data-theme="light"] .btn-hero-secondary {
+        background: rgba(19, 39, 72, 0.06);
+        border-color: rgba(25, 52, 93, 0.25);
+        color: #17305b;
+    }
+
+    body[data-theme="light"] .btn-hero-secondary:hover {
+        background: rgba(19, 39, 72, 0.12);
+        border-color: rgba(25, 52, 93, 0.4);
+        color: #13244b;
+    }
+
+    body[data-theme="light"] .hero-glow-blob {
+        opacity: 0.28;
+    }
+
+    .reveal-on-scroll {
+        opacity: 0;
+        transform: translateY(24px);
+        transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+
+    .reveal-on-scroll.revealed {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    body.motion-disabled .landing-hero,
+    body.motion-disabled .hero-glow-blob,
+    body.motion-disabled .scroll-indicator,
+    body.motion-disabled .hero-content {
+        animation: none !important;
+    }
+
+    body.motion-disabled .reveal-on-scroll {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+    }
+
+    body.motion-disabled .parallax-item {
+        transform: none !important;
+    }
+
+    @keyframes gradientShift {
+        0% { filter: hue-rotate(0deg); }
+        100% { filter: hue-rotate(8deg); }
+    }
+
+    @keyframes floatUp {
+        0% { opacity: 0; transform: translateY(25px); }
+        100% { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes blobDrift {
+        0% { transform: translate3d(0, 0, 0) scale(1); }
+        50% { transform: translate3d(18px, -16px, 0) scale(1.08); }
+        100% { transform: translate3d(-14px, 12px, 0) scale(0.95); }
     }
     
     @media (max-width: 768px) {
@@ -321,10 +484,13 @@
 {% block content %}
 <!-- Hero Section -->
 <section class="landing-hero">
+    <div class="hero-glow-blob blob-one parallax-item" data-parallax-speed="18"></div>
+    <div class="hero-glow-blob blob-two parallax-item" data-parallax-speed="-14"></div>
+    <div class="hero-glow-blob blob-three parallax-item" data-parallax-speed="10"></div>
     <div class="container">
-        <div class="hero-content text-center">
+        <div class="hero-content text-center parallax-item" data-parallax-speed="6">
             <div class="mb-4">
-                <i class="fas fa-graduation-cap" style="font-size: 4rem; color: #4285f4;"></i>
+                <i class="fas fa-graduation-cap" style="font-size: 4rem; color: var(--primary-color);"></i>
     </div>
             <h1 class="hero-title">UNITEST - #1 AI Quiz Generator & AI Learning Platform</h1>
             <p class="hero-subtitle">The Best AI-Based Quiz Generator for Students and Teachers</p>
@@ -365,7 +531,7 @@
         
         <div class="row g-4">
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large">
+                <div class="feature-card-large reveal-on-scroll">
                     <div class="feature-icon text-primary">
                         <i class="fas fa-brain"></i>
                     </div>
@@ -377,7 +543,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large">
+                <div class="feature-card-large reveal-on-scroll">
                     <div class="feature-icon text-success">
                         <i class="fas fa-chart-line"></i>
                     </div>
@@ -389,7 +555,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large">
+                <div class="feature-card-large reveal-on-scroll">
                     <div class="feature-icon text-warning">
                         <i class="fas fa-robot"></i>
                     </div>
@@ -401,7 +567,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large">
+                <div class="feature-card-large reveal-on-scroll">
                     <div class="feature-icon text-info">
                         <i class="fas fa-code"></i>
                     </div>
@@ -413,7 +579,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large">
+                <div class="feature-card-large reveal-on-scroll">
                     <div class="feature-icon text-danger">
                         <i class="fas fa-file-upload"></i>
                     </div>
@@ -425,7 +591,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large">
+                <div class="feature-card-large reveal-on-scroll">
                     <div class="feature-icon text-secondary">
                         <i class="fas fa-chart-bar"></i>
                     </div>
@@ -444,25 +610,25 @@
     <div class="container">
         <div class="row">
             <div class="col-md-3 col-6">
-                <div class="stat-card">
+                <div class="stat-card reveal-on-scroll">
                     <div class="stat-number">10K+</div>
                     <div class="stat-label">Active Users</div>
                 </div>
             </div>
             <div class="col-md-3 col-6">
-                <div class="stat-card">
+                <div class="stat-card reveal-on-scroll">
                     <div class="stat-number">50K+</div>
                     <div class="stat-label">Quizzes Created</div>
                 </div>
             </div>
             <div class="col-md-3 col-6">
-                <div class="stat-card">
+                <div class="stat-card reveal-on-scroll">
                     <div class="stat-number">100+</div>
                     <div class="stat-label">Topics Covered</div>
                 </div>
             </div>
             <div class="col-md-3 col-6">
-                <div class="stat-card">
+                <div class="stat-card reveal-on-scroll">
                     <div class="stat-number">99%</div>
                     <div class="stat-label">Satisfaction Rate</div>
                 </div>
@@ -488,7 +654,7 @@
                     
         <div class="row g-4">
             <div class="col-md-4">
-                <div class="trending-card">
+                <div class="trending-card reveal-on-scroll">
                     <span class="trending-badge">
                         <i class="fas fa-fire me-1"></i>Popular
                     </span>
@@ -502,7 +668,7 @@
                     </div>
                     
             <div class="col-md-4">
-                <div class="trending-card">
+                <div class="trending-card reveal-on-scroll">
                     <span class="trending-badge">
                         <i class="fas fa-star me-1"></i>Featured
                     </span>
@@ -516,7 +682,7 @@
             </div>
             
             <div class="col-md-4">
-                <div class="trending-card">
+                <div class="trending-card reveal-on-scroll">
                     <span class="trending-badge">
                         <i class="fas fa-trending-up me-1"></i>Trending
                     </span>
@@ -542,7 +708,7 @@
         
         <div class="row g-4">
             <div class="col-md-6 col-lg-3">
-                <div class="step-card">
+                <div class="step-card reveal-on-scroll">
                     <div class="step-number">1</div>
                     <h4 class="text-white mb-3">Choose Your Topic</h4>
                     <p class="text-light-custom">Enter any subject or topic you want to learn about, or upload study materials for automatic topic extraction.</p>
@@ -550,7 +716,7 @@
                     </div>
             
             <div class="col-md-6 col-lg-3">
-                <div class="step-card">
+                <div class="step-card reveal-on-scroll">
                     <div class="step-number">2</div>
                     <h4 class="text-white mb-3">AI Generates Questions</h4>
                     <p class="text-light-custom">Our advanced AI creates personalized questions based on your chosen topic and current learning level.</p>
@@ -558,7 +724,7 @@
             </div>
             
             <div class="col-md-6 col-lg-3">
-                <div class="step-card">
+                <div class="step-card reveal-on-scroll">
                     <div class="step-number">3</div>
                     <h4 class="text-white mb-3">Take the Quiz</h4>
                     <p class="text-light-custom">Answer questions and get instant feedback. AI evaluates subjective answers for comprehensive assessment.</p>
@@ -566,7 +732,7 @@
             </div>
             
             <div class="col-md-6 col-lg-3">
-                <div class="step-card">
+                <div class="step-card reveal-on-scroll">
                     <div class="step-number">4</div>
                     <h4 class="text-white mb-3">Track Progress</h4>
                     <p class="text-light-custom">Monitor your learning journey and advance through Bloom's Taxonomy levels as you improve.</p>
@@ -600,7 +766,7 @@
                 
                 <div class="row g-4 mt-4">
                     <div class="col-md-6">
-                        <div class="feature-card-large">
+                        <div class="feature-card-large reveal-on-scroll">
                             <h4 class="feature-title">For Students</h4>
                             <p class="feature-description">
                                 Get personalized quizzes on any topic, track your learning progress, and master subjects with AI-powered feedback and Bloom's taxonomy progression.
@@ -608,7 +774,7 @@
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <div class="feature-card-large">
+                        <div class="feature-card-large reveal-on-scroll">
                             <h4 class="feature-title">For Teachers</h4>
                             <p class="feature-description">
                                 Create comprehensive assessments, upload PDF materials, set difficulty levels, and monitor student progress with detailed analytics and integrity tracking.
@@ -644,4 +810,81 @@
         </div>
     </div>
 </section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const storageKey = 'unitestMotionEnabled';
+    const savedMotion = localStorage.getItem(storageKey);
+    let motionEnabled = savedMotion === null ? true : savedMotion === 'true';
+
+    const applyMotionPreference = (enabled) => {
+        motionEnabled = enabled;
+        document.body.classList.toggle('motion-disabled', !enabled);
+    };
+
+    applyMotionPreference(motionEnabled);
+
+    const revealTargets = document.querySelectorAll('.reveal-on-scroll');
+    if (revealTargets.length) {
+        if (motionEnabled && 'IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('revealed');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.15 });
+            revealTargets.forEach((el) => observer.observe(el));
+        } else {
+            revealTargets.forEach((el) => el.classList.add('revealed'));
+        }
+    }
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isDesktop = window.matchMedia('(min-width: 992px)').matches;
+    const parallaxItems = document.querySelectorAll('.parallax-item');
+
+    if (motionEnabled && !prefersReducedMotion && isDesktop && parallaxItems.length) {
+        const hero = document.querySelector('.landing-hero');
+        if (hero) {
+            let rafId = null;
+            hero.addEventListener('mousemove', function (event) {
+                const rect = hero.getBoundingClientRect();
+                const x = (event.clientX - rect.left) / rect.width - 0.5;
+                const y = (event.clientY - rect.top) / rect.height - 0.5;
+
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                }
+                rafId = requestAnimationFrame(() => {
+                    parallaxItems.forEach((item) => {
+                        const speed = Number(item.dataset.parallaxSpeed || 8);
+                        const tx = x * speed;
+                        const ty = y * speed;
+                        item.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+                    });
+                });
+            });
+
+            hero.addEventListener('mouseleave', function () {
+                parallaxItems.forEach((item) => {
+                    item.style.transform = 'translate3d(0, 0, 0)';
+                });
+            });
+        }
+    }
+
+    window.addEventListener('motionPreferenceChanged', function (event) {
+        const enabled = !!(event && event.detail && event.detail.enabled);
+        applyMotionPreference(enabled);
+        if (!enabled) {
+            revealTargets.forEach((el) => el.classList.add('revealed'));
+            parallaxItems.forEach((item) => {
+                item.style.transform = 'translate3d(0, 0, 0)';
+            });
+        }
+    });
+});
+</script>
 {% endblock %}

@@ -2519,6 +2519,41 @@ def profile():
                 flash('Failed to resend OTP.', 'error')
             return redirect(url_for('profile'))
 
+        if action == 'change_password':
+            current_password = request.form.get('current_password', '')
+            new_password = request.form.get('new_password', '')
+            confirm_new_password = request.form.get('confirm_new_password', '')
+
+            if not current_password or not new_password or not confirm_new_password:
+                flash('Please fill all password fields.', 'error')
+                return redirect(url_for('profile'))
+
+            if not check_password_hash(current_user.password_hash, current_password):
+                flash('Current password is incorrect.', 'error')
+                return redirect(url_for('profile'))
+
+            if new_password != confirm_new_password:
+                flash('New password and confirm password do not match.', 'error')
+                return redirect(url_for('profile'))
+
+            if len(new_password) < 6:
+                flash('New password must be at least 6 characters long.', 'error')
+                return redirect(url_for('profile'))
+
+            if current_password == new_password:
+                flash('New password must be different from current password.', 'error')
+                return redirect(url_for('profile'))
+
+            try:
+                current_user.password_hash = generate_password_hash(new_password)
+                db.session.commit()
+                flash('Password updated successfully.', 'success')
+            except Exception as e:
+                print(f"Password update error: {e}")
+                db.session.rollback()
+                flash('Could not update password. Please try again.', 'error')
+            return redirect(url_for('profile'))
+
     return render_template(
         'profile.html',
         email_change_pending=session.get('profile_email_change_pending'),

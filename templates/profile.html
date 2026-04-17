@@ -83,6 +83,28 @@
                 </div>
             </div>
             {% endif %}
+
+            <div class="card shadow mt-4">
+                <div class="card-body p-4">
+                    <h4 class="text-primary mb-3"><i class="fas fa-key me-2"></i>Reset Password</h4>
+                    <form method="POST">
+                        <input type="hidden" name="action" value="change_password">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Current Password</label>
+                            <input type="password" name="current_password" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">New Password</label>
+                            <input type="password" name="new_password" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Confirm New Password</label>
+                            <input type="password" name="confirm_new_password" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Update Password</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </div>

@@ -27,6 +27,10 @@
         <option value="percentage-asc">% (Lowest)</option>
         <option value="name-asc">Name A–Z</option>
         <option value="name-desc">Name Z–A</option>
+        <option value="violations-desc">Violations (Most)</option>
+        <option value="violations-asc">Violations (Least)</option>
+        <option value="integrity-flagged">Integrity (Flagged First)</option>
+        <option value="integrity-clean">Integrity (Clean First)</option>
       </select>
     </div>
   </div>
@@ -49,7 +53,9 @@
           </thead>
           <tbody>
             {% for s in submissions %}
-            <tr class="result-row" data-date="{{ s.submitted_at.timestamp() if s.submitted_at else 0 }}" data-score="{{ s.score }}" data-percentage="{{ s.percentage }}" data-student="{{ student_map.get(s.student_id).username if student_map.get(s.student_id) else s.student_id }}">
+            {% set violation_count = (1 if s.fullscreen_exit_flag else 0) + (1 if s.alt_tab_flag else 0) + (1 if s.win_shift_s_flag else 0) + (1 if s.win_prtscn_flag else 0) + (1 if s.prtscn_flag else 0) %}
+            {% set is_flagged = (1 if (s.marked_as_cheating or violation_count > 0 or not s.is_full_completion) else 0) %}
+            <tr class="result-row" data-date="{{ s.submitted_at.timestamp() if s.submitted_at else 0 }}" data-score="{{ s.score }}" data-percentage="{{ s.percentage }}" data-student="{{ student_map.get(s.student_id).username if student_map.get(s.student_id) else s.student_id }}" data-violations="{{ violation_count }}" data-flagged="{{ is_flagged }}">
               <td>{{ student_map.get(s.student_id).username if student_map.get(s.student_id) else s.student_id }}</td>
               <td>{{ '%.1f'|format(s.score) }}/{{ '%.1f'|format(s.total) }}</td>
               <td>{{ '%.0f'|format(s.percentage) }}%</td>
@@ -118,6 +124,10 @@ function sortResults(sortBy) {
       case 'percentage-asc': av = parseFloat(a.dataset.percentage); bv = parseFloat(b.dataset.percentage); break;
       case 'name-asc': av = (a.dataset.student || '').toLowerCase(); bv = (b.dataset.student || '').toLowerCase(); break;
       case 'name-desc': av = (b.dataset.student || '').toLowerCase(); bv = (a.dataset.student || '').toLowerCase(); break;
+      case 'violations-desc': av = parseFloat(b.dataset.violations || '0'); bv = parseFloat(a.dataset.violations || '0'); break;
+      case 'violations-asc': av = parseFloat(a.dataset.violations || '0'); bv = parseFloat(b.dataset.violations || '0'); break;
+      case 'integrity-flagged': av = parseFloat(b.dataset.flagged || '0'); bv = parseFloat(a.dataset.flagged || '0'); break;
+      case 'integrity-clean': av = parseFloat(a.dataset.flagged || '0'); bv = parseFloat(b.dataset.flagged || '0'); break;
       default: return 0;
     }
     if (av < bv) return -1; if (av > bv) return 1; return 0;

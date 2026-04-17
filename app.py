@@ -2871,12 +2871,26 @@ def download_quiz_results(code, format):
         return redirect(url_for('dashboard'))
     submissions = db.session.query(QuizSubmission).filter_by(quiz_id=quiz.id).order_by(QuizSubmission.submitted_at.desc()).all()
     student_map = {u.id: u for u in db.session.query(User).filter(User.id.in_([s.student_id for s in submissions])).all()}
-    header = ['Student', 'Score', 'Total', 'Percentage', 'Passed', 'Submitted At']
+    header = [
+        'Student', 'Score', 'Total', 'Percentage', 'Passed',
+        'Integrity', 'Violation Count', 'Submitted At'
+    ]
     rows = []
     for s in submissions:
         student = student_map.get(s.student_id)
         name = student.username if student else f'ID {s.student_id}'
-        rows.append([name, f'{s.score:.1f}', f'{s.total:.1f}', f'{s.percentage:.1f}', 'Yes' if s.passed else 'No', s.submitted_at.strftime('%Y-%m-%d %H:%M') if s.submitted_at else ''])
+        violation_count = int(bool(s.fullscreen_exit_flag)) + int(bool(s.alt_tab_flag)) + int(bool(s.win_shift_s_flag)) + int(bool(s.win_prtscn_flag)) + int(bool(s.prtscn_flag))
+        integrity_status = 'Flagged' if (s.marked_as_cheating or violation_count > 0 or not s.is_full_completion) else 'Clean'
+        rows.append([
+            name,
+            f'{s.score:.1f}',
+            f'{s.total:.1f}',
+            f'{s.percentage:.1f}',
+            'Yes' if s.passed else 'No',
+            integrity_status,
+            violation_count,
+            s.submitted_at.strftime('%Y-%m-%d %H:%M') if s.submitted_at else ''
+        ])
     fn = f'{quiz.code}_results'
     fmt = (format or 'csv').lower()
     if fmt == 'xlsx':

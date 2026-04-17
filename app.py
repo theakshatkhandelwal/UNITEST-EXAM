@@ -440,7 +440,9 @@ class ProctoringSnapshot(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     submission_id = db.Column(db.Integer, db.ForeignKey('quiz_submission.id'), nullable=False)
     snapshot_type = db.Column(db.String(20), nullable=False)
-    image_data = db.Column(db.Text, nullable=True)
+    # Keep DB column name as "image_path" for compatibility with existing deployments.
+    # The app still uses attribute name "image_data" in Python code.
+    image_data = db.Column('image_path', db.Text, nullable=True)
     captured_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 class ProctoringBreach(db.Model):

@@ -20,6 +20,8 @@ import io
 from datetime import datetime, timedelta
 import requests
 import secrets
+import hashlib
+import time
 import csv
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -71,6 +73,53 @@ def get_geolocation_from_ip(ip_address):
     except Exception as e:
         print(f"Geolocation lookup failed for {ip_address}: {str(e)}")
         return None
+
+def persist_proctoring_image(image_data, submission_id, snapshot_type, captured_at):
+    """
+    Persist proctoring image and return storable reference (URL/base64).
+    If Cloudinary env vars are configured, uploads image and returns secure URL.
+    Otherwise returns original image_data (legacy DB behavior).
+    """
+    if not image_data:
+        return None
+
+    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME')
+    api_key = os.environ.get('CLOUDINARY_API_KEY')
+    api_secret = os.environ.get('CLOUDINARY_API_SECRET')
+
+    if not (cloud_name and api_key and api_secret):
+        return image_data
+
+    try:
+        ts = int(time.time())
+        base_folder = os.environ.get('CLOUDINARY_PROCTOR_FOLDER', 'unitest/proctoring')
+        folder = f"{base_folder}/{submission_id}"
+        public_id = f"{snapshot_type}_{int(captured_at.timestamp())}_{secrets.token_hex(3)}"
+        to_sign = f"folder={folder}&public_id={public_id}&timestamp={ts}{api_secret}"
+        signature = hashlib.sha1(to_sign.encode('utf-8')).hexdigest()
+        url = f"https://api.cloudinary.com/v1_1/{cloud_name}/image/upload"
+
+        response = requests.post(
+            url,
+            data={
+                'api_key': api_key,
+                'timestamp': ts,
+                'folder': folder,
+                'public_id': public_id,
+                'signature': signature,
+                'file': image_data,
+            },
+            timeout=20
+        )
+        result = response.json() if response.content else {}
+        secure_url = result.get('secure_url')
+        if secure_url:
+            return secure_url
+        print(f"Cloudinary upload failed: {result}")
+    except Exception as e:
+        print(f"Cloudinary upload error: {e}")
+
+    return image_data
 
 # Cloud OCR API support (works in serverless environments like Vercel)
 def extract_pdf_content_with_cloud_ocr(file_path):
@@ -2579,10 +2628,11 @@ def api_proctoring_snapshot(code):
     elif device_fp and submission.device_fingerprint and submission.device_fingerprint != device_fp[:512]:
         db.session.add(ProctoringBreach(submission_id=submission.id, breach_type='DEVICE_ID_CHANGE_DETECTED', occurred_at=captured_at))
         submission.device_fingerprint = device_fp[:512]
-    # Allow larger payloads for screenshot/webcam frames.
-    if image_data and len(image_data) > 1500000:
+    # Prevent very large payloads from overwhelming DB/storage.
+    if image_data and len(image_data) > 2500000:
         image_data = None
-    db.session.add(ProctoringSnapshot(submission_id=submission.id, snapshot_type=snapshot_type, image_data=image_data, captured_at=captured_at))
+    stored_image_ref = persist_proctoring_image(image_data, submission.id, snapshot_type, captured_at)
+    db.session.add(ProctoringSnapshot(submission_id=submission.id, snapshot_type=snapshot_type, image_data=stored_image_ref, captured_at=captured_at))
     db.session.commit()
     return jsonify({'ok': True})
 

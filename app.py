@@ -676,6 +676,40 @@ def _send_email_otp(email, otp):
         print(f"Email OTP send failed: {e}")
         return False
 
+def _send_password_reset_email(email, reset_link):
+    subject = "UniTest password reset link"
+    body = (
+        "You requested a password reset for your UniTest account.\n\n"
+        f"Reset link: {reset_link}\n\n"
+        "This link is valid for 1 hour. If you did not request this, you can ignore this email."
+    )
+    mail_server = os.environ.get('MAIL_SERVER')
+    mail_port = int(os.environ.get('MAIL_PORT', '587'))
+    mail_username = os.environ.get('MAIL_USERNAME')
+    mail_password = os.environ.get('MAIL_PASSWORD')
+    mail_use_tls = str(os.environ.get('MAIL_USE_TLS', 'true')).lower() == 'true'
+
+    if not (mail_server and mail_username and mail_password):
+        print(f"[DEV RESET EMAIL] {email} => {reset_link}")
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = mail_username
+        msg['To'] = email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        with smtplib.SMTP(mail_server, mail_port, timeout=15) as server:
+            if mail_use_tls:
+                server.starttls()
+            server.login(mail_username, mail_password)
+            server.sendmail(mail_username, [email], msg.as_string())
+        return True
+    except Exception as e:
+        print(f"Password reset email send failed: {e}")
+        return False
+
 def _make_unique_username(base_username):
     base = re.sub(r'[^a-zA-Z0-9_]', '', (base_username or 'user').strip())[:24] or 'user'
     candidate = base
@@ -2306,16 +2340,13 @@ def forgot_password():
                 
                 # Generate reset link
                 reset_link = url_for('reset_password', token=reset_token, _external=True)
-                
-                # In production, send email here
-                # For now, show the link (you can configure email later)
-                flash(f'Password reset link generated! Reset Link: {reset_link}', 'info')
-                flash('Please copy this link and use it to reset your password. The link is valid for 1 hour.', 'info')
-                
-                # TODO: Send email with reset_link
-                # Example: send_password_reset_email(user.email, reset_link)
-                
-                return render_template('forgot_password.html', reset_link=reset_link, show_link=True)
+
+                sent = _send_password_reset_email(user.email, reset_link)
+                if not sent:
+                    flash('Could not send reset email right now. Please verify mail settings and try again.', 'error')
+                    return redirect(url_for('forgot_password'))
+                flash('If an account exists with that email/username, a password reset link has been sent.', 'info')
+                return redirect(url_for('forgot_password'))
             else:
                 # Don't reveal if user exists for security
                 flash('If an account exists with that email/username, a password reset link has been sent.', 'info')
@@ -2326,7 +2357,7 @@ def forgot_password():
             flash(f'Error processing request: {str(e)}', 'error')
             return redirect(url_for('forgot_password'))
     
-    return render_template('forgot_password.html', show_link=False)
+    return render_template('forgot_password.html')
 
 @app.route('/reset_password/<token>', methods=['GET', 'POST'])
 def reset_password(token):

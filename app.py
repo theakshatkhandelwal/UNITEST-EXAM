@@ -676,33 +676,6 @@ def _send_email_otp(email, otp):
         print(f"Email OTP send failed: {e}")
         return False
 
-def _send_sms_otp(phone_number, otp):
-    twilio_sid = os.environ.get('TWILIO_ACCOUNT_SID')
-    twilio_token = os.environ.get('TWILIO_AUTH_TOKEN')
-    twilio_from = os.environ.get('TWILIO_PHONE_NUMBER')
-    message = f"Your UniTest mobile OTP is {otp}. Valid for 10 minutes."
-
-    # Dev fallback if SMS provider isn't configured.
-    if not (twilio_sid and twilio_token and twilio_from):
-        print(f"[DEV SMS OTP] {phone_number} => {otp}")
-        return True
-
-    try:
-        endpoint = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_sid}/Messages.json"
-        resp = requests.post(
-            endpoint,
-            data={'From': twilio_from, 'To': phone_number, 'Body': message},
-            auth=(twilio_sid, twilio_token),
-            timeout=15
-        )
-        if resp.status_code in (200, 201):
-            return True
-        print(f"SMS OTP send failed [{resp.status_code}]: {resp.text[:500]}")
-        return False
-    except Exception as e:
-        print(f"SMS OTP send exception: {e}")
-        return False
-
 def _make_unique_username(base_username):
     base = re.sub(r'[^a-zA-Z0-9_]', '', (base_username or 'user').strip())[:24] or 'user'
     candidate = base
@@ -2055,17 +2028,12 @@ def signup():
         try:
             username = request.form['username']
             email = request.form['email']
-            phone_number = request.form.get('phone_number', '').strip()
             password = request.form['password']
             confirm_password = request.form['confirm_password']
             role = request.form.get('role', 'student')
 
-            if not all([username, email, phone_number, password, confirm_password]):
+            if not all([username, email, password, confirm_password]):
                 flash('Please fill in all fields', 'error')
-                return redirect(url_for('signup'))
-
-            if not re.match(r'^\+?[0-9]{10,15}$', phone_number):
-                flash('Enter a valid phone number (10-15 digits, optional + prefix).', 'error')
                 return redirect(url_for('signup'))
 
             if password != confirm_password:
@@ -2083,37 +2051,24 @@ def signup():
                 flash('Email already exists', 'error')
                 return redirect(url_for('signup'))
 
-            existing_phone = db.session.query(User).filter_by(phone_number=phone_number).first()
-            if existing_phone:
-                flash('Phone number already exists', 'error')
-                return redirect(url_for('signup'))
-
             email_otp = _generate_otp()
-            phone_otp = _generate_otp()
             expires_at = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
 
             email_sent = _send_email_otp(email, email_otp)
-            sms_sent = _send_sms_otp(phone_number, phone_otp)
             if not email_sent:
                 flash('Unable to send email OTP right now. Please try again.', 'error')
-                return redirect(url_for('signup'))
-            if not sms_sent:
-                flash('Unable to send mobile OTP right now. Please try again.', 'error')
                 return redirect(url_for('signup'))
 
             session['signup_otp_pending'] = {
                 'username': username,
                 'email': email.lower(),
-                'phone_number': phone_number,
                 'password_hash': generate_password_hash(password),
                 'role': role if role in ['student', 'teacher'] else 'student',
                 'email_otp_hash': _hash_otp(email_otp),
-                'phone_otp_hash': _hash_otp(phone_otp),
                 'otp_expires_at': expires_at,
-                'email_verified': False,
-                'phone_verified': False
+                'email_verified': False
             }
-            flash('OTP sent to your email and mobile. Verify both to complete signup.', 'success')
+            flash('OTP sent to your email. Verify it to complete signup.', 'success')
             return redirect(url_for('verify_signup_otp'))
         except Exception as e:
             print(f"Error in signup: {str(e)}")
@@ -2151,35 +2106,18 @@ def verify_signup_otp():
                 flash('Failed to resend email OTP.', 'error')
             return redirect(url_for('verify_signup_otp'))
 
-        if action == 'resend_phone':
-            otp = _generate_otp()
-            if _send_sms_otp(pending['phone_number'], otp):
-                pending['phone_otp_hash'] = _hash_otp(otp)
-                pending['otp_expires_at'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
-                session['signup_otp_pending'] = pending
-                flash('Mobile OTP resent.', 'success')
-            else:
-                flash('Failed to resend mobile OTP.', 'error')
-            return redirect(url_for('verify_signup_otp'))
-
         email_otp = request.form.get('email_otp', '').strip()
-        phone_otp = request.form.get('phone_otp', '').strip()
         if _hash_otp(email_otp) != pending['email_otp_hash']:
             flash('Invalid email OTP.', 'error')
-            return redirect(url_for('verify_signup_otp'))
-        if _hash_otp(phone_otp) != pending['phone_otp_hash']:
-            flash('Invalid mobile OTP.', 'error')
             return redirect(url_for('verify_signup_otp'))
 
         try:
             user = User(
                 username=pending['username'],
                 email=pending['email'],
-                phone_number=pending['phone_number'],
                 password_hash=pending['password_hash'],
                 role=pending['role'],
                 email_verified=True,
-                phone_verified=True,
                 auth_provider='local'
             )
             db.session.add(user)
@@ -2204,8 +2142,8 @@ def login():
 
             user = db.session.query(User).filter_by(username=username).first()
             if user and check_password_hash(user.password_hash, password):
-                if not user.email_verified or not user.phone_verified:
-                    flash('Please complete email and mobile verification before login.', 'error')
+                if not user.email_verified:
+                    flash('Please complete email verification before login.', 'error')
                     return redirect(url_for('login'))
                 _record_login_event(user)
                 db.session.commit()
@@ -2314,7 +2252,6 @@ def google_auth_callback():
                 password_hash=generate_password_hash(secrets.token_urlsafe(24)),
                 role='student',
                 email_verified=True,
-                phone_verified=False,
                 google_id=google_sub,
                 auth_provider='google'
             )
@@ -2326,11 +2263,6 @@ def google_auth_callback():
             user.email_verified = True
             db.session.commit()
 
-        if not user.phone_verified:
-            session['google_phone_pending_user_id'] = user.id
-            flash('Google login successful. Verify your mobile OTP to continue.', 'info')
-            return redirect(url_for('verify_google_phone'))
-
         _record_login_event(user)
         db.session.commit()
         login_user(user)
@@ -2341,84 +2273,6 @@ def google_auth_callback():
         db.session.rollback()
         flash('Google login failed. Please try again.', 'error')
         return redirect(url_for('login'))
-
-@app.route('/auth/google/verify-phone', methods=['GET', 'POST'])
-def verify_google_phone():
-    user_id = session.get('google_phone_pending_user_id')
-    if not user_id:
-        flash('No pending Google phone verification found.', 'error')
-        return redirect(url_for('login'))
-    user = db.session.query(User).filter_by(id=user_id).first()
-    if not user:
-        session.pop('google_phone_pending_user_id', None)
-        flash('User not found.', 'error')
-        return redirect(url_for('login'))
-
-    pending = session.get('google_phone_otp_pending')
-    if request.method == 'POST':
-        action = request.form.get('action', 'send')
-
-        if action == 'send':
-            phone_number = request.form.get('phone_number', '').strip()
-            if not re.match(r'^\+?[0-9]{10,15}$', phone_number):
-                flash('Enter a valid phone number (10-15 digits).', 'error')
-                return redirect(url_for('verify_google_phone'))
-
-            existing_phone = db.session.query(User).filter(User.phone_number == phone_number, User.id != user.id).first()
-            if existing_phone:
-                flash('This phone number is already linked to another account.', 'error')
-                return redirect(url_for('verify_google_phone'))
-
-            otp = _generate_otp()
-            if not _send_sms_otp(phone_number, otp):
-                flash('Could not send mobile OTP. Try again.', 'error')
-                return redirect(url_for('verify_google_phone'))
-            session['google_phone_otp_pending'] = {
-                'phone_number': phone_number,
-                'otp_hash': _hash_otp(otp),
-                'expires_at': (datetime.utcnow() + timedelta(minutes=10)).isoformat()
-            }
-            flash('Mobile OTP sent. Enter it below.', 'success')
-            return redirect(url_for('verify_google_phone'))
-
-        if action == 'resend':
-            if not pending:
-                flash('No active OTP session found. Enter number and send OTP again.', 'error')
-                return redirect(url_for('verify_google_phone'))
-            otp = _generate_otp()
-            if _send_sms_otp(pending['phone_number'], otp):
-                pending['otp_hash'] = _hash_otp(otp)
-                pending['expires_at'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
-                session['google_phone_otp_pending'] = pending
-                flash('OTP resent successfully.', 'success')
-            else:
-                flash('Failed to resend OTP.', 'error')
-            return redirect(url_for('verify_google_phone'))
-
-        if action == 'verify':
-            if not pending:
-                flash('No active OTP session found. Send OTP first.', 'error')
-                return redirect(url_for('verify_google_phone'))
-            if datetime.utcnow() > datetime.fromisoformat(pending['expires_at']):
-                session.pop('google_phone_otp_pending', None)
-                flash('OTP expired. Send a new OTP.', 'error')
-                return redirect(url_for('verify_google_phone'))
-            otp = request.form.get('phone_otp', '').strip()
-            if _hash_otp(otp) != pending['otp_hash']:
-                flash('Invalid OTP.', 'error')
-                return redirect(url_for('verify_google_phone'))
-
-            user.phone_number = pending['phone_number']
-            user.phone_verified = True
-            _record_login_event(user)
-            db.session.commit()
-            login_user(user)
-            session.pop('google_phone_otp_pending', None)
-            session.pop('google_phone_pending_user_id', None)
-            flash('Phone verified. Logged in successfully!', 'success')
-            return redirect(url_for('dashboard'))
-
-    return render_template('verify_google_phone.html', user=user, pending=pending)
 
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():

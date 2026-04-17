@@ -1,68 +1,62 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="auth-container">
-    <div class="auth-card">
-        <div class="auth-header">
-            <h1 class="auth-title">Create Your Account</h1>
-            <p class="auth-subtitle">Join UNITEST - AI-Powered Quiz Platform</p>
-        </div>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <form method="POST" class="auth-form">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required placeholder="Choose a username">
-            </div>
-
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" name="email" required placeholder="your@email.com">
-            </div>
-
-            <div class="form-group">
-                <label for="phone_number">Mobile Number</label>
-                <input type="text" id="phone_number" name="phone_number" required placeholder="+919999999999">
-                <small style="color:#666;">Used for OTP verification at signup and Google sign-in.</small>
-            </div>
-
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required placeholder="Create a strong password">
-                <div id="strength-meter" style="display: none;">
-                    <div class="password-strength-meter">
-                        <div class="password-strength-bar"></div>
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
+                        <h2 class="fw-bold text-primary">Create Your Account</h2>
+                        <p class="text-muted">Join UniTest and start your learning journey</p>
                     </div>
-                    <div class="password-strength-text"></div>
+
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="username" class="form-label fw-bold">Username</label>
+                            <input type="text" class="form-control" id="username" name="username" required placeholder="Choose a username">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label fw-bold">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" required placeholder="your@email.com">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label fw-bold">Password</label>
+                            <input type="password" class="form-control" id="password" name="password" required placeholder="Create a strong password">
+                            <div id="strength-meter" style="display: none;">
+                                <div class="password-strength-meter">
+                                    <div class="password-strength-bar"></div>
+                                </div>
+                                <div class="password-strength-text"></div>
+                            </div>
+                            <div id="strength-suggestions"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="confirm_password" class="form-label fw-bold">Confirm Password</label>
+                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required placeholder="Confirm your password">
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="role" class="form-label fw-bold">I am a:</label>
+                            <select class="form-select" id="role" name="role" required>
+                                <option value="student">Student</option>
+                                <option value="teacher">Teacher</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100 btn-lg mb-3">Sign Up</button>
+                    </form>
+
+                    <div class="text-center">
+                        <p class="text-muted mb-0">Already have an account?</p>
+                        <a href="{{ url_for('login') }}" class="text-primary text-decoration-none fw-bold">Sign In</a>
+                    </div>
                 </div>
-                <div id="strength-suggestions"></div>
             </div>
-
-            <div class="form-group">
-                <label for="confirm_password">Confirm Password</label>
-                <input type="password" id="confirm_password" name="confirm_password" required placeholder="Confirm your password">
-            </div>
-
-            <div class="form-group">
-                <label for="role">I am a:</label>
-                <select id="role" name="role" required>
-                    <option value="student">Student</option>
-                    <option value="teacher">Teacher</option>
-                </select>
-            </div>
-
-            <button type="submit" class="btn btn-primary btn-block">Sign Up</button>
-        </form>
-
-        <div class="auth-links">
-            Already have an account? <a href="{{ url_for('login') }}">Sign In</a>
         </div>
     </div>
 </div>

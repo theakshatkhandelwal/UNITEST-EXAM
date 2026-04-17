@@ -2639,6 +2639,8 @@ def api_proctoring_snapshot(code):
     if snapshot_type not in ('screen', 'webcam'):
         snapshot_type = 'webcam'
     image_data = data.get('image')
+    if not image_data:
+        return jsonify({'ok': False, 'error': 'missing_image'}), 400
     captured_at = datetime.utcnow()
     if data.get('captured_at'):
         try:

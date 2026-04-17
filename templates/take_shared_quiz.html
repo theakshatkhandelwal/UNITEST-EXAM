@@ -262,6 +262,8 @@ function captureSnapshots() {
     captureToDataUrl(proctorScreenStream, 800, function(d){ sendSnapshot('screen', d, at); });
   } else if (cachedScreenSnapshot) {
     sendSnapshot('screen', cachedScreenSnapshot, at);
+  } else {
+    logProctoringBreach('SCREEN_CAPTURE_UNAVAILABLE');
   }
   if (proctorWebcamStream) {
     captureToDataUrl(proctorWebcamStream, 400, function(d){ sendSnapshot('webcam', d, at); });
@@ -1055,6 +1057,8 @@ document.addEventListener('DOMContentLoaded', function() {
   if (quizForm) {
     quizForm.addEventListener('submit', function(e) {
       console.log('Form submit event triggered');
+      window.isSubmittingQuiz = true;
+      quizStarted = false;
       
       // Sync all CodeMirror editors back to their textareas
       if (window.codeMirrorEditors) {
@@ -1214,6 +1218,7 @@ document.addEventListener('DOMContentLoaded', function() {
     finalSubmitBtn.addEventListener('click', function() {
       // Set flag BEFORE showing confirmation dialog (which exits fullscreen)
       window.isSubmittingQuiz = true;
+      quizStarted = false;
       
       if (confirm('Are you sure you want to submit the quiz? You cannot change your answers after submission.')) {
         window.saveCurrentAnswer();
@@ -1232,6 +1237,7 @@ document.addEventListener('DOMContentLoaded', function() {
       } else {
         // User cancelled - reset flag
         window.isSubmittingQuiz = false;
+        quizStarted = true;
       }
     });
   }

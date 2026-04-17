@@ -49,11 +49,17 @@
         resolve(null);
         return;
       }
+      var resolved = false;
       var v = document.createElement('video');
       v.srcObject = stream;
       v.muted = true;
       v.playsInline = true;
-      v.onloadeddata = function() {
+      var finalize = function(value) {
+        if (resolved) return;
+        resolved = true;
+        resolve(value || null);
+      };
+      var snap = function() {
         try {
           var c = document.createElement('canvas');
           var t = stream.getVideoTracks()[0].getSettings();
@@ -61,12 +67,16 @@
           if (maxW && w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
           c.width = w; c.height = h;
           c.getContext('2d').drawImage(v, 0, 0, w, h);
-          resolve(c.toDataURL('image/jpeg', 0.35));
+          finalize(c.toDataURL('image/jpeg', 0.35));
         } catch (e) {
-          resolve(null);
+          finalize(null);
         }
       };
-      v.play().catch(function() { resolve(null); });
+      v.onloadeddata = function() { requestAnimationFrame(snap); };
+      v.play().then(function() {
+        setTimeout(snap, 400);
+      }).catch(function() { finalize(null); });
+      setTimeout(function() { finalize(null); }, 2500);
     });
   }
 
@@ -86,6 +96,11 @@
         let screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
         let camShot = await captureToDataUrl(camStream, 320);
         let screenShot = await captureToDataUrl(screenStream, 640);
+        if (!camShot || !screenShot) {
+          camStream.getTracks().forEach(function(t) { t.stop(); });
+          screenStream.getTracks().forEach(function(t) { t.stop(); });
+          throw new Error('Could not capture webcam/screen snapshot. Please allow permissions and try again.');
+        }
         let capturedAt = new Date().toISOString();
         try {
           sessionStorage.setItem('prejoin_cam_snapshot', camShot || '');

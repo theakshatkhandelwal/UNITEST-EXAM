@@ -220,6 +220,7 @@ const QUIZ_CODE = "{{ quiz.code }}";
 const PROCTOR_INTERVAL = 40 * 1000;
 let proctorScreenStream = null, proctorWebcamStream = null, proctorIntervalId = null, deviceFpSent = false;
 let isProctoringInitializing = false;
+let isPermissionPromptActive = false;
 let preJoinSynced = false;
 function getDeviceFingerprint() {
   var s = (navigator.userAgent || '') + '|' + (screen.width + 'x' + screen.height) + '|' + (new Date().getTimezoneOffset());
@@ -265,12 +266,12 @@ function startProctoring() {
   setTimeout(function(){
     syncPreJoinSnapshots();
     startLiveProctoringStreams();
-    isProctoringInitializing = false;
   }, 3000);
 }
 
 function startLiveProctoringStreams() {
   // NOTE: Browser security may require a prompt here per page/session for screen capture.
+  isPermissionPromptActive = true;
   Promise.allSettled([
     navigator.mediaDevices.getDisplayMedia({ video: true }),
     navigator.mediaDevices.getUserMedia({ video: true })
@@ -289,6 +290,9 @@ function startLiveProctoringStreams() {
     proctorIntervalId = setInterval(captureSnapshots, PROCTOR_INTERVAL);
   }).catch(function() {
     logProctoringBreach('PROCTOR_STREAM_INIT_FAILED');
+  }).finally(function() {
+    isPermissionPromptActive = false;
+    isProctoringInitializing = false;
   });
 }
 
@@ -489,7 +493,7 @@ function exitQuiz() {
 
 // Monitor fullscreen changes
 function onFullscreenExit() {
-  if (isProctoringInitializing) return;
+  if (isProctoringInitializing || isPermissionPromptActive) return;
   if (typeof logProctoringBreach === 'function') logProctoringBreach('FULLSCREEN_EXIT_COUNT');
   console.log('Exited fullscreen');
   exitQuiz();
@@ -580,7 +584,7 @@ let visibilityWarningShown = false;
 
 // Detect tab switching using Page Visibility API
 document.addEventListener('visibilitychange', function() {
-  if (!quizStarted || isProctoringInitializing) return;
+  if (!quizStarted || isProctoringInitializing || isPermissionPromptActive) return;
   
   if (document.hidden) {
     if (typeof logProctoringBreach === 'function') {
@@ -606,7 +610,7 @@ document.addEventListener('visibilitychange', function() {
 
 // Detect window blur (when user switches to another window)
 window.addEventListener('blur', function() {
-  if (!quizStarted || isProctoringInitializing) return;
+  if (!quizStarted || isProctoringInitializing || isPermissionPromptActive) return;
   if (typeof logProctoringBreach === 'function') logProctoringBreach('PAGE_UNFOCUSSED');
   const shouldFlag = showWarning('window_blur', 'You switched to another window. This is not allowed during the quiz.');
   if (shouldFlag) {

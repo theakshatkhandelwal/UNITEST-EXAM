@@ -22,6 +22,7 @@ import requests
 import secrets
 import hashlib
 import time
+import base64
 import csv
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -88,7 +89,25 @@ def persist_proctoring_image(image_data, submission_id, snapshot_type, captured_
     api_secret = os.environ.get('CLOUDINARY_API_SECRET')
 
     if not (cloud_name and api_key and api_secret):
-        return image_data
+        # Local fallback (short path in DB) when Cloudinary is not configured.
+        try:
+            if image_data.startswith('data:image/'):
+                header, b64 = image_data.split(',', 1)
+                ext = 'jpg'
+                if 'image/png' in header:
+                    ext = 'png'
+                elif 'image/webp' in header:
+                    ext = 'webp'
+                folder = os.path.join('static', 'proctoring_snapshots', str(submission_id))
+                os.makedirs(folder, exist_ok=True)
+                filename = f"{snapshot_type}_{int(captured_at.timestamp())}_{secrets.token_hex(3)}.{ext}"
+                path = os.path.join(folder, filename)
+                with open(path, 'wb') as f:
+                    f.write(base64.b64decode(b64))
+                return f"proctoring_snapshots/{submission_id}/{filename}"
+        except Exception as e:
+            print(f"Local snapshot fallback failed: {e}")
+        return None
 
     try:
         ts = int(time.time())
@@ -2632,9 +2651,14 @@ def api_proctoring_snapshot(code):
     if image_data and len(image_data) > 2500000:
         image_data = None
     stored_image_ref = persist_proctoring_image(image_data, submission.id, snapshot_type, captured_at)
-    db.session.add(ProctoringSnapshot(submission_id=submission.id, snapshot_type=snapshot_type, image_data=stored_image_ref, captured_at=captured_at))
-    db.session.commit()
-    return jsonify({'ok': True})
+    try:
+        db.session.add(ProctoringSnapshot(submission_id=submission.id, snapshot_type=snapshot_type, image_data=stored_image_ref, captured_at=captured_at))
+        db.session.commit()
+        return jsonify({'ok': True, 'stored': bool(stored_image_ref)})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Snapshot persist failed for submission {submission.id}: {e}")
+        return jsonify({'ok': False, 'error': 'snapshot_store_failed'}), 500
 
 # Proctoring: record breach
 @app.route('/api/proctoring/breach/<code>', methods=['POST'])

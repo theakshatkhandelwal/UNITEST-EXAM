@@ -443,7 +443,8 @@ class ProctoringSnapshot(db.Model):
     # Keep DB column name as "image_path" for compatibility with existing deployments.
     # The app still uses attribute name "image_data" in Python code.
     image_data = db.Column('image_path', db.Text, nullable=True)
-    captured_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Keep DB column name as "timestamp" for compatibility with older schema.
+    captured_at = db.Column('timestamp', db.DateTime, default=datetime.utcnow, nullable=False)
 
 class ProctoringBreach(db.Model):
     __tablename__ = 'proctoring_breach'

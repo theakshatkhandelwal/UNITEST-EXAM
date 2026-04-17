@@ -539,6 +539,7 @@ class Quiz(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     difficulty = db.Column(db.String(20), default='beginner')  # beginner/intermediate/advanced
     duration_minutes = db.Column(db.Integer)  # optional time limit for test
+    is_archived = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class QuizQuestion(db.Model):
@@ -2597,14 +2598,25 @@ def dashboard():
     progress_records = db.session.query(Progress).filter_by(user_id=current_user.id).all()
     # Teacher's quizzes
     my_quizzes = []
+    show_archived = request.args.get('show_archived', '0') == '1'
     if getattr(current_user, 'role', 'student') == 'teacher':
-        my_quizzes = db.session.query(Quiz).filter_by(created_by=current_user.id).all()
+        teacher_quiz_query = db.session.query(Quiz).filter_by(created_by=current_user.id)
+        if not show_archived:
+            teacher_quiz_query = teacher_quiz_query.filter(Quiz.is_archived == False)  # noqa: E712
+        my_quizzes = teacher_quiz_query.order_by(Quiz.created_at.desc()).all()
     # Student shared quiz history
     my_submissions = []
     if getattr(current_user, 'role', 'student') == 'student':
         my_submissions = db.session.query(QuizSubmission).filter_by(student_id=current_user.id).order_by(QuizSubmission.submitted_at.desc()).all()
     current_time = datetime.utcnow()  # For 15-minute review unlock
-    return render_template('dashboard.html', progress_records=progress_records, my_quizzes=my_quizzes, my_submissions=my_submissions, current_time=current_time)
+    return render_template(
+        'dashboard.html',
+        progress_records=progress_records,
+        my_quizzes=my_quizzes,
+        my_submissions=my_submissions,
+        current_time=current_time,
+        show_archived=show_archived
+    )
 
 def generate_quiz_code(length=6):
     import random, string
@@ -2667,6 +2679,32 @@ def teacher_create_quiz():
             return redirect(url_for('teacher_create_quiz'))
 
     return render_template('create_quiz.html')
+
+@app.route('/teacher/quiz/<code>/archive', methods=['POST'])
+@login_required
+def teacher_archive_quiz(code):
+    guard = require_teacher()
+    if guard:
+        return guard
+
+    quiz = db.session.query(Quiz).filter_by(code=code.upper(), created_by=current_user.id).first()
+    if not quiz:
+        flash('Quiz not found or permission denied.', 'error')
+        return redirect(url_for('dashboard'))
+
+    try:
+        action = request.form.get('action', 'archive').strip().lower()
+        quiz.is_archived = (action != 'unarchive')
+        db.session.commit()
+        flash('Quiz archived successfully.' if quiz.is_archived else 'Quiz moved back to active list.', 'success')
+    except Exception as e:
+        print(f"Archive toggle error for quiz {code}: {e}")
+        db.session.rollback()
+        flash('Could not update archive status.', 'error')
+
+    # Keep current list mode after action.
+    show_archived = '1' if request.form.get('show_archived') == '1' else '0'
+    return redirect(url_for('dashboard', show_archived=show_archived))
 
 # Teacher: simple create by topic and number of questions
 @app.route('/teacher/quiz/new_simple', methods=['GET', 'POST'])
@@ -5040,6 +5078,17 @@ def init_db():
                             print(f"Added {col} to user table")
                 except Exception as e:
                     print(f"Auth extension columns check/add failed (may already exist): {e}")
+
+                # Teacher quiz archive support
+                try:
+                    from sqlalchemy import text
+                    result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='quiz' AND column_name='is_archived'"))
+                    if not result.fetchone():
+                        db.session.execute(text("ALTER TABLE quiz ADD COLUMN is_archived BOOLEAN DEFAULT FALSE"))
+                        db.session.commit()
+                        print("Added is_archived to quiz table")
+                except Exception as e:
+                    print(f"Quiz archive column check/add failed (may already exist): {e}")
                 
                 # Check and add violation flag columns to quiz_submission table (PostgreSQL)
                 try:
@@ -5114,6 +5163,13 @@ def init_db():
                         if 'auth_provider' not in user_cols:
                             conn.execute(text("ALTER TABLE user ADD COLUMN auth_provider VARCHAR(20) DEFAULT 'local';"))
                             print("✅ Added auth_provider to user")
+
+                        # Check quiz table columns
+                        quiz_res = conn.execute(text("PRAGMA table_info(quiz);"))
+                        quiz_cols = [str(r[1]) for r in quiz_res]
+                        if 'is_archived' not in quiz_cols:
+                            conn.execute(text("ALTER TABLE quiz ADD COLUMN is_archived BOOLEAN DEFAULT 0;"))
+                            print("✅ Added is_archived to quiz")
 
                         # Check quiz_submission table columns
                         res = conn.execute(text("PRAGMA table_info(quiz_submission);"))

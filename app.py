@@ -24,6 +24,10 @@ import hashlib
 import time
 import base64
 import csv
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from urllib.parse import urlencode
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
@@ -513,6 +517,11 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     reset_token = db.Column(db.String(100), unique=True, nullable=True)  # Password reset token
     reset_token_expiry = db.Column(db.DateTime, nullable=True)  # Token expiration time
+    phone_number = db.Column(db.String(20), unique=True, nullable=True)
+    email_verified = db.Column(db.Boolean, default=False, nullable=False)
+    phone_verified = db.Column(db.Boolean, default=False, nullable=False)
+    google_id = db.Column(db.String(255), unique=True, nullable=True)
+    auth_provider = db.Column(db.String(20), default='local', nullable=False)
     login_history = db.relationship('LoginHistory', backref='user', lazy=True, cascade='all, delete-orphan')
 
 class Progress(db.Model):
@@ -629,6 +638,99 @@ class LoginHistory(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
+
+def _hash_otp(value):
+    return hashlib.sha256(f"{value}|{app.config['SECRET_KEY']}".encode('utf-8')).hexdigest()
+
+def _generate_otp():
+    return f"{secrets.randbelow(1000000):06d}"
+
+def _send_email_otp(email, otp):
+    subject = "UniTest verification code"
+    body = f"Your UniTest email OTP is: {otp}. It is valid for 10 minutes."
+    mail_server = os.environ.get('MAIL_SERVER')
+    mail_port = int(os.environ.get('MAIL_PORT', '587'))
+    mail_username = os.environ.get('MAIL_USERNAME')
+    mail_password = os.environ.get('MAIL_PASSWORD')
+    mail_use_tls = str(os.environ.get('MAIL_USE_TLS', 'true')).lower() == 'true'
+
+    # Dev fallback when SMTP is not configured.
+    if not (mail_server and mail_username and mail_password):
+        print(f"[DEV EMAIL OTP] {email} => {otp}")
+        return True
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = mail_username
+        msg['To'] = email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        with smtplib.SMTP(mail_server, mail_port, timeout=15) as server:
+            if mail_use_tls:
+                server.starttls()
+            server.login(mail_username, mail_password)
+            server.sendmail(mail_username, [email], msg.as_string())
+        return True
+    except Exception as e:
+        print(f"Email OTP send failed: {e}")
+        return False
+
+def _send_sms_otp(phone_number, otp):
+    twilio_sid = os.environ.get('TWILIO_ACCOUNT_SID')
+    twilio_token = os.environ.get('TWILIO_AUTH_TOKEN')
+    twilio_from = os.environ.get('TWILIO_PHONE_NUMBER')
+    message = f"Your UniTest mobile OTP is {otp}. Valid for 10 minutes."
+
+    # Dev fallback if SMS provider isn't configured.
+    if not (twilio_sid and twilio_token and twilio_from):
+        print(f"[DEV SMS OTP] {phone_number} => {otp}")
+        return True
+
+    try:
+        endpoint = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_sid}/Messages.json"
+        resp = requests.post(
+            endpoint,
+            data={'From': twilio_from, 'To': phone_number, 'Body': message},
+            auth=(twilio_sid, twilio_token),
+            timeout=15
+        )
+        if resp.status_code in (200, 201):
+            return True
+        print(f"SMS OTP send failed [{resp.status_code}]: {resp.text[:500]}")
+        return False
+    except Exception as e:
+        print(f"SMS OTP send exception: {e}")
+        return False
+
+def _make_unique_username(base_username):
+    base = re.sub(r'[^a-zA-Z0-9_]', '', (base_username or 'user').strip())[:24] or 'user'
+    candidate = base
+    idx = 1
+    while db.session.query(User).filter_by(username=candidate).first():
+        candidate = f"{base}{idx}"
+        idx += 1
+    return candidate
+
+def _record_login_event(user):
+    login_time = datetime.utcnow()
+    user.last_login = login_time
+    ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip_address and ',' in ip_address:
+        ip_address = ip_address.split(',')[0].strip()
+    geo_data = get_geolocation_from_ip(ip_address)
+    login_history = LoginHistory(
+        user_id=user.id,
+        login_time=login_time,
+        ip_address=ip_address,
+        user_agent=request.headers.get('User-Agent', 'Unknown'),
+        latitude=geo_data.get('latitude') if geo_data else None,
+        longitude=geo_data.get('longitude') if geo_data else None,
+        city=geo_data.get('city') if geo_data else None,
+        country=geo_data.get('country') if geo_data else None,
+        region=geo_data.get('region') if geo_data else None
+    )
+    db.session.add(login_history)
 
 def handle_gemini_api_error(e, context="API call"):
     """Handle Gemini API errors and provide user-friendly messages"""
@@ -1953,12 +2055,17 @@ def signup():
         try:
             username = request.form['username']
             email = request.form['email']
+            phone_number = request.form.get('phone_number', '').strip()
             password = request.form['password']
             confirm_password = request.form['confirm_password']
             role = request.form.get('role', 'student')
 
-            if not all([username, email, password, confirm_password]):
+            if not all([username, email, phone_number, password, confirm_password]):
                 flash('Please fill in all fields', 'error')
+                return redirect(url_for('signup'))
+
+            if not re.match(r'^\+?[0-9]{10,15}$', phone_number):
+                flash('Enter a valid phone number (10-15 digits, optional + prefix).', 'error')
                 return redirect(url_for('signup'))
 
             if password != confirm_password:
@@ -1976,18 +2083,38 @@ def signup():
                 flash('Email already exists', 'error')
                 return redirect(url_for('signup'))
 
-            # Create new user
-            user = User(
-                username=username,
-                email=email,
-                password_hash=generate_password_hash(password),
-                role=role if role in ['student','teacher'] else 'student'
-            )
-            db.session.add(user)
-            db.session.commit()
+            existing_phone = db.session.query(User).filter_by(phone_number=phone_number).first()
+            if existing_phone:
+                flash('Phone number already exists', 'error')
+                return redirect(url_for('signup'))
 
-            flash('Account created successfully! Please login.', 'success')
-            return redirect(url_for('login'))
+            email_otp = _generate_otp()
+            phone_otp = _generate_otp()
+            expires_at = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+
+            email_sent = _send_email_otp(email, email_otp)
+            sms_sent = _send_sms_otp(phone_number, phone_otp)
+            if not email_sent:
+                flash('Unable to send email OTP right now. Please try again.', 'error')
+                return redirect(url_for('signup'))
+            if not sms_sent:
+                flash('Unable to send mobile OTP right now. Please try again.', 'error')
+                return redirect(url_for('signup'))
+
+            session['signup_otp_pending'] = {
+                'username': username,
+                'email': email.lower(),
+                'phone_number': phone_number,
+                'password_hash': generate_password_hash(password),
+                'role': role if role in ['student', 'teacher'] else 'student',
+                'email_otp_hash': _hash_otp(email_otp),
+                'phone_otp_hash': _hash_otp(phone_otp),
+                'otp_expires_at': expires_at,
+                'email_verified': False,
+                'phone_verified': False
+            }
+            flash('OTP sent to your email and mobile. Verify both to complete signup.', 'success')
+            return redirect(url_for('verify_signup_otp'))
         except Exception as e:
             print(f"Error in signup: {str(e)}")
             db.session.rollback()
@@ -1995,6 +2122,78 @@ def signup():
             return redirect(url_for('signup'))
 
     return render_template('signup.html')
+
+@app.route('/verify-signup-otp', methods=['GET', 'POST'])
+def verify_signup_otp():
+    pending = session.get('signup_otp_pending')
+    if not pending:
+        flash('No pending signup verification found.', 'error')
+        return redirect(url_for('signup'))
+
+    if request.method == 'POST':
+        action = request.form.get('action', 'verify')
+        now = datetime.utcnow()
+        expires_at = datetime.fromisoformat(pending['otp_expires_at'])
+
+        if now > expires_at:
+            session.pop('signup_otp_pending', None)
+            flash('OTP expired. Please sign up again.', 'error')
+            return redirect(url_for('signup'))
+
+        if action == 'resend_email':
+            otp = _generate_otp()
+            if _send_email_otp(pending['email'], otp):
+                pending['email_otp_hash'] = _hash_otp(otp)
+                pending['otp_expires_at'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+                session['signup_otp_pending'] = pending
+                flash('Email OTP resent.', 'success')
+            else:
+                flash('Failed to resend email OTP.', 'error')
+            return redirect(url_for('verify_signup_otp'))
+
+        if action == 'resend_phone':
+            otp = _generate_otp()
+            if _send_sms_otp(pending['phone_number'], otp):
+                pending['phone_otp_hash'] = _hash_otp(otp)
+                pending['otp_expires_at'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+                session['signup_otp_pending'] = pending
+                flash('Mobile OTP resent.', 'success')
+            else:
+                flash('Failed to resend mobile OTP.', 'error')
+            return redirect(url_for('verify_signup_otp'))
+
+        email_otp = request.form.get('email_otp', '').strip()
+        phone_otp = request.form.get('phone_otp', '').strip()
+        if _hash_otp(email_otp) != pending['email_otp_hash']:
+            flash('Invalid email OTP.', 'error')
+            return redirect(url_for('verify_signup_otp'))
+        if _hash_otp(phone_otp) != pending['phone_otp_hash']:
+            flash('Invalid mobile OTP.', 'error')
+            return redirect(url_for('verify_signup_otp'))
+
+        try:
+            user = User(
+                username=pending['username'],
+                email=pending['email'],
+                phone_number=pending['phone_number'],
+                password_hash=pending['password_hash'],
+                role=pending['role'],
+                email_verified=True,
+                phone_verified=True,
+                auth_provider='local'
+            )
+            db.session.add(user)
+            db.session.commit()
+            session.pop('signup_otp_pending', None)
+            flash('Account created and verified successfully! Please login.', 'success')
+            return redirect(url_for('login'))
+        except Exception as e:
+            print(f"Error in verify_signup_otp: {e}")
+            db.session.rollback()
+            flash('Verification failed. Please try signup again.', 'error')
+            return redirect(url_for('signup'))
+
+    return render_template('verify_signup_otp.html', pending=pending)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -2005,33 +2204,11 @@ def login():
 
             user = db.session.query(User).filter_by(username=username).first()
             if user and check_password_hash(user.password_hash, password):
-                # Track login
-                login_time = datetime.utcnow()
-                user.last_login = login_time
-                
-                # Get real IP address (handle proxies like Vercel/Cloudflare)
-                ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
-                if ip_address and ',' in ip_address:
-                    ip_address = ip_address.split(',')[0].strip()  # Get first IP in chain
-                
-                # Get geolocation from IP
-                geo_data = get_geolocation_from_ip(ip_address)
-                
-                # Record login history with geolocation
-                login_history = LoginHistory(
-                    user_id=user.id,
-                    login_time=login_time,
-                    ip_address=ip_address,
-                    user_agent=request.headers.get('User-Agent', 'Unknown'),
-                    latitude=geo_data.get('latitude') if geo_data else None,
-                    longitude=geo_data.get('longitude') if geo_data else None,
-                    city=geo_data.get('city') if geo_data else None,
-                    country=geo_data.get('country') if geo_data else None,
-                    region=geo_data.get('region') if geo_data else None
-                )
-                db.session.add(login_history)
+                if not user.email_verified or not user.phone_verified:
+                    flash('Please complete email and mobile verification before login.', 'error')
+                    return redirect(url_for('login'))
+                _record_login_event(user)
                 db.session.commit()
-                
                 login_user(user)
                 flash('Logged in successfully!', 'success')
                 return redirect(url_for('dashboard'))
@@ -2045,6 +2222,203 @@ def login():
             return redirect(url_for('login'))
 
     return render_template('login.html')
+
+@app.route('/auth/google/start')
+def google_auth_start():
+    client_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
+    if not client_id:
+        flash('Google login is not configured yet. Set GOOGLE_OAUTH_CLIENT_ID.', 'error')
+        return redirect(url_for('login'))
+
+    state = secrets.token_urlsafe(24)
+    session['google_oauth_state'] = state
+    redirect_uri = url_for('google_auth_callback', _external=True)
+    query = urlencode({
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'access_type': 'offline',
+        'prompt': 'select_account'
+    })
+    return redirect(f"https://accounts.google.com/o/oauth2/v2/auth?{query}")
+
+@app.route('/auth/google/callback')
+def google_auth_callback():
+    try:
+        state = request.args.get('state', '')
+        if not state or state != session.get('google_oauth_state'):
+            flash('Google login state mismatch. Try again.', 'error')
+            return redirect(url_for('login'))
+
+        code = request.args.get('code')
+        if not code:
+            flash('Google login failed: missing authorization code.', 'error')
+            return redirect(url_for('login'))
+
+        client_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
+        client_secret = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET')
+        if not (client_id and client_secret):
+            flash('Google login is not fully configured.', 'error')
+            return redirect(url_for('login'))
+
+        redirect_uri = url_for('google_auth_callback', _external=True)
+        token_resp = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                'code': code,
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'redirect_uri': redirect_uri,
+                'grant_type': 'authorization_code'
+            },
+            timeout=20
+        )
+        if token_resp.status_code != 200:
+            print(f"Google token exchange failed: {token_resp.text[:500]}")
+            flash('Google login failed during token exchange.', 'error')
+            return redirect(url_for('login'))
+
+        access_token = token_resp.json().get('access_token')
+        if not access_token:
+            flash('Google login failed: missing access token.', 'error')
+            return redirect(url_for('login'))
+
+        userinfo_resp = requests.get(
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=20
+        )
+        if userinfo_resp.status_code != 200:
+            print(f"Google userinfo failed: {userinfo_resp.text[:500]}")
+            flash('Google login failed while fetching profile.', 'error')
+            return redirect(url_for('login'))
+
+        profile = userinfo_resp.json()
+        email = (profile.get('email') or '').lower()
+        google_sub = profile.get('sub')
+        if not email or not google_sub:
+            flash('Google profile is missing required fields.', 'error')
+            return redirect(url_for('login'))
+
+        user = db.session.query(User).filter_by(google_id=google_sub).first()
+        if not user:
+            user = db.session.query(User).filter_by(email=email).first()
+
+        if not user:
+            username_seed = profile.get('name') or email.split('@')[0]
+            user = User(
+                username=_make_unique_username(username_seed),
+                email=email,
+                password_hash=generate_password_hash(secrets.token_urlsafe(24)),
+                role='student',
+                email_verified=True,
+                phone_verified=False,
+                google_id=google_sub,
+                auth_provider='google'
+            )
+            db.session.add(user)
+            db.session.commit()
+        else:
+            user.google_id = user.google_id or google_sub
+            user.auth_provider = 'google'
+            user.email_verified = True
+            db.session.commit()
+
+        if not user.phone_verified:
+            session['google_phone_pending_user_id'] = user.id
+            flash('Google login successful. Verify your mobile OTP to continue.', 'info')
+            return redirect(url_for('verify_google_phone'))
+
+        _record_login_event(user)
+        db.session.commit()
+        login_user(user)
+        flash('Logged in successfully with Google!', 'success')
+        return redirect(url_for('dashboard'))
+    except Exception as e:
+        print(f"Google callback error: {e}")
+        db.session.rollback()
+        flash('Google login failed. Please try again.', 'error')
+        return redirect(url_for('login'))
+
+@app.route('/auth/google/verify-phone', methods=['GET', 'POST'])
+def verify_google_phone():
+    user_id = session.get('google_phone_pending_user_id')
+    if not user_id:
+        flash('No pending Google phone verification found.', 'error')
+        return redirect(url_for('login'))
+    user = db.session.query(User).filter_by(id=user_id).first()
+    if not user:
+        session.pop('google_phone_pending_user_id', None)
+        flash('User not found.', 'error')
+        return redirect(url_for('login'))
+
+    pending = session.get('google_phone_otp_pending')
+    if request.method == 'POST':
+        action = request.form.get('action', 'send')
+
+        if action == 'send':
+            phone_number = request.form.get('phone_number', '').strip()
+            if not re.match(r'^\+?[0-9]{10,15}$', phone_number):
+                flash('Enter a valid phone number (10-15 digits).', 'error')
+                return redirect(url_for('verify_google_phone'))
+
+            existing_phone = db.session.query(User).filter(User.phone_number == phone_number, User.id != user.id).first()
+            if existing_phone:
+                flash('This phone number is already linked to another account.', 'error')
+                return redirect(url_for('verify_google_phone'))
+
+            otp = _generate_otp()
+            if not _send_sms_otp(phone_number, otp):
+                flash('Could not send mobile OTP. Try again.', 'error')
+                return redirect(url_for('verify_google_phone'))
+            session['google_phone_otp_pending'] = {
+                'phone_number': phone_number,
+                'otp_hash': _hash_otp(otp),
+                'expires_at': (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+            }
+            flash('Mobile OTP sent. Enter it below.', 'success')
+            return redirect(url_for('verify_google_phone'))
+
+        if action == 'resend':
+            if not pending:
+                flash('No active OTP session found. Enter number and send OTP again.', 'error')
+                return redirect(url_for('verify_google_phone'))
+            otp = _generate_otp()
+            if _send_sms_otp(pending['phone_number'], otp):
+                pending['otp_hash'] = _hash_otp(otp)
+                pending['expires_at'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+                session['google_phone_otp_pending'] = pending
+                flash('OTP resent successfully.', 'success')
+            else:
+                flash('Failed to resend OTP.', 'error')
+            return redirect(url_for('verify_google_phone'))
+
+        if action == 'verify':
+            if not pending:
+                flash('No active OTP session found. Send OTP first.', 'error')
+                return redirect(url_for('verify_google_phone'))
+            if datetime.utcnow() > datetime.fromisoformat(pending['expires_at']):
+                session.pop('google_phone_otp_pending', None)
+                flash('OTP expired. Send a new OTP.', 'error')
+                return redirect(url_for('verify_google_phone'))
+            otp = request.form.get('phone_otp', '').strip()
+            if _hash_otp(otp) != pending['otp_hash']:
+                flash('Invalid OTP.', 'error')
+                return redirect(url_for('verify_google_phone'))
+
+            user.phone_number = pending['phone_number']
+            user.phone_verified = True
+            _record_login_event(user)
+            db.session.commit()
+            login_user(user)
+            session.pop('google_phone_otp_pending', None)
+            session.pop('google_phone_pending_user_id', None)
+            flash('Phone verified. Logged in successfully!', 'success')
+            return redirect(url_for('dashboard'))
+
+    return render_template('verify_google_phone.html', user=user, pending=pending)
 
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
@@ -4593,6 +4967,25 @@ def init_db():
                         print("Added reset_token_expiry column to user table")
                 except Exception as e:
                     print(f"reset_token_expiry column check/add failed (may already exist): {e}")
+
+                # Auth extension columns (Google + OTP verification status)
+                try:
+                    from sqlalchemy import text
+                    user_columns = [
+                        ('phone_number', 'VARCHAR(20)'),
+                        ('email_verified', 'BOOLEAN DEFAULT FALSE'),
+                        ('phone_verified', 'BOOLEAN DEFAULT FALSE'),
+                        ('google_id', 'VARCHAR(255)'),
+                        ('auth_provider', "VARCHAR(20) DEFAULT 'local'")
+                    ]
+                    for col, defn in user_columns:
+                        result = db.session.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='user' AND column_name=:c"), {'c': col})
+                        if not result.fetchone():
+                            db.session.execute(text(f'ALTER TABLE "user" ADD COLUMN {col} {defn}'))
+                            db.session.commit()
+                            print(f"Added {col} to user table")
+                except Exception as e:
+                    print(f"Auth extension columns check/add failed (may already exist): {e}")
                 
                 # Check and add violation flag columns to quiz_submission table (PostgreSQL)
                 try:
@@ -4649,6 +5042,25 @@ def init_db():
                 try:
                     from sqlalchemy import text
                     with db.engine.begin() as conn:
+                        # Check user table columns
+                        user_res = conn.execute(text("PRAGMA table_info(user);"))
+                        user_cols = [str(r[1]) for r in user_res]
+                        if 'phone_number' not in user_cols:
+                            conn.execute(text("ALTER TABLE user ADD COLUMN phone_number VARCHAR(20);"))
+                            print("✅ Added phone_number to user")
+                        if 'email_verified' not in user_cols:
+                            conn.execute(text("ALTER TABLE user ADD COLUMN email_verified BOOLEAN DEFAULT 0;"))
+                            print("✅ Added email_verified to user")
+                        if 'phone_verified' not in user_cols:
+                            conn.execute(text("ALTER TABLE user ADD COLUMN phone_verified BOOLEAN DEFAULT 0;"))
+                            print("✅ Added phone_verified to user")
+                        if 'google_id' not in user_cols:
+                            conn.execute(text("ALTER TABLE user ADD COLUMN google_id VARCHAR(255);"))
+                            print("✅ Added google_id to user")
+                        if 'auth_provider' not in user_cols:
+                            conn.execute(text("ALTER TABLE user ADD COLUMN auth_provider VARCHAR(20) DEFAULT 'local';"))
+                            print("✅ Added auth_provider to user")
+
                         # Check quiz_submission table columns
                         res = conn.execute(text("PRAGMA table_info(quiz_submission);"))
                         cols = [str(r[1]) for r in res]

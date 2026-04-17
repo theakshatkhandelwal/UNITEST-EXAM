@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Verify Signup OTP - UniTest{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow">
+                <div class="card-body p-4">
+                    <h3 class="mb-3 text-primary">Verify Email + Mobile OTP</h3>
+                    <p class="text-muted mb-4">
+                        OTP sent to <strong>{{ pending.email }}</strong> and <strong>{{ pending.phone_number }}</strong>.
+                    </p>
+
+                    <form method="POST" class="mb-3">
+                        <input type="hidden" name="action" value="verify">
+                        <div class="mb-3">
+                            <label class="form-label">Email OTP</label>
+                            <input type="text" class="form-control" name="email_otp" maxlength="6" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Mobile OTP</label>
+                            <input type="text" class="form-control" name="phone_otp" maxlength="6" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Verify & Create Account</button>
+                    </form>
+
+                    <div class="d-flex gap-2">
+                        <form method="POST" class="w-50">
+                            <input type="hidden" name="action" value="resend_email">
+                            <button type="submit" class="btn btn-outline-secondary w-100">Resend Email OTP</button>
+                        </form>
+                        <form method="POST" class="w-50">
+                            <input type="hidden" name="action" value="resend_phone">
+                            <button type="submit" class="btn btn-outline-secondary w-100">Resend Mobile OTP</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -222,6 +222,8 @@ let proctorScreenStream = null, proctorWebcamStream = null, proctorIntervalId = 
 let isProctoringInitializing = false;
 let isPermissionPromptActive = false;
 let preJoinSynced = false;
+let cachedScreenSnapshot = null;
+let cachedWebcamSnapshot = null;
 function getDeviceFingerprint() {
   var s = (navigator.userAgent || '') + '|' + (screen.width + 'x' + screen.height) + '|' + (new Date().getTimezoneOffset());
   var h = 0;
@@ -256,44 +258,30 @@ function sendSnapshot(type, img, at) {
 }
 function captureSnapshots() {
   var at = new Date().toISOString();
-  if (proctorScreenStream) captureToDataUrl(proctorScreenStream, 800, function(d){ sendSnapshot('screen', d, at); });
-  if (proctorWebcamStream) captureToDataUrl(proctorWebcamStream, 400, function(d){ sendSnapshot('webcam', d, at); });
-  else { sendSnapshot('webcam', null, at); logProctoringBreach('CAMERA_OFF_DETECTED'); }
+  if (proctorScreenStream) {
+    captureToDataUrl(proctorScreenStream, 800, function(d){ sendSnapshot('screen', d, at); });
+  } else if (cachedScreenSnapshot) {
+    sendSnapshot('screen', cachedScreenSnapshot, at);
+  }
+  if (proctorWebcamStream) {
+    captureToDataUrl(proctorWebcamStream, 400, function(d){ sendSnapshot('webcam', d, at); });
+  } else if (cachedWebcamSnapshot) {
+    sendSnapshot('webcam', cachedWebcamSnapshot, at);
+  } else {
+    sendSnapshot('webcam', null, at);
+    logProctoringBreach('CAMERA_OFF_DETECTED');
+  }
 }
 function startProctoring() {
   if (proctorIntervalId) return;
   isProctoringInitializing = true;
   setTimeout(function(){
     syncPreJoinSnapshots();
-    startLiveProctoringStreams();
-  }, 3000);
-}
-
-function startLiveProctoringStreams() {
-  // NOTE: Browser security may require a prompt here per page/session for screen capture.
-  isPermissionPromptActive = true;
-  Promise.allSettled([
-    navigator.mediaDevices.getDisplayMedia({ video: true }),
-    navigator.mediaDevices.getUserMedia({ video: true })
-  ]).then(function(results) {
-    if (results[0] && results[0].status === 'fulfilled') {
-      proctorScreenStream = results[0].value;
-    } else {
-      logProctoringBreach('SCREEN_CAPTURE_UNAVAILABLE');
-    }
-    if (results[1] && results[1].status === 'fulfilled') {
-      proctorWebcamStream = results[1].value;
-    } else {
-      logProctoringBreach('CAMERA_OFF_DETECTED');
-    }
-    captureSnapshots();
+    // Do not re-request permissions after join; keep reusing pre-join captures.
     proctorIntervalId = setInterval(captureSnapshots, PROCTOR_INTERVAL);
-  }).catch(function() {
-    logProctoringBreach('PROCTOR_STREAM_INIT_FAILED');
-  }).finally(function() {
-    isPermissionPromptActive = false;
+    captureSnapshots();
     isProctoringInitializing = false;
-  });
+  }, 3000);
 }
 
 function syncPreJoinSnapshots() {
@@ -305,6 +293,8 @@ function syncPreJoinSnapshots() {
     var camShot = sessionStorage.getItem('prejoin_cam_snapshot');
     var screenShot = sessionStorage.getItem('prejoin_screen_snapshot');
     if (storedAt) at = storedAt;
+    cachedWebcamSnapshot = camShot || null;
+    cachedScreenSnapshot = screenShot || null;
     if (screenShot) sendSnapshot('screen', screenShot, at);
     if (camShot) sendSnapshot('webcam', camShot, at);
     if (!screenShot || !camShot) {

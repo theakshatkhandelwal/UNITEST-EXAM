@@ -84,12 +84,7 @@ def persist_proctoring_image(image_data, submission_id, snapshot_type, captured_
     if not image_data:
         return None
 
-    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME')
-    api_key = os.environ.get('CLOUDINARY_API_KEY')
-    api_secret = os.environ.get('CLOUDINARY_API_SECRET')
-
-    if not (cloud_name and api_key and api_secret):
-        # Local fallback (short path in DB) when Cloudinary is not configured.
+    def _save_local_snapshot():
         try:
             if image_data.startswith('data:image/'):
                 header, b64 = image_data.split(',', 1)
@@ -108,6 +103,13 @@ def persist_proctoring_image(image_data, submission_id, snapshot_type, captured_
         except Exception as e:
             print(f"Local snapshot fallback failed: {e}")
         return None
+
+    cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME')
+    api_key = os.environ.get('CLOUDINARY_API_KEY')
+    api_secret = os.environ.get('CLOUDINARY_API_SECRET')
+
+    if not (cloud_name and api_key and api_secret):
+        return _save_local_snapshot()
 
     try:
         ts = int(time.time())
@@ -138,7 +140,8 @@ def persist_proctoring_image(image_data, submission_id, snapshot_type, captured_
     except Exception as e:
         print(f"Cloudinary upload error: {e}")
 
-    return image_data
+    # Never return raw base64 to DB because legacy schema may be VARCHAR(255).
+    return _save_local_snapshot()
 
 # Cloud OCR API support (works in serverless environments like Vercel)
 def extract_pdf_content_with_cloud_ocr(file_path):

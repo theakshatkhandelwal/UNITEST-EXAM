@@ -2397,6 +2397,134 @@ def logout():
     logout_user()
     return redirect(url_for('home'))
 
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    if request.method == 'POST':
+        action = request.form.get('action', 'update_profile')
+
+        if action == 'update_profile':
+            try:
+                new_username = request.form.get('username', '').strip()
+                new_email = request.form.get('email', '').strip().lower()
+
+                if not new_username or not new_email:
+                    flash('Username and email are required.', 'error')
+                    return redirect(url_for('profile'))
+
+                if new_username != current_user.username:
+                    existing_username = db.session.query(User).filter(User.username == new_username, User.id != current_user.id).first()
+                    if existing_username:
+                        flash('Username already taken.', 'error')
+                        return redirect(url_for('profile'))
+                    current_user.username = new_username
+
+                if new_email != current_user.email:
+                    existing_email = db.session.query(User).filter(User.email == new_email, User.id != current_user.id).first()
+                    if existing_email:
+                        flash('Email already in use by another account.', 'error')
+                        return redirect(url_for('profile'))
+
+                    otp = _generate_otp()
+                    if not _send_email_otp(new_email, otp):
+                        flash('Could not send verification OTP to new email.', 'error')
+                        return redirect(url_for('profile'))
+
+                    session['profile_email_change_pending'] = {
+                        'new_email': new_email,
+                        'otp_hash': _hash_otp(otp),
+                        'expires_at': (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+                    }
+                    db.session.commit()
+                    flash('Profile updated. Verify OTP sent to your new email to finalize email change.', 'success')
+                    return redirect(url_for('profile'))
+
+                db.session.commit()
+                flash('Profile updated successfully.', 'success')
+                return redirect(url_for('profile'))
+            except Exception as e:
+                print(f"Profile update error: {e}")
+                db.session.rollback()
+                flash('Could not update profile. Please try again.', 'error')
+                return redirect(url_for('profile'))
+
+        if action == 'send_current_email_otp':
+            otp = _generate_otp()
+            if _send_email_otp(current_user.email, otp):
+                session['profile_email_verify_pending'] = {
+                    'email': current_user.email,
+                    'otp_hash': _hash_otp(otp),
+                    'expires_at': (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+                }
+                flash('Verification OTP sent to your current email.', 'success')
+            else:
+                flash('Could not send verification OTP right now.', 'error')
+            return redirect(url_for('profile'))
+
+        if action == 'verify_current_email_otp':
+            pending = session.get('profile_email_verify_pending')
+            if not pending:
+                flash('No active email verification request. Send OTP first.', 'error')
+                return redirect(url_for('profile'))
+            if pending.get('email') != current_user.email:
+                session.pop('profile_email_verify_pending', None)
+                flash('Email changed. Please request OTP again.', 'error')
+                return redirect(url_for('profile'))
+            if datetime.utcnow() > datetime.fromisoformat(pending['expires_at']):
+                session.pop('profile_email_verify_pending', None)
+                flash('OTP expired. Please request a new one.', 'error')
+                return redirect(url_for('profile'))
+            entered = request.form.get('current_email_otp', '').strip()
+            if _hash_otp(entered) != pending['otp_hash']:
+                flash('Invalid OTP.', 'error')
+                return redirect(url_for('profile'))
+            current_user.email_verified = True
+            db.session.commit()
+            session.pop('profile_email_verify_pending', None)
+            flash('Email verified successfully.', 'success')
+            return redirect(url_for('profile'))
+
+        if action == 'verify_new_email_otp':
+            pending = session.get('profile_email_change_pending')
+            if not pending:
+                flash('No pending email change found.', 'error')
+                return redirect(url_for('profile'))
+            if datetime.utcnow() > datetime.fromisoformat(pending['expires_at']):
+                session.pop('profile_email_change_pending', None)
+                flash('OTP expired. Update email again to get a fresh OTP.', 'error')
+                return redirect(url_for('profile'))
+            entered = request.form.get('new_email_otp', '').strip()
+            if _hash_otp(entered) != pending['otp_hash']:
+                flash('Invalid OTP for new email.', 'error')
+                return redirect(url_for('profile'))
+            current_user.email = pending['new_email']
+            current_user.email_verified = True
+            db.session.commit()
+            session.pop('profile_email_change_pending', None)
+            flash('New email verified and updated successfully.', 'success')
+            return redirect(url_for('profile'))
+
+        if action == 'resend_new_email_otp':
+            pending = session.get('profile_email_change_pending')
+            if not pending:
+                flash('No pending email change found.', 'error')
+                return redirect(url_for('profile'))
+            otp = _generate_otp()
+            if _send_email_otp(pending['new_email'], otp):
+                pending['otp_hash'] = _hash_otp(otp)
+                pending['expires_at'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+                session['profile_email_change_pending'] = pending
+                flash('OTP resent to new email.', 'success')
+            else:
+                flash('Failed to resend OTP.', 'error')
+            return redirect(url_for('profile'))
+
+    return render_template(
+        'profile.html',
+        email_change_pending=session.get('profile_email_change_pending'),
+        email_verify_pending=session.get('profile_email_verify_pending')
+    )
+
 @app.route('/dashboard')
 @login_required
 def dashboard():

@@ -373,10 +373,6 @@
             --accent-color: #ea4335;
             --gradient-bg: #1a73e8;
             --gradient-fg: #4285f4;
-            --bg-color: #f8f9fa;
-            --text-color: #212529;
-            --card-bg: #ffffff;
-            --border-color: #e9ecef;
             --navbar-bg: linear-gradient(135deg, #0f172a, #1e293b);
         }
 
@@ -386,6 +382,7 @@
             --accent-color: #f59e0b;
             --gradient-bg: #0f766e;
             --gradient-fg: #0369a1;
+            --navbar-bg: linear-gradient(135deg, #0b3b66, #0f766e);
         }
 
         [data-color-scheme="emerald"] {
@@ -394,6 +391,24 @@
             --accent-color: #f97316;
             --gradient-bg: #047857;
             --gradient-fg: #16a34a;
+            --navbar-bg: linear-gradient(135deg, #14532d, #047857);
+        }
+
+        /* Dark-mode variants per color scheme */
+        [data-theme="dark"][data-color-scheme="default"] {
+            --navbar-bg: linear-gradient(135deg, #0f172a, #1e293b);
+        }
+
+        [data-theme="dark"][data-color-scheme="purple"] {
+            --navbar-bg: linear-gradient(135deg, #2a0a4f, #3b0764);
+        }
+
+        [data-theme="dark"][data-color-scheme="ocean"] {
+            --navbar-bg: linear-gradient(135deg, #082f49, #155e75);
+        }
+
+        [data-theme="dark"][data-color-scheme="emerald"] {
+            --navbar-bg: linear-gradient(135deg, #052e16, #065f46);
         }
 
         /* Floating WhatsApp Contact */

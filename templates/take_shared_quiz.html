@@ -220,6 +220,7 @@ const QUIZ_CODE = "{{ quiz.code }}";
 const PROCTOR_INTERVAL = 90 * 1000;
 let proctorScreenStream = null, proctorWebcamStream = null, proctorIntervalId = null, deviceFpSent = false;
 let isProctoringInitializing = false;
+let preJoinSynced = false;
 function getDeviceFingerprint() {
   var s = (navigator.userAgent || '') + '|' + (screen.width + 'x' + screen.height) + '|' + (new Date().getTimezoneOffset());
   var h = 0;
@@ -261,13 +262,32 @@ function captureSnapshots() {
 function startProctoring() {
   if (proctorIntervalId) return;
   isProctoringInitializing = true;
-  navigator.mediaDevices.getDisplayMedia({ video: true }).then(function(s){ proctorScreenStream = s; }).catch(function(){});
-  navigator.mediaDevices.getUserMedia({ video: true }).then(function(s){ proctorWebcamStream = s; }).catch(function(){ logProctoringBreach('CAMERA_OFF_DETECTED'); });
   setTimeout(function(){
-    captureSnapshots();
-    proctorIntervalId = setInterval(captureSnapshots, PROCTOR_INTERVAL);
+    syncPreJoinSnapshots();
     isProctoringInitializing = false;
   }, 3000);
+}
+
+function syncPreJoinSnapshots() {
+  if (preJoinSynced) return;
+  preJoinSynced = true;
+  var at = new Date().toISOString();
+  try {
+    var storedAt = sessionStorage.getItem('prejoin_captured_at');
+    var camShot = sessionStorage.getItem('prejoin_cam_snapshot');
+    var screenShot = sessionStorage.getItem('prejoin_screen_snapshot');
+    if (storedAt) at = storedAt;
+    if (screenShot) sendSnapshot('screen', screenShot, at);
+    if (camShot) sendSnapshot('webcam', camShot, at);
+    if (!screenShot || !camShot) {
+      logProctoringBreach('PROCTOR_PRECHECK_MISSING');
+    }
+    sessionStorage.removeItem('prejoin_captured_at');
+    sessionStorage.removeItem('prejoin_cam_snapshot');
+    sessionStorage.removeItem('prejoin_screen_snapshot');
+  } catch (e) {
+    logProctoringBreach('PROCTOR_PRECHECK_MISSING');
+  }
 }
 
 function startQuiz() {

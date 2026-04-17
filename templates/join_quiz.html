@@ -43,6 +43,33 @@
     }
   }
 
+  function captureToDataUrl(stream, maxW) {
+    return new Promise(function(resolve) {
+      if (!stream || !stream.getVideoTracks || !stream.getVideoTracks().length) {
+        resolve(null);
+        return;
+      }
+      var v = document.createElement('video');
+      v.srcObject = stream;
+      v.muted = true;
+      v.playsInline = true;
+      v.onloadeddata = function() {
+        try {
+          var c = document.createElement('canvas');
+          var t = stream.getVideoTracks()[0].getSettings();
+          var w = t.width || 640, h = t.height || 480;
+          if (maxW && w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(v, 0, 0, w, h);
+          resolve(c.toDataURL('image/jpeg', 0.6));
+        } catch (e) {
+          resolve(null);
+        }
+      };
+      v.play().catch(function() { resolve(null); });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     var form = document.getElementById('joinQuizForm');
     var btn = document.getElementById('joinQuizBtn');
@@ -54,7 +81,19 @@
       btn.disabled = true;
       btn.textContent = 'Checking permissions...';
       try {
-        await requestPreJoinPermissions();
+        // Ask permissions before join and capture initial proof snapshots.
+        let camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        let screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        let camShot = await captureToDataUrl(camStream, 400);
+        let screenShot = await captureToDataUrl(screenStream, 800);
+        let capturedAt = new Date().toISOString();
+        try {
+          sessionStorage.setItem('prejoin_cam_snapshot', camShot || '');
+          sessionStorage.setItem('prejoin_screen_snapshot', screenShot || '');
+          sessionStorage.setItem('prejoin_captured_at', capturedAt);
+        } catch (e) {}
+        camStream.getTracks().forEach(function(t) { t.stop(); });
+        screenStream.getTracks().forEach(function(t) { t.stop(); });
         form.dataset.permissionsChecked = 'true';
         form.submit();
       } catch (err) {

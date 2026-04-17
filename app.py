@@ -2579,7 +2579,8 @@ def api_proctoring_snapshot(code):
     elif device_fp and submission.device_fingerprint and submission.device_fingerprint != device_fp[:512]:
         db.session.add(ProctoringBreach(submission_id=submission.id, breach_type='DEVICE_ID_CHANGE_DETECTED', occurred_at=captured_at))
         submission.device_fingerprint = device_fp[:512]
-    if image_data and len(image_data) > 300000:
+    # Allow larger payloads for screenshot/webcam frames.
+    if image_data and len(image_data) > 1500000:
         image_data = None
     db.session.add(ProctoringSnapshot(submission_id=submission.id, snapshot_type=snapshot_type, image_data=image_data, captured_at=captured_at))
     db.session.commit()

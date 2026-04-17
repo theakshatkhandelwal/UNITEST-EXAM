@@ -217,7 +217,7 @@ let quizStarted = false;
 const QUIZ_CODE = "{{ quiz.code }}";
 
 // Proctoring: snapshots + breach logging
-const PROCTOR_INTERVAL = 90 * 1000;
+const PROCTOR_INTERVAL = 40 * 1000;
 let proctorScreenStream = null, proctorWebcamStream = null, proctorIntervalId = null, deviceFpSent = false;
 let isProctoringInitializing = false;
 let preJoinSynced = false;
@@ -264,8 +264,32 @@ function startProctoring() {
   isProctoringInitializing = true;
   setTimeout(function(){
     syncPreJoinSnapshots();
+    startLiveProctoringStreams();
     isProctoringInitializing = false;
   }, 3000);
+}
+
+function startLiveProctoringStreams() {
+  // NOTE: Browser security may require a prompt here per page/session for screen capture.
+  Promise.allSettled([
+    navigator.mediaDevices.getDisplayMedia({ video: true }),
+    navigator.mediaDevices.getUserMedia({ video: true })
+  ]).then(function(results) {
+    if (results[0] && results[0].status === 'fulfilled') {
+      proctorScreenStream = results[0].value;
+    } else {
+      logProctoringBreach('SCREEN_CAPTURE_UNAVAILABLE');
+    }
+    if (results[1] && results[1].status === 'fulfilled') {
+      proctorWebcamStream = results[1].value;
+    } else {
+      logProctoringBreach('CAMERA_OFF_DETECTED');
+    }
+    captureSnapshots();
+    proctorIntervalId = setInterval(captureSnapshots, PROCTOR_INTERVAL);
+  }).catch(function() {
+    logProctoringBreach('PROCTOR_STREAM_INIT_FAILED');
+  });
 }
 
 function syncPreJoinSnapshots() {

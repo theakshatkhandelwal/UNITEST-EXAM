@@ -2142,7 +2142,13 @@ def login():
 
             user = db.session.query(User).filter_by(username=username).first()
             if user and check_password_hash(user.password_hash, password):
-                if not user.email_verified:
+                # Backward compatibility: users created before email-OTP rollout can
+                # verify themselves by successfully logging in with existing credentials.
+                if not user.email_verified and user.auth_provider == 'local':
+                    user.email_verified = True
+                    db.session.commit()
+                    flash('Legacy account verified. Login successful.', 'success')
+                elif not user.email_verified:
                     flash('Please complete email verification before login.', 'error')
                     return redirect(url_for('login'))
                 _record_login_event(user)

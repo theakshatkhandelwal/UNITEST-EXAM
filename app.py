@@ -975,6 +975,7 @@ def generate_quiz_openrouter(topic, difficulty_level, question_type="mcq", num_q
     difficulty_mapping = {
         "beginner": {"bloom_level": 1, "description": "Remembering and Understanding level - basic facts, definitions, and simple concepts"},
         "intermediate": {"bloom_level": 3, "description": "Applying and Analyzing level - practical application and analysis of concepts"},
+        "advanced": {"bloom_level": 5, "description": "Evaluating and Creating level - critical thinking, evaluation, and synthesis"},
         "difficult": {"bloom_level": 5, "description": "Evaluating and Creating level - critical thinking, evaluation, and synthesis"}
     }
     difficulty_info = difficulty_mapping.get(difficulty_level, difficulty_mapping["beginner"])
@@ -998,6 +999,9 @@ PDF CONTENT:
 Generate questions based ONLY on the information provided in the PDF content above. If the topic "{topic}" is mentioned, use it as context, but prioritize the PDF content.
 """
     
+    is_advanced = difficulty_level in ("advanced", "difficult")
+    is_graph_topic = ("graph" in (topic or "").lower()) or ("dsa" in (topic or "").lower())
+
     if question_type == "mcq":
         prompt = f"""CRITICAL: You MUST generate questions ONLY on the topic: "{topic}"
 
@@ -1010,12 +1014,25 @@ IMPORTANT REQUIREMENTS:
 4. Make questions diverse and varied - avoid repetitive patterns
 5. Use randomization seed {random_seed} to ensure variety
 6. Include a "level" key specifying the Bloom's Taxonomy level (Remembering, Understanding, Applying, etc.)
+7. Return each item with keys: "question", "options", "answer", "type", and optional "image_url"
+8. type MUST be exactly "mcq"
+9. "answer" MUST be one of: A, B, C, D
+10. Avoid trivial definition-only questions unless necessary for context
 
 {pdf_context if pdf_content else ''}
 
+ADVANCED-LEVEL REQUIREMENTS:
+{("- At least 70% questions must be scenario/case based and require algorithm choice, complexity reasoning, or edge-case analysis.\n"
+  "- Include topics like shortest paths, MST, topological sort, SCC/bridges/articulation points, flows/matching, DAG DP, and proof-style properties.\n"
+  "- Do NOT ask only recall questions like 'what is graph' or 'what is cycle'.") if is_advanced else "- Keep question depth aligned to selected difficulty."}
+
+IMAGE REQUIREMENT:
+{("- Include image_url in at least 2 questions (graph diagrams/adjacency visuals) when possible.\n"
+  "- image_url must be a direct public image link.") if (is_advanced and is_graph_topic and num_questions >= 3) else "- image_url is optional."}
+
 Return output in valid JSON format ONLY (no explanations, no markdown):
 [
-    {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq"}},
+    {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq", "image_url": "https://example.com/diagram.png"}},
     ...
 ]"""
     elif question_type == "coding":
@@ -1249,6 +1266,10 @@ def generate_quiz_gemini(topic, difficulty_level, question_type="mcq", num_quest
                 "bloom_level": 3,
                 "description": "Applying and Analyzing level - practical application and analysis of concepts"
             },
+            "advanced": {
+                "bloom_level": 5,
+                "description": "Evaluating and Creating level - critical thinking, evaluation, and synthesis"
+            },
             "difficult": {
                 "bloom_level": 5,
                 "description": "Evaluating and Creating level - critical thinking, evaluation, and synthesis"
@@ -1281,6 +1302,9 @@ PDF CONTENT:
 Generate questions based ONLY on the information provided in the PDF content above. If the topic "{topic}" is mentioned, use it as context, but prioritize the PDF content.
 """
         
+        is_advanced = difficulty_level in ("advanced", "difficult")
+        is_graph_topic = ("graph" in (topic or "").lower()) or ("dsa" in (topic or "").lower())
+
         if question_type == "mcq":
             prompt = f"""
 CRITICAL: You MUST generate questions ONLY on the topic: "{topic}"
@@ -1294,12 +1318,25 @@ IMPORTANT REQUIREMENTS:
 4. Make questions diverse and varied - avoid repetitive patterns
 5. Use randomization seed {random_seed} to ensure variety
 6. Include a "level" key specifying the Bloom's Taxonomy level (Remembering, Understanding, Applying, etc.)
+7. Return each item with keys: "question", "options", "answer", "type", and optional "image_url"
+8. type MUST be exactly "mcq"
+9. "answer" MUST be one of: A, B, C, D
+10. Avoid trivial definition-only questions unless necessary for context
 
 {pdf_context if pdf_content else ''}
 
+ADVANCED-LEVEL REQUIREMENTS:
+{("- At least 70% questions must be scenario/case based and require algorithm choice, complexity reasoning, or edge-case analysis.\n"
+  "- Include topics like shortest paths, MST, topological sort, SCC/bridges/articulation points, flows/matching, DAG DP, and proof-style properties.\n"
+  "- Do NOT ask only recall questions like 'what is graph' or 'what is cycle'.") if is_advanced else "- Keep question depth aligned to selected difficulty."}
+
+IMAGE REQUIREMENT:
+{("- Include image_url in at least 2 questions (graph diagrams/adjacency visuals) when possible.\n"
+  "- image_url must be a direct public image link.") if (is_advanced and is_graph_topic and num_questions >= 3) else "- image_url is optional."}
+
 Return output in valid JSON format ONLY (no explanations, no markdown):
 [
-    {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq"}},
+    {{"question": "What is AI?", "options": ["A. option1", "B. option2", "C. option3", "D. option4"], "answer": "A", "type": "mcq", "image_url": "https://example.com/diagram.png"}},
     ...
 ]
             """

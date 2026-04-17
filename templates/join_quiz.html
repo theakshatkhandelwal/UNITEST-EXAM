@@ -9,19 +9,63 @@
 
   <div class="card">
     <div class="card-body">
-      <form method="POST">
+      <form method="POST" id="joinQuizForm">
         <div class="mb-3">
           <label class="form-label">Quiz Code</label>
           <input name="code" class="form-control" placeholder="e.g., 7G2KQX" required>
         </div>
         <div class="d-flex gap-2">
           <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
-          <button class="btn btn-primary" type="submit">Join Quiz</button>
+          <button class="btn btn-primary" type="submit" id="joinQuizBtn">Join Quiz</button>
         </div>
       </form>
     </div>
   </div>
 </div>
+<script>
+  async function requestPreJoinPermissions() {
+    // Request camera + screen permission before entering quiz page.
+    // This reduces unexpected focus/blur violations during quiz startup.
+    let camStream = null;
+    let screenStream = null;
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    } catch (e) {
+      throw new Error('Camera access is required before joining the quiz.');
+    }
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    } catch (e) {
+      throw new Error('Screen sharing permission is required before joining the quiz.');
+    } finally {
+      if (camStream) camStream.getTracks().forEach(function(t) { t.stop(); });
+      if (screenStream) screenStream.getTracks().forEach(function(t) { t.stop(); });
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var form = document.getElementById('joinQuizForm');
+    var btn = document.getElementById('joinQuizBtn');
+    if (!form || !btn || !navigator.mediaDevices) return;
+
+    form.addEventListener('submit', async function(e) {
+      if (form.dataset.permissionsChecked === 'true') return;
+      e.preventDefault();
+      btn.disabled = true;
+      btn.textContent = 'Checking permissions...';
+      try {
+        await requestPreJoinPermissions();
+        form.dataset.permissionsChecked = 'true';
+        form.submit();
+      } catch (err) {
+        alert(err.message || 'Permission check failed. Please allow required permissions.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Join Quiz';
+      }
+    });
+  });
+</script>
 {% endblock %}
 
 

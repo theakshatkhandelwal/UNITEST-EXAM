@@ -367,6 +367,19 @@
             --gradient-fg: #7c3aed;
         }
 
+        [data-color-scheme="default"] {
+            --primary-color: #4285f4;
+            --secondary-color: #34a853;
+            --accent-color: #ea4335;
+            --gradient-bg: #1a73e8;
+            --gradient-fg: #4285f4;
+            --bg-color: #f8f9fa;
+            --text-color: #212529;
+            --card-bg: #ffffff;
+            --border-color: #e9ecef;
+            --navbar-bg: linear-gradient(135deg, #0f172a, #1e293b);
+        }
+
         [data-color-scheme="ocean"] {
             --primary-color: #0ea5e9;
             --secondary-color: #14b8a6;
@@ -553,6 +566,7 @@
                     {% endif %}
                     <li class="nav-item d-flex align-items-center me-2">
                         <select class="theme-scheme-select" id="themeScheme" title="Choose color theme" aria-label="Choose color theme">
+                            <option value="default">Default</option>
                             <option value="purple">Purple</option>
                             <option value="ocean">Ocean</option>
                             <option value="emerald">Emerald</option>
@@ -625,7 +639,7 @@
             
             // Get saved theme or default to light
             const savedTheme = localStorage.getItem('theme') || 'light';
-            const savedScheme = localStorage.getItem('colorScheme') || 'purple';
+            const savedScheme = localStorage.getItem('colorScheme') || 'default';
             
             // Apply saved theme
             applyTheme(savedTheme);
@@ -645,7 +659,7 @@
 
             if (themeScheme) {
                 themeScheme.addEventListener('change', function() {
-                    const nextScheme = themeScheme.value || 'purple';
+                    const nextScheme = themeScheme.value || 'default';
                     applyColorScheme(nextScheme);
                     localStorage.setItem('colorScheme', nextScheme);
                 });

@@ -636,6 +636,17 @@ class LoginHistory(db.Model):
     country = db.Column(db.String(100), nullable=True)
     region = db.Column(db.String(100), nullable=True)
 
+class SiteActivity(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    path = db.Column(db.String(255), nullable=False)
+    endpoint = db.Column(db.String(120), nullable=True)
+    method = db.Column(db.String(10), nullable=False, default='GET')
+    ip_address = db.Column(db.String(45), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user = db.relationship('User', backref='site_activities')
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -739,6 +750,36 @@ def _record_login_event(user):
         region=geo_data.get('region') if geo_data else None
     )
     db.session.add(login_history)
+
+def _record_site_activity():
+    # Log only meaningful page visits (GET HTML pages), skip assets/internal calls.
+    if request.method != 'GET':
+        return
+    if request.path.startswith('/static'):
+        return
+    if request.endpoint in {
+        'static', 'admin_metrics', 'favicon', 'internal_error', 'not_found_error'
+    }:
+        return
+    if request.path.startswith('/api'):
+        return
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return
+
+    ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+    if ip_address and ',' in ip_address:
+        ip_address = ip_address.split(',')[0].strip()
+
+    activity = SiteActivity(
+        user_id=current_user.id if current_user.is_authenticated else None,
+        path=request.path[:255],
+        endpoint=(request.endpoint or '')[:120] if request.endpoint else None,
+        method=request.method,
+        ip_address=ip_address,
+        user_agent=(request.headers.get('User-Agent') or 'Unknown')[:255]
+    )
+    db.session.add(activity)
+    db.session.commit()
 
 def handle_gemini_api_error(e, context="API call"):
     """Handle Gemini API errors and provide user-friendly messages"""
@@ -4823,6 +4864,19 @@ def admin_users():
         ).order_by(
             func.count(LoginHistory.id).desc()
         ).limit(10).all()
+
+        # === WEBSITE VISITS & USER ACTIVITIES ===
+        total_site_visits = db.session.query(func.count(SiteActivity.id)).scalar() or 0
+        site_visits_today = db.session.query(func.count(SiteActivity.id)).filter(
+            SiteActivity.created_at >= today_start
+        ).scalar() or 0
+        unique_site_visitors = db.session.query(
+            func.count(func.distinct(SiteActivity.user_id))
+        ).filter(SiteActivity.user_id.isnot(None)).scalar() or 0
+
+        recent_activities = db.session.query(SiteActivity).outerjoin(User).order_by(
+            SiteActivity.created_at.desc()
+        ).limit(25).all()
         
         # Convert users_by_role to dictionary
         users_by_role_dict = {role: count for role, count in users_by_role} if users_by_role else {}
@@ -4843,7 +4897,11 @@ def admin_users():
             logins_this_month=logins_this_month,
             logins_by_date=logins_by_date,
             recent_logins=recent_logins,
-            most_active_users=most_active_users
+            most_active_users=most_active_users,
+            total_site_visits=total_site_visits,
+            site_visits_today=site_visits_today,
+            unique_site_visitors=unique_site_visitors,
+            recent_activities=recent_activities
         )
     except Exception as e:
         print(f"Error in admin_users: {str(e)}")
@@ -5241,6 +5299,16 @@ def _ensure_db_initialized():
         return
     initialize_on_first_request()
     _db_initialized = True
+
+@app.before_request
+def _track_site_activity():
+    if request.endpoint == '_ensure_db_initialized':
+        return
+    try:
+        _record_site_activity()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Site activity tracking failed: {e}")
 
 # For Vercel/serverless: Don't initialize at import time
 # Initialize will happen on first request via @app.before_first_request or similar

@@ -479,10 +479,52 @@
             font-size: 1rem;
         }
 
+        .whatsapp-widget {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            z-index: 1050;
+            display: inline-flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .whatsapp-close-btn {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(17, 24, 39, 0.75);
+            color: #ffffff;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+        }
+
+        .whatsapp-widget.minimized .whatsapp-close-btn {
+            display: none;
+        }
+
+        .whatsapp-widget.minimized .whatsapp-float {
+            padding: 10px;
+            border-radius: 50%;
+            max-width: none;
+            gap: 0;
+        }
+
+        .whatsapp-widget.minimized .whatsapp-float .wa-text {
+            display: none;
+        }
+
         @media (max-width: 576px) {
-            .whatsapp-float {
+            .whatsapp-widget {
                 right: 10px;
                 bottom: 10px;
+            }
+            .whatsapp-float {
                 max-width: calc(100vw - 20px);
                 padding: 10px 12px;
             }
@@ -643,17 +685,26 @@
         {% block content %}{% endblock %}
     </main>
 
-    <a
-        class="whatsapp-float"
-        href="https://wa.me/917255881443?text=Hi%20UniTest%2C%20I%20have%20a%20question."
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Chat on WhatsApp"
-        title="Chat on WhatsApp"
-    >
-        <span class="wa-icon"><i class="fab fa-whatsapp"></i></span>
-        <span class="wa-text">Have questions regarding the programme?</span>
-    </a>
+    {% set hide_whatsapp = request.endpoint in ['join_quiz', 'take_shared_quiz', 'take_quiz'] %}
+    {% if not hide_whatsapp %}
+    <div class="whatsapp-widget" id="whatsappWidget">
+        <button type="button" class="whatsapp-close-btn" id="whatsappMinimizeBtn" aria-label="Minimize WhatsApp widget" title="Minimize">
+            <i class="fas fa-times"></i>
+        </button>
+        <a
+            class="whatsapp-float"
+            href="https://wa.me/917255881443?text=Hi%20UniTest%2C%20I%20have%20a%20question."
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Chat on WhatsApp"
+            title="Chat on WhatsApp"
+            id="whatsappFloatLink"
+        >
+            <span class="wa-icon"><i class="fab fa-whatsapp"></i></span>
+            <span class="wa-text">Have questions regarding the programme?</span>
+        </a>
+    </div>
+    {% endif %}
 
     <footer class="text-light py-4 mt-5" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);">
         <div class="container text-center">
@@ -747,6 +798,41 @@
                 window.dispatchEvent(new CustomEvent('motionPreferenceChanged', {
                     detail: { enabled: enabled }
                 }));
+            }
+
+            const whatsappWidget = document.getElementById('whatsappWidget');
+            const whatsappMinimizeBtn = document.getElementById('whatsappMinimizeBtn');
+            const whatsappFloatLink = document.getElementById('whatsappFloatLink');
+            const whatsappStateKey = 'whatsappWidgetMinimized';
+
+            if (whatsappWidget && whatsappMinimizeBtn && whatsappFloatLink) {
+                const applyWhatsappState = (isMinimized) => {
+                    whatsappWidget.classList.toggle('minimized', !!isMinimized);
+                    whatsappFloatLink.setAttribute(
+                        'aria-label',
+                        isMinimized ? 'Open WhatsApp chat' : 'Chat on WhatsApp'
+                    );
+                    whatsappFloatLink.setAttribute(
+                        'title',
+                        isMinimized ? 'Open WhatsApp chat' : 'Chat on WhatsApp'
+                    );
+                };
+
+                const savedMinimized = localStorage.getItem(whatsappStateKey) === 'true';
+                applyWhatsappState(savedMinimized);
+
+                whatsappMinimizeBtn.addEventListener('click', function() {
+                    applyWhatsappState(true);
+                    localStorage.setItem(whatsappStateKey, 'true');
+                });
+
+                whatsappFloatLink.addEventListener('click', function(event) {
+                    if (whatsappWidget.classList.contains('minimized')) {
+                        event.preventDefault();
+                        applyWhatsappState(false);
+                        localStorage.setItem(whatsappStateKey, 'false');
+                    }
+                });
             }
         });
     </script>

@@ -77,6 +77,12 @@
                                                 <span class="ms-2 text-success">{{ result.correct_answer }}</span>
                                             </div>
                                         {% endif %}
+                                        {% if result.solution %}
+                                            <div class="mt-2 p-2 bg-light rounded border">
+                                                <strong>Solution:</strong>
+                                                <div class="small mt-1">{{ result.solution }}</div>
+                                            </div>
+                                        {% endif %}
                                     </div>
                                     <div class="col-md-6 text-md-end">
                                         <span class="badge {% if result.is_correct %}bg-success{% else %}bg-danger{% endif %} fs-6">
@@ -115,6 +121,14 @@
                                                 {{ result.sample_answer[:200] }}{% if result.sample_answer|length > 200 %}...{% endif %}
                                             </div>
                                         </div>
+                                        {% if result.solution %}
+                                        <div class="mb-2">
+                                            <strong>Stepwise Solution:</strong>
+                                            <div class="mt-2 p-3 bg-light rounded">
+                                                {{ result.solution }}
+                                            </div>
+                                        </div>
+                                        {% endif %}
                                     </div>
                                     <div class="col-md-4 text-md-end">
                                         <div class="text-center">

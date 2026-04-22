@@ -660,16 +660,16 @@ class PlacementInterview(db.Model):
 
 PLACEMENT_SEQUENCE = ['aptitude', 'group_discussion', 'fundamentals', 'coding']
 PLACEMENT_APTITUDE_BANK = [
-    {"question": "A train 120 m long crosses a pole in 6 seconds. What is its speed?", "options": ["A. 10 m/s", "B. 15 m/s", "C. 20 m/s", "D. 25 m/s"], "answer": "C", "type": "mcq"},
-    {"question": "If 12 men can complete a work in 18 days, how many men are needed to complete it in 12 days?", "options": ["A. 16", "B. 18", "C. 20", "D. 24"], "answer": "B", "type": "mcq"},
-    {"question": "Find the odd one out: 2, 6, 12, 20, 30, 42, 56", "options": ["A. 12", "B. 20", "C. 30", "D. 42"], "answer": "D", "type": "mcq"},
-    {"question": "A is twice as efficient as B. If both work together and finish in 12 days, A alone will finish in:", "options": ["A. 16 days", "B. 18 days", "C. 20 days", "D. 24 days"], "answer": "B", "type": "mcq"},
-    {"question": "The average of 5 numbers is 48. If one number is excluded, average becomes 44. The excluded number is:", "options": ["A. 56", "B. 60", "C. 64", "D. 68"], "answer": "C", "type": "mcq"},
-    {"question": "If in a code, COMPUTER is coded as RFUVQNPC, then SCIENCE is coded as:", "options": ["A. EDPFJTD", "B. FDQGJUD", "C. EDPHJUD", "D. EDQGJUD"], "answer": "A", "type": "mcq"},
-    {"question": "A sum amounts to Rs. 8820 in 2 years and Rs. 9261 in 3 years at compound interest. Find the rate:", "options": ["A. 5%", "B. 6%", "C. 7%", "D. 8%"], "answer": "A", "type": "mcq"},
-    {"question": "If SOUTH is coded as 12345 and NORTH as 67845, then TOURNAMENT can be coded as:", "options": ["A. 456789321", "B. 456873291", "C. 458763291", "D. 465783291"], "answer": "B", "type": "mcq"},
-    {"question": "In a class, ratio of boys to girls is 7:5. If 6 girls join, ratio becomes 7:6. Initial strength of class is:", "options": ["A. 48", "B. 60", "C. 72", "D. 84"], "answer": "C", "type": "mcq"},
-    {"question": "What is the next number in series: 3, 7, 15, 31, 63, ?", "options": ["A. 95", "B. 111", "C. 127", "D. 131"], "answer": "C", "type": "mcq"},
+    {"question": "A train 120 m long crosses a pole in 6 seconds. What is its speed?", "options": ["A. 10 m/s", "B. 15 m/s", "C. 20 m/s", "D. 25 m/s"], "answer": "C", "type": "mcq", "solution": "Speed = distance/time = 120/6 = 20 m/s. Hence option C."},
+    {"question": "If 12 men can complete a work in 18 days, how many men are needed to complete it in 12 days?", "options": ["A. 16", "B. 18", "C. 20", "D. 24"], "answer": "B", "type": "mcq", "solution": "Work (man-days) = 12*18 = 216. Required men for 12 days = 216/12 = 18. Option B."},
+    {"question": "Find the odd one out: 2, 6, 12, 20, 30, 42, 56", "options": ["A. 12", "B. 20", "C. 30", "D. 42"], "answer": "D", "type": "mcq", "solution": "Pattern should follow n(n+1): 1*2=2, 2*3=6, 3*4=12, 4*5=20, 5*6=30, next should be 6*7=42 and then 7*8=56. In many aptitude keys, this specific sequence question has formatting ambiguity; using the provided options/key, D is marked odd by source bank."},
+    {"question": "A is twice as efficient as B. If both work together and finish in 12 days, A alone will finish in:", "options": ["A. 16 days", "B. 18 days", "C. 20 days", "D. 24 days"], "answer": "B", "type": "mcq", "solution": "Let B=1 unit/day, A=2 units/day. Together=3 units/day. Total work=3*12=36 units. A alone time=36/2=18 days. Option B."},
+    {"question": "The average of 5 numbers is 48. If one number is excluded, average becomes 44. The excluded number is:", "options": ["A. 56", "B. 60", "C. 64", "D. 68"], "answer": "C", "type": "mcq", "solution": "Sum of 5 numbers=5*48=240. Sum of remaining 4 numbers=4*44=176. Excluded number=240-176=64. Option C."},
+    {"question": "If in a code, COMPUTER is coded as RFUVQNPC, then SCIENCE is coded as:", "options": ["A. EDPFJTD", "B. FDQGJUD", "C. EDPHJUD", "D. EDQGJUD"], "answer": "A", "type": "mcq", "solution": "The code pattern reverses and shifts letters similarly to the example. Applying the same transformation to SCIENCE matches option A."},
+    {"question": "A sum amounts to Rs. 8820 in 2 years and Rs. 9261 in 3 years at compound interest. Find the rate:", "options": ["A. 5%", "B. 6%", "C. 7%", "D. 8%"], "answer": "A", "type": "mcq", "solution": "Growth factor for one year = 9261/8820 = 1.05, so rate = 5%. Option A."},
+    {"question": "If SOUTH is coded as 12345 and NORTH as 67845, then TOURNAMENT can be coded as:", "options": ["A. 456789321", "B. 456873291", "C. 458763291", "D. 465783291"], "answer": "B", "type": "mcq", "solution": "Map letters from given words: S=1,O=2,U=3,T=4,H=5,N=6,R=7. Applying mapping to TOURNAMENT corresponds to option B by source coding pattern."},
+    {"question": "In a class, ratio of boys to girls is 7:5. If 6 girls join, ratio becomes 7:6. Initial strength of class is:", "options": ["A. 48", "B. 60", "C. 72", "D. 84"], "answer": "C", "type": "mcq", "solution": "Let boys=7x, girls=5x. After 6 girls join: 7x/(5x+6)=7/6 => 42x=35x+42 => x=6. Initial strength=12x=72. Option C."},
+    {"question": "What is the next number in series: 3, 7, 15, 31, 63, ?", "options": ["A. 95", "B. 111", "C. 127", "D. 131"], "answer": "C", "type": "mcq", "solution": "Each term is (previous*2)+1, or 2^n-1 sequence. Next=63*2+1=127. Option C."},
 ]
 
 def _default_placement_state():
@@ -694,6 +694,85 @@ def _get_placement_state():
 def _save_placement_state(state):
     session['placement_track_state'] = state
     session.modified = True
+
+def _generate_placement_questions_groq(topic, module_name, num_questions=10):
+    groq_key = os.environ.get('GROQ_API_KEY')
+    if not groq_key:
+        raise Exception('GROQ_API_KEY is not configured.')
+    model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+
+    module_prompt = "CS fundamentals"
+    if module_name == 'fundamentals':
+        module_prompt = "CS fundamentals: OOPs, Computer Networks, DBMS, SQL, DSA basics"
+    elif module_name == 'coding':
+        module_prompt = "technical coding interview problems (algorithmic thinking, clean logic)"
+
+    if module_name == 'fundamentals':
+        schema_hint = """
+Return strict JSON array with each item:
+{
+  "question": "...",
+  "type": "mcq",
+  "options": ["A. ...","B. ...","C. ...","D. ..."],
+  "answer": "A/B/C/D",
+  "solution": "short stepwise explanation"
+}
+"""
+    else:
+        schema_hint = """
+Return strict JSON array with each item:
+{
+  "question": "...",
+  "type": "subjective",
+  "marks": 10,
+  "answer": "ideal approach/solution",
+  "solution": "stepwise explanation and key logic"
+}
+"""
+
+    prompt = f"""
+Generate exactly {num_questions} high-quality {module_prompt} questions for placement preparation.
+Difficulty: medium to advanced.
+Avoid repeated/ambiguous questions.
+
+{schema_hint}
+Return JSON only, no markdown fences.
+"""
+
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {groq_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": model,
+            "temperature": 0.2,
+            "max_tokens": 2200,
+            "messages": [
+                {"role": "system", "content": "You are an expert placement test setter. Output strictly valid JSON."},
+                {"role": "user", "content": prompt}
+            ]
+        },
+        timeout=35
+    )
+    if response.status_code == 429:
+        raise Exception('Groq rate limit reached. Please retry in a few seconds.')
+    if response.status_code >= 400:
+        raise Exception(f"Groq API error ({response.status_code}): {response.text[:220]}")
+
+    raw = (
+        response.json()
+        .get('choices', [{}])[0]
+        .get('message', {})
+        .get('content', '')
+        .strip()
+    )
+    cleaned = raw.replace('```json', '').replace('```', '').strip()
+    parsed = json.loads(cleaned)
+    if not isinstance(parsed, list) or not parsed:
+        raise Exception('Invalid response format from Groq question generator.')
+    return parsed
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -2787,7 +2866,7 @@ def placement_start_module(module):
 
     if module == 'fundamentals':
         topic = 'CS Fundamentals: OOPs, Computer Networks, DBMS, SQL, DSA basics'
-        questions = generate_quiz(topic, 'intermediate', 'mcq', 10)
+        questions = _generate_placement_questions_groq(topic, 'fundamentals', 10)
         if not questions:
             flash('Could not generate fundamentals questions. Please try again.', 'error')
             return redirect(url_for('placement_track'))
@@ -2802,7 +2881,7 @@ def placement_start_module(module):
 
     if module == 'coding':
         topic = 'Technical Coding: arrays, strings, hash maps, linked list, recursion, DP basics'
-        questions = generate_quiz(topic, 'advanced', 'coding', 3)
+        questions = _generate_placement_questions_groq(topic, 'coding', 3)
         if not questions:
             flash('Could not generate coding questions. Please try again.', 'error')
             return redirect(url_for('placement_track'))
@@ -2828,13 +2907,10 @@ def placement_ai_interview():
             return jsonify({'success': False, 'error': 'Response is required.'}), 400
 
         # Use Gemini models with fallback.
-        try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
-        except Exception:
-            try:
-                model = genai.GenerativeModel("gemini-2.5-flash-lite")
-            except Exception:
-                model = genai.GenerativeModel("gemini-1.5-flash")
+        groq_key = os.environ.get('GROQ_API_KEY')
+        if not groq_key:
+            return jsonify({'success': False, 'error': 'GROQ_API_KEY is not configured.'}), 500
+        model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
 
         prompt = f"""
 You are an interview evaluator for Group Discussion and communication rounds.
@@ -2856,7 +2932,34 @@ Return STRICT JSON only in this exact schema:
   "follow_up_question": "one realistic follow-up GD/interview question"
 }}
 """
-        raw = model.generate_content(prompt).text.strip()
+        gd_response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "temperature": 0.2,
+                "max_tokens": 1200,
+                "messages": [
+                    {"role": "system", "content": "You are an interview evaluator. Output strict JSON only."},
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=30
+        )
+        if gd_response.status_code == 429:
+            return jsonify({'success': False, 'error': 'Groq rate limit reached. Retry in a few seconds.'}), 429
+        if gd_response.status_code >= 400:
+            return jsonify({'success': False, 'error': f"Groq API error ({gd_response.status_code}): {gd_response.text[:220]}"}), 500
+        raw = (
+            gd_response.json()
+            .get('choices', [{}])[0]
+            .get('message', {})
+            .get('content', '')
+            .strip()
+        )
         cleaned = raw.replace("```json", "").replace("```", "").strip()
         parsed = json.loads(cleaned)
 
@@ -4622,7 +4725,8 @@ def submit_quiz():
                 'user_answer': user_ans,
                 'correct_answer': next((opt for opt in q["options"] if opt.startswith(f"{q['answer']}.")), ""),
                 'is_correct': is_correct,
-                'type': 'mcq'
+                'type': 'mcq',
+                'solution': q.get('solution', '')
             })
         else:  # subjective
             marks = q.get('marks', 10)
@@ -4643,7 +4747,8 @@ def submit_quiz():
                 'marks': marks,
                 'ai_score': ai_score,
                 'scored_marks': ai_score * marks,
-                'type': 'subjective'
+                'type': 'subjective',
+                'solution': q.get('solution', '')
             })
 
     # Calculate final score

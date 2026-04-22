@@ -88,6 +88,17 @@
                                                 <i class="fas fa-times me-1"></i>Incorrect
                                             {% endif %}
                                         </span>
+                                        {% if not result.is_correct %}
+                                        <button
+                                            class="btn btn-sm btn-outline-primary ms-2 doubt-btn"
+                                            data-question="{{ result.question|e }}"
+                                            data-user-answer="{{ result.user_answer|e }}"
+                                            data-correct-answer="{{ result.correct_answer|e }}"
+                                            data-question-type="mcq"
+                                        >
+                                            <i class="fas fa-lightbulb me-1"></i>AI Doubt Resolver
+                                        </button>
+                                        {% endif %}
                                     </div>
                                 </div>
                             {% elif result.type == 'subjective' %}
@@ -120,6 +131,17 @@
                                                 <small class="text-muted">({{ "%.0f"|format(result.ai_score * 100) }}%)</small>
                                             </div>
                                         </div>
+                                        {% if (result.ai_score or 0) < 0.6 %}
+                                        <button
+                                            class="btn btn-sm btn-outline-primary mt-2 doubt-btn"
+                                            data-question="{{ result.question|e }}"
+                                            data-user-answer="{{ result.user_answer|e }}"
+                                            data-correct-answer="{{ result.sample_answer|e }}"
+                                            data-question-type="subjective"
+                                        >
+                                            <i class="fas fa-lightbulb me-1"></i>AI Doubt Resolver
+                                        </button>
+                                        {% endif %}
                                     </div>
                                 </div>
                             {% elif result.type == 'coding' %}
@@ -161,6 +183,17 @@
                                                 <span class="text-primary fw-bold">{{ "%.1f"|format(result.scored_marks) }}/{{ result.marks }}</span>
                                             </div>
                                         </div>
+                                        {% if (result.passed_test_cases or 0) < (result.total_test_cases or 0) %}
+                                        <button
+                                            class="btn btn-sm btn-outline-primary mt-2 doubt-btn"
+                                            data-question="{{ result.question|e }}"
+                                            data-user-answer="{{ result.user_answer|e }}"
+                                            data-correct-answer="{{ result.sample_output|default('', true)|e }}"
+                                            data-question-type="coding"
+                                        >
+                                            <i class="fas fa-lightbulb me-1"></i>AI Doubt Resolver
+                                        </button>
+                                        {% endif %}
                                     </div>
                                 </div>
                                 {% if result.test_results %}
@@ -210,5 +243,66 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="doubtResolverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-lightbulb me-2"></i>AI Doubt Resolver</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="doubtResolverBody">
+                <div class="text-center py-4 text-muted">Select a question to resolve doubts.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const buttons = document.querySelectorAll('.doubt-btn');
+    const modalEl = document.getElementById('doubtResolverModal');
+    const bodyEl = document.getElementById('doubtResolverBody');
+    if (!buttons.length || !modalEl || !bodyEl) return;
+    const modal = new bootstrap.Modal(modalEl);
+
+    buttons.forEach((btn) => {
+        btn.addEventListener('click', async function () {
+            const payload = {
+                question: btn.dataset.question || '',
+                user_answer: btn.dataset.userAnswer || '',
+                correct_answer: btn.dataset.correctAnswer || '',
+                question_type: btn.dataset.questionType || 'general'
+            };
+            bodyEl.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary"></div><p class="mt-2 mb-0">Resolving your doubt...</p></div>';
+            modal.show();
+            try {
+                const res = await fetch('/ai_doubt_resolver', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Could not resolve doubt.');
+                }
+                const steps = (data.improvement_steps || []).map((s) => `<li>${s}</li>`).join('');
+                bodyEl.innerHTML = `
+                    <h6>Concept Explained</h6>
+                    <p>${data.concept_explained || ''}</p>
+                    <h6>Why Your Answer Was Weak</h6>
+                    <p>${data.why_wrong || ''}</p>
+                    <h6>How To Improve</h6>
+                    <ul>${steps || '<li>No steps provided</li>'}</ul>
+                    <h6>Practice Question</h6>
+                    <p class="mb-0">${data.practice_question || 'N/A'}</p>
+                `;
+            } catch (err) {
+                bodyEl.innerHTML = `<div class="alert alert-danger mb-0">${err.message}</div>`;
+            }
+        });
+    });
+});
+</script>
 {% endblock %}
 

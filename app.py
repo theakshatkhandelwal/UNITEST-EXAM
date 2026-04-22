@@ -647,6 +647,17 @@ class SiteActivity(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     user = db.relationship('User', backref='site_activities')
 
+class PlacementInterview(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    topic = db.Column(db.String(150), nullable=False, default='General')
+    response_text = db.Column(db.Text, nullable=False)
+    score = db.Column(db.Float, nullable=False, default=0.0)
+    feedback = db.Column(db.Text, nullable=True)
+    follow_up_question = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user = db.relationship('User', backref='placement_interviews')
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -2658,6 +2669,152 @@ def dashboard():
         current_time=current_time,
         show_archived=show_archived
     )
+
+@app.route('/placement_track')
+@login_required
+def placement_track():
+    from sqlalchemy import func
+
+    # Core submission stats
+    submissions = db.session.query(QuizSubmission).filter_by(student_id=current_user.id, completed=True).all()
+    total_attempts = len(submissions)
+
+    # Pull all answers with question metadata for current user.
+    answer_rows = db.session.query(QuizAnswer, QuizQuestion).join(
+        QuizQuestion, QuizAnswer.question_id == QuizQuestion.id
+    ).join(
+        QuizSubmission, QuizAnswer.submission_id == QuizSubmission.id
+    ).filter(
+        QuizSubmission.student_id == current_user.id
+    ).all()
+
+    # Aptitude: MCQ correctness.
+    mcq_rows = [(ans, q) for ans, q in answer_rows if q.qtype == 'mcq']
+    mcq_total = len(mcq_rows)
+    mcq_correct = sum(1 for ans, _ in mcq_rows if bool(ans.is_correct))
+    aptitude_score = (mcq_correct / mcq_total * 100.0) if mcq_total else 0.0
+
+    # Coding: test case pass ratio with marks-based fallback.
+    coding_rows = [(ans, q) for ans, q in answer_rows if q.qtype == 'coding']
+    coding_total_cases = sum(int(ans.total_test_cases or 0) for ans, _ in coding_rows)
+    coding_passed_cases = sum(int(ans.passed_test_cases or 0) for ans, _ in coding_rows)
+    if coding_total_cases > 0:
+        coding_score = (coding_passed_cases / coding_total_cases) * 100.0
+    elif coding_rows:
+        earned = sum(float(ans.scored_marks or 0.0) for ans, _ in coding_rows)
+        possible = sum(float(q.marks or 0.0) for _, q in coding_rows)
+        coding_score = (earned / possible * 100.0) if possible > 0 else 0.0
+    else:
+        coding_score = 0.0
+
+    # CS fundamentals: subjective AI score average.
+    subj_rows = [(ans, q) for ans, q in answer_rows if q.qtype == 'subjective']
+    fundamentals_score = (
+        sum(float(ans.ai_score or 0.0) for ans, _ in subj_rows) / len(subj_rows) * 100.0
+    ) if subj_rows else 0.0
+
+    # Group discussion/interview track.
+    gd_attempts = db.session.query(PlacementInterview).filter_by(user_id=current_user.id).order_by(
+        PlacementInterview.created_at.desc()
+    ).limit(10).all()
+    gd_score = (
+        sum(float(i.score or 0.0) for i in gd_attempts) / len(gd_attempts)
+    ) if gd_attempts else 0.0
+
+    # Weighted readiness index.
+    readiness_index = (
+        aptitude_score * 0.30 +
+        gd_score * 0.25 +
+        coding_score * 0.25 +
+        fundamentals_score * 0.20
+    )
+
+    module_scores = {
+        'aptitude': round(aptitude_score, 1),
+        'group_discussion': round(gd_score, 1),
+        'coding': round(coding_score, 1),
+        'fundamentals': round(fundamentals_score, 1),
+    }
+
+    return render_template(
+        'placement_track.html',
+        readiness_index=round(readiness_index, 1),
+        module_scores=module_scores,
+        total_attempts=total_attempts,
+        mcq_total=mcq_total,
+        coding_total=len(coding_rows),
+        fundamentals_total=len(subj_rows),
+        gd_attempts=gd_attempts
+    )
+
+@app.route('/placement_track/ai_interview', methods=['POST'])
+@login_required
+def placement_ai_interview():
+    try:
+        data = request.get_json(silent=True) or {}
+        topic = (data.get('topic') or 'General').strip()[:150]
+        response_text = (data.get('response') or '').strip()
+        if not response_text:
+            return jsonify({'success': False, 'error': 'Response is required.'}), 400
+
+        # Use Gemini models with fallback.
+        try:
+            model = genai.GenerativeModel("gemini-2.5-flash")
+        except Exception:
+            try:
+                model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            except Exception:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+
+        prompt = f"""
+You are an interview evaluator for Group Discussion and communication rounds.
+Evaluate the candidate response for topic "{topic}".
+
+Candidate response:
+\"\"\"{response_text}\"\"\"
+
+Return STRICT JSON only in this exact schema:
+{{
+  "score": 0-100 number,
+  "feedback": "2-4 lines concise feedback",
+  "strengths": ["point1", "point2"],
+  "improvements": ["point1", "point2"],
+  "follow_up_question": "one realistic follow-up GD/interview question"
+}}
+"""
+        raw = model.generate_content(prompt).text.strip()
+        cleaned = raw.replace("```json", "").replace("```", "").strip()
+        parsed = json.loads(cleaned)
+
+        score = float(parsed.get('score', 0.0))
+        score = max(0.0, min(100.0, score))
+        feedback = str(parsed.get('feedback', '')).strip()
+        follow_up_question = str(parsed.get('follow_up_question', '')).strip()
+        strengths = parsed.get('strengths') or []
+        improvements = parsed.get('improvements') or []
+
+        interview = PlacementInterview(
+            user_id=current_user.id,
+            topic=topic or 'General',
+            response_text=response_text,
+            score=score,
+            feedback=feedback,
+            follow_up_question=follow_up_question
+        )
+        db.session.add(interview)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'score': round(score, 1),
+            'feedback': feedback,
+            'strengths': strengths,
+            'improvements': improvements,
+            'follow_up_question': follow_up_question
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': f'AI interview evaluation failed: {str(e)}'}), 500
 
 def generate_quiz_code(length=6):
     import random, string
@@ -4683,6 +4840,57 @@ def ai_learn():
         
     except Exception as e:
         return jsonify({'success': False, 'error': f'Error generating learning content: {str(e)}'})
+
+@app.route('/ai_doubt_resolver', methods=['POST'])
+@login_required
+def ai_doubt_resolver():
+    try:
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        user_answer = (data.get('user_answer') or '').strip()
+        correct_answer = (data.get('correct_answer') or '').strip()
+        question_type = (data.get('question_type') or 'general').strip()
+
+        if not question:
+            return jsonify({'success': False, 'error': 'Question is required.'}), 400
+
+        try:
+            model = genai.GenerativeModel("gemini-2.5-flash")
+        except Exception:
+            try:
+                model = genai.GenerativeModel("gemini-2.5-flash-lite")
+            except Exception:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+
+        prompt = f"""
+You are an expert tutor. Resolve the student's doubt based on a wrong/weak answer.
+
+Question type: {question_type}
+Question: {question}
+Student answer: {user_answer}
+Expected/correct answer: {correct_answer}
+
+Return STRICT JSON only:
+{{
+  "concept_explained": "3-6 sentence clear explanation",
+  "why_wrong": "2-4 sentence reason why student's answer was weak",
+  "improvement_steps": ["step1", "step2", "step3"],
+  "practice_question": "one practice question based on same concept"
+}}
+"""
+        raw = model.generate_content(prompt).text.strip()
+        cleaned = raw.replace("```json", "").replace("```", "").strip()
+        parsed = json.loads(cleaned)
+
+        return jsonify({
+            'success': True,
+            'concept_explained': parsed.get('concept_explained', ''),
+            'why_wrong': parsed.get('why_wrong', ''),
+            'improvement_steps': parsed.get('improvement_steps', []),
+            'practice_question': parsed.get('practice_question', '')
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Could not resolve doubt: {str(e)}'}), 500
 
 @app.route('/download_pdf')
 @login_required

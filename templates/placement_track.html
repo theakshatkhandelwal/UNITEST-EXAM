@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Placement Track - UniTest{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="card mb-4">
+        <div class="card-header text-white" style="background: linear-gradient(135deg, var(--gradient-bg), var(--gradient-fg));">
+            <h3 class="mb-0"><i class="fas fa-briefcase me-2"></i>Placement Track</h3>
+        </div>
+        <div class="card-body">
+            <div class="row text-center g-3">
+                <div class="col-md-3">
+                    <div class="p-3 border rounded h-100">
+                        <h6 class="text-muted mb-1">Readiness Index</h6>
+                        <h2 class="text-primary mb-0">{{ readiness_index }}%</h2>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 border rounded h-100">
+                        <h6 class="text-muted mb-1">Total Attempts</h6>
+                        <h2 class="mb-0">{{ total_attempts }}</h2>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 border rounded h-100">
+                        <h6 class="text-muted mb-1">Coding Attempts</h6>
+                        <h2 class="mb-0">{{ coding_total }}</h2>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3 border rounded h-100">
+                        <h6 class="text-muted mb-1">GD Attempts</h6>
+                        <h2 class="mb-0">{{ gd_attempts|length }}</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-calculator fa-2x text-primary mb-2"></i>
+                    <h6>Aptitude</h6>
+                    <h4>{{ module_scores.aptitude }}%</h4>
+                    <small class="text-muted">{{ mcq_total }} MCQ responses analyzed</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-comments fa-2x text-success mb-2"></i>
+                    <h6>Group Discussion (AI Interview)</h6>
+                    <h4>{{ module_scores.group_discussion }}%</h4>
+                    <small class="text-muted">AI-evaluated communication rounds</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-code fa-2x text-warning mb-2"></i>
+                    <h6>Coding</h6>
+                    <h4>{{ module_scores.coding }}%</h4>
+                    <small class="text-muted">{{ coding_total }} coding responses analyzed</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-book fa-2x text-info mb-2"></i>
+                    <h6>CS Fundamentals</h6>
+                    <h4>{{ module_scores.fundamentals }}%</h4>
+                    <small class="text-muted">{{ fundamentals_total }} subjective responses analyzed</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-microphone-alt me-2"></i>AI Group Discussion / Interview Practice</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Topic</label>
+                        <input type="text" class="form-control" id="gdTopic" placeholder="e.g., AI replacing jobs, Remote work, Startup culture">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Your Response</label>
+                        <textarea class="form-control" id="gdResponse" rows="6" placeholder="Write your group discussion/interview response..."></textarea>
+                    </div>
+                    <button class="btn btn-primary" id="evaluateGdBtn">
+                        <i class="fas fa-wand-magic-sparkles me-1"></i>Evaluate with AI
+                    </button>
+                    <div id="gdResult" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-history me-2"></i>Recent AI Interview Attempts</h6>
+                </div>
+                <div class="card-body">
+                    {% if gd_attempts %}
+                    <ul class="list-group list-group-flush">
+                        {% for item in gd_attempts %}
+                        <li class="list-group-item px-0">
+                            <div class="d-flex justify-content-between">
+                                <strong>{{ item.topic }}</strong>
+                                <span class="badge bg-primary">{{ "%.1f"|format(item.score) }}%</span>
+                            </div>
+                            <small class="text-muted">{{ item.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted mb-0">No interview attempts yet. Submit your first response.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const btn = document.getElementById('evaluateGdBtn');
+    const topicInput = document.getElementById('gdTopic');
+    const responseInput = document.getElementById('gdResponse');
+    const resultBox = document.getElementById('gdResult');
+
+    btn.addEventListener('click', async function () {
+        const topic = (topicInput.value || '').trim() || 'General';
+        const response = (responseInput.value || '').trim();
+        if (!response) {
+            resultBox.innerHTML = '<div class="alert alert-warning mb-0">Please write your response first.</div>';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Evaluating...';
+        resultBox.innerHTML = '';
+
+        try {
+            const res = await fetch('/placement_track/ai_interview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic: topic, response: response })
+            });
+            const data = await res.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Evaluation failed');
+            }
+
+            const strengths = (data.strengths || []).map(function (s) { return `<li>${s}</li>`; }).join('');
+            const improvements = (data.improvements || []).map(function (s) { return `<li>${s}</li>`; }).join('');
+            resultBox.innerHTML = `
+                <div class="card border-success">
+                    <div class="card-body">
+                        <h6 class="mb-2 text-success">AI Score: ${data.score}%</h6>
+                        <p class="mb-2">${data.feedback || ''}</p>
+                        <strong>Strengths</strong>
+                        <ul>${strengths || '<li>No strengths provided</li>'}</ul>
+                        <strong>Improvements</strong>
+                        <ul>${improvements || '<li>No improvements provided</li>'}</ul>
+                        <strong>Follow-up Question</strong>
+                        <p class="mb-0">${data.follow_up_question || 'N/A'}</p>
+                    </div>
+                </div>
+            `;
+        } catch (err) {
+            resultBox.innerHTML = `<div class="alert alert-danger mb-0">${err.message}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-wand-magic-sparkles me-1"></i>Evaluate with AI';
+        }
+    });
+});
+</script>
+{% endblock %}

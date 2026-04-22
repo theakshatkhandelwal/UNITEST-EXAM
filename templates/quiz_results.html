@@ -153,6 +153,11 @@
                 <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-lg me-3">
                     <i class="fas fa-tachometer-alt me-2"></i>Back to Dashboard
                 </a>
+                {% if placement_module %}
+                    <a href="{{ url_for('placement_track') }}" class="btn btn-outline-success btn-lg me-3">
+                        <i class="fas fa-briefcase me-2"></i>Back to Placement Track
+                    </a>
+                {% endif %}
                 
                 {% if passed %}
                     <form method="POST" action="{{ url_for('next_level') }}" style="display: inline;">

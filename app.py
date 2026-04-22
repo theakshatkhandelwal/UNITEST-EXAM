@@ -658,6 +658,43 @@ class PlacementInterview(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     user = db.relationship('User', backref='placement_interviews')
 
+PLACEMENT_SEQUENCE = ['aptitude', 'group_discussion', 'fundamentals', 'coding']
+PLACEMENT_APTITUDE_BANK = [
+    {"question": "A train 120 m long crosses a pole in 6 seconds. What is its speed?", "options": ["A. 10 m/s", "B. 15 m/s", "C. 20 m/s", "D. 25 m/s"], "answer": "C", "type": "mcq"},
+    {"question": "If 12 men can complete a work in 18 days, how many men are needed to complete it in 12 days?", "options": ["A. 16", "B. 18", "C. 20", "D. 24"], "answer": "B", "type": "mcq"},
+    {"question": "Find the odd one out: 2, 6, 12, 20, 30, 42, 56", "options": ["A. 12", "B. 20", "C. 30", "D. 42"], "answer": "D", "type": "mcq"},
+    {"question": "A is twice as efficient as B. If both work together and finish in 12 days, A alone will finish in:", "options": ["A. 16 days", "B. 18 days", "C. 20 days", "D. 24 days"], "answer": "B", "type": "mcq"},
+    {"question": "The average of 5 numbers is 48. If one number is excluded, average becomes 44. The excluded number is:", "options": ["A. 56", "B. 60", "C. 64", "D. 68"], "answer": "C", "type": "mcq"},
+    {"question": "If in a code, COMPUTER is coded as RFUVQNPC, then SCIENCE is coded as:", "options": ["A. EDPFJTD", "B. FDQGJUD", "C. EDPHJUD", "D. EDQGJUD"], "answer": "A", "type": "mcq"},
+    {"question": "A sum amounts to Rs. 8820 in 2 years and Rs. 9261 in 3 years at compound interest. Find the rate:", "options": ["A. 5%", "B. 6%", "C. 7%", "D. 8%"], "answer": "A", "type": "mcq"},
+    {"question": "If SOUTH is coded as 12345 and NORTH as 67845, then TOURNAMENT can be coded as:", "options": ["A. 456789321", "B. 456873291", "C. 458763291", "D. 465783291"], "answer": "B", "type": "mcq"},
+    {"question": "In a class, ratio of boys to girls is 7:5. If 6 girls join, ratio becomes 7:6. Initial strength of class is:", "options": ["A. 48", "B. 60", "C. 72", "D. 84"], "answer": "C", "type": "mcq"},
+    {"question": "What is the next number in series: 3, 7, 15, 31, 63, ?", "options": ["A. 95", "B. 111", "C. 127", "D. 131"], "answer": "C", "type": "mcq"},
+]
+
+def _default_placement_state():
+    return {
+        'current_stage': 'aptitude',
+        'scores': {'aptitude': 0.0, 'group_discussion': 0.0, 'fundamentals': 0.0, 'coding': 0.0},
+        'completed': {'aptitude': False, 'group_discussion': False, 'fundamentals': False, 'coding': False}
+    }
+
+def _get_placement_state():
+    state = session.get('placement_track_state')
+    if not state or not isinstance(state, dict):
+        state = _default_placement_state()
+    state.setdefault('current_stage', 'aptitude')
+    state.setdefault('scores', _default_placement_state()['scores'])
+    state.setdefault('completed', _default_placement_state()['completed'])
+    for key in PLACEMENT_SEQUENCE:
+        state['scores'].setdefault(key, 0.0)
+        state['completed'].setdefault(key, False)
+    return state
+
+def _save_placement_state(state):
+    session['placement_track_state'] = state
+    session.modified = True
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -2673,67 +2710,35 @@ def dashboard():
 @app.route('/placement_track')
 @login_required
 def placement_track():
-    from sqlalchemy import func
-
-    # Core submission stats
-    submissions = db.session.query(QuizSubmission).filter_by(student_id=current_user.id, completed=True).all()
-    total_attempts = len(submissions)
-
-    # Pull all answers with question metadata for current user.
-    answer_rows = db.session.query(QuizAnswer, QuizQuestion).join(
-        QuizQuestion, QuizAnswer.question_id == QuizQuestion.id
-    ).join(
-        QuizSubmission, QuizAnswer.submission_id == QuizSubmission.id
-    ).filter(
-        QuizSubmission.student_id == current_user.id
-    ).all()
-
-    # Aptitude: MCQ correctness.
-    mcq_rows = [(ans, q) for ans, q in answer_rows if q.qtype == 'mcq']
-    mcq_total = len(mcq_rows)
-    mcq_correct = sum(1 for ans, _ in mcq_rows if bool(ans.is_correct))
-    aptitude_score = (mcq_correct / mcq_total * 100.0) if mcq_total else 0.0
-
-    # Coding: test case pass ratio with marks-based fallback.
-    coding_rows = [(ans, q) for ans, q in answer_rows if q.qtype == 'coding']
-    coding_total_cases = sum(int(ans.total_test_cases or 0) for ans, _ in coding_rows)
-    coding_passed_cases = sum(int(ans.passed_test_cases or 0) for ans, _ in coding_rows)
-    if coding_total_cases > 0:
-        coding_score = (coding_passed_cases / coding_total_cases) * 100.0
-    elif coding_rows:
-        earned = sum(float(ans.scored_marks or 0.0) for ans, _ in coding_rows)
-        possible = sum(float(q.marks or 0.0) for _, q in coding_rows)
-        coding_score = (earned / possible * 100.0) if possible > 0 else 0.0
-    else:
-        coding_score = 0.0
-
-    # CS fundamentals: subjective AI score average.
-    subj_rows = [(ans, q) for ans, q in answer_rows if q.qtype == 'subjective']
-    fundamentals_score = (
-        sum(float(ans.ai_score or 0.0) for ans, _ in subj_rows) / len(subj_rows) * 100.0
-    ) if subj_rows else 0.0
+    state = _get_placement_state()
+    scores = state.get('scores', {})
+    completed = state.get('completed', {})
 
     # Group discussion/interview track.
     gd_attempts = db.session.query(PlacementInterview).filter_by(user_id=current_user.id).order_by(
         PlacementInterview.created_at.desc()
     ).limit(10).all()
-    gd_score = (
-        sum(float(i.score or 0.0) for i in gd_attempts) / len(gd_attempts)
-    ) if gd_attempts else 0.0
+    total_attempts = sum(1 for k in PLACEMENT_SEQUENCE if completed.get(k, False))
 
     # Weighted readiness index.
     readiness_index = (
-        aptitude_score * 0.30 +
-        gd_score * 0.25 +
-        coding_score * 0.25 +
-        fundamentals_score * 0.20
+        float(scores.get('aptitude', 0.0)) * 0.30 +
+        float(scores.get('group_discussion', 0.0)) * 0.25 +
+        float(scores.get('coding', 0.0)) * 0.25 +
+        float(scores.get('fundamentals', 0.0)) * 0.20
     )
 
     module_scores = {
-        'aptitude': round(aptitude_score, 1),
-        'group_discussion': round(gd_score, 1),
-        'coding': round(coding_score, 1),
-        'fundamentals': round(fundamentals_score, 1),
+        'aptitude': round(float(scores.get('aptitude', 0.0)), 1),
+        'group_discussion': round(float(scores.get('group_discussion', 0.0)), 1),
+        'coding': round(float(scores.get('coding', 0.0)), 1),
+        'fundamentals': round(float(scores.get('fundamentals', 0.0)), 1),
+    }
+
+    next_locked = {
+        'group_discussion': not completed.get('aptitude', False),
+        'fundamentals': not completed.get('group_discussion', False),
+        'coding': not completed.get('fundamentals', False),
     }
 
     return render_template(
@@ -2741,11 +2746,76 @@ def placement_track():
         readiness_index=round(readiness_index, 1),
         module_scores=module_scores,
         total_attempts=total_attempts,
-        mcq_total=mcq_total,
-        coding_total=len(coding_rows),
-        fundamentals_total=len(subj_rows),
-        gd_attempts=gd_attempts
+        gd_attempts=gd_attempts,
+        completed=completed,
+        current_stage=state.get('current_stage', 'aptitude'),
+        next_locked=next_locked
     )
+
+@app.route('/placement_track/start/<module>')
+@login_required
+def placement_start_module(module):
+    module = (module or '').strip().lower()
+    if module not in PLACEMENT_SEQUENCE:
+        flash('Invalid placement module.', 'error')
+        return redirect(url_for('placement_track'))
+
+    state = _get_placement_state()
+    completed = state.get('completed', {})
+    if module == 'group_discussion' and not completed.get('aptitude', False):
+        flash('Complete Aptitude first to unlock Group Discussion.', 'error')
+        return redirect(url_for('placement_track'))
+    if module == 'fundamentals' and not completed.get('group_discussion', False):
+        flash('Complete Group Discussion first to unlock CS Fundamentals.', 'error')
+        return redirect(url_for('placement_track'))
+    if module == 'coding' and not completed.get('fundamentals', False):
+        flash('Complete CS Fundamentals first to unlock Technical Coding.', 'error')
+        return redirect(url_for('placement_track'))
+
+    state['current_stage'] = module
+    _save_placement_state(state)
+
+    if module == 'aptitude':
+        session['current_quiz'] = {
+            'questions': PLACEMENT_APTITUDE_BANK[:10],
+            'topic': 'Placement Aptitude - Most Asked Questions',
+            'bloom_level': 1,
+            'difficulty_level': 'intermediate',
+            'placement_module': 'aptitude'
+        }
+        return redirect(url_for('take_quiz'))
+
+    if module == 'fundamentals':
+        topic = 'CS Fundamentals: OOPs, Computer Networks, DBMS, SQL, DSA basics'
+        questions = generate_quiz(topic, 'intermediate', 'mcq', 10)
+        if not questions:
+            flash('Could not generate fundamentals questions. Please try again.', 'error')
+            return redirect(url_for('placement_track'))
+        session['current_quiz'] = {
+            'questions': questions,
+            'topic': topic,
+            'bloom_level': 1,
+            'difficulty_level': 'intermediate',
+            'placement_module': 'fundamentals'
+        }
+        return redirect(url_for('take_quiz'))
+
+    if module == 'coding':
+        topic = 'Technical Coding: arrays, strings, hash maps, linked list, recursion, DP basics'
+        questions = generate_quiz(topic, 'advanced', 'coding', 3)
+        if not questions:
+            flash('Could not generate coding questions. Please try again.', 'error')
+            return redirect(url_for('placement_track'))
+        session['current_quiz'] = {
+            'questions': questions,
+            'topic': topic,
+            'bloom_level': 1,
+            'difficulty_level': 'advanced',
+            'placement_module': 'coding'
+        }
+        return redirect(url_for('take_quiz'))
+
+    return redirect(url_for('placement_track'))
 
 @app.route('/placement_track/ai_interview', methods=['POST'])
 @login_required
@@ -2777,6 +2847,10 @@ Return STRICT JSON only in this exact schema:
 {{
   "score": 0-100 number,
   "feedback": "2-4 lines concise feedback",
+  "speech_clarity": 0-100 number,
+  "grammar": 0-100 number,
+  "fluency": 0-100 number,
+  "confidence": 0-100 number,
   "strengths": ["point1", "point2"],
   "improvements": ["point1", "point2"],
   "follow_up_question": "one realistic follow-up GD/interview question"
@@ -2788,6 +2862,10 @@ Return STRICT JSON only in this exact schema:
 
         score = float(parsed.get('score', 0.0))
         score = max(0.0, min(100.0, score))
+        speech_clarity = max(0.0, min(100.0, float(parsed.get('speech_clarity', score))))
+        grammar = max(0.0, min(100.0, float(parsed.get('grammar', score))))
+        fluency = max(0.0, min(100.0, float(parsed.get('fluency', score))))
+        confidence = max(0.0, min(100.0, float(parsed.get('confidence', score))))
         feedback = str(parsed.get('feedback', '')).strip()
         follow_up_question = str(parsed.get('follow_up_question', '')).strip()
         strengths = parsed.get('strengths') or []
@@ -2804,9 +2882,20 @@ Return STRICT JSON only in this exact schema:
         db.session.add(interview)
         db.session.commit()
 
+        state = _get_placement_state()
+        state['scores']['group_discussion'] = round(score, 1)
+        if score >= 60:
+            state['completed']['group_discussion'] = True
+            state['current_stage'] = 'fundamentals'
+        _save_placement_state(state)
+
         return jsonify({
             'success': True,
             'score': round(score, 1),
+            'speech_clarity': round(speech_clarity, 1),
+            'grammar': round(grammar, 1),
+            'fluency': round(fluency, 1),
+            'confidence': round(confidence, 1),
             'feedback': feedback,
             'strengths': strengths,
             'improvements': improvements,
@@ -4569,6 +4658,18 @@ def submit_quiz():
         passed = percentage >= 60
         final_score = f"{correct_answers}/{len(questions)}"
 
+    placement_module = quiz_data.get('placement_module')
+    if placement_module in PLACEMENT_SEQUENCE:
+        state = _get_placement_state()
+        state['scores'][placement_module] = round(float(percentage), 1)
+        if percentage >= 60:
+            state['completed'][placement_module] = True
+            if placement_module == 'aptitude':
+                state['current_stage'] = 'group_discussion'
+            elif placement_module == 'fundamentals':
+                state['current_stage'] = 'coding'
+        _save_placement_state(state)
+
     # Update progress
     progress = db.session.query(Progress).filter_by(user_id=current_user.id, topic=topic).first()
     if progress:
@@ -4594,7 +4695,8 @@ def submit_quiz():
                          passed=passed,
                          topic=topic,
                          bloom_level=bloom_level,
-                         difficulty_level=difficulty_level)
+                         difficulty_level=difficulty_level,
+                         placement_module=placement_module)
 
 @app.route('/next_level', methods=['POST'])
 @login_required

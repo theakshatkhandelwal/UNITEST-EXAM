@@ -18,20 +18,20 @@
                 </div>
                 <div class="col-md-3">
                     <div class="p-3 border rounded h-100">
-                        <h6 class="text-muted mb-1">Total Attempts</h6>
+                        <h6 class="text-muted mb-1">Modules Completed</h6>
                         <h2 class="mb-0">{{ total_attempts }}</h2>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="p-3 border rounded h-100">
-                        <h6 class="text-muted mb-1">Coding Attempts</h6>
-                        <h2 class="mb-0">{{ coding_total }}</h2>
+                        <h6 class="text-muted mb-1">Current Stage</h6>
+                        <h6 class="mb-0 text-capitalize">{{ current_stage.replace('_', ' ') }}</h6>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="p-3 border rounded h-100">
-                        <h6 class="text-muted mb-1">GD Attempts</h6>
-                        <h2 class="mb-0">{{ gd_attempts|length }}</h2>
+                        <h6 class="text-muted mb-1">Status</h6>
+                        <h6 class="mb-0">{{ 'On Track' if readiness_index >= 60 else 'Needs Practice' }}</h6>
                     </div>
                 </div>
             </div>
@@ -43,9 +43,12 @@
             <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="fas fa-calculator fa-2x text-primary mb-2"></i>
-                    <h6>Aptitude</h6>
+                    <h6>1) Aptitude</h6>
                     <h4>{{ module_scores.aptitude }}%</h4>
-                    <small class="text-muted">{{ mcq_total }} MCQ responses analyzed</small>
+                    <small class="text-muted d-block mb-2">Most asked aptitude questions</small>
+                    <a class="btn btn-sm btn-primary" href="{{ url_for('placement_start_module', module='aptitude') }}">
+                        Start / Retry
+                    </a>
                 </div>
             </div>
         </div>
@@ -53,19 +56,14 @@
             <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="fas fa-comments fa-2x text-success mb-2"></i>
-                    <h6>Group Discussion (AI Interview)</h6>
+                    <h6>2) Group Discussion</h6>
                     <h4>{{ module_scores.group_discussion }}%</h4>
-                    <small class="text-muted">AI-evaluated communication rounds</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6 col-lg-3">
-            <div class="card h-100">
-                <div class="card-body text-center">
-                    <i class="fas fa-code fa-2x text-warning mb-2"></i>
-                    <h6>Coding</h6>
-                    <h4>{{ module_scores.coding }}%</h4>
-                    <small class="text-muted">{{ coding_total }} coding responses analyzed</small>
+                    <small class="text-muted d-block mb-2">Voice + AI analysis</small>
+                    {% if next_locked.group_discussion %}
+                        <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-lock me-1"></i>Locked</button>
+                    {% else %}
+                        <a class="btn btn-sm btn-success" href="#gdRound"><i class="fas fa-microphone me-1"></i>Start</a>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -73,28 +71,62 @@
             <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="fas fa-book fa-2x text-info mb-2"></i>
-                    <h6>CS Fundamentals</h6>
+                    <h6>3) CS Fundamentals</h6>
                     <h4>{{ module_scores.fundamentals }}%</h4>
-                    <small class="text-muted">{{ fundamentals_total }} subjective responses analyzed</small>
+                    <small class="text-muted d-block mb-2">OOPs, CN, DBMS, SQL, DSA</small>
+                    {% if next_locked.fundamentals %}
+                        <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-lock me-1"></i>Locked</button>
+                    {% else %}
+                        <a class="btn btn-sm btn-info text-white" href="{{ url_for('placement_start_module', module='fundamentals') }}">Start</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-code fa-2x text-warning mb-2"></i>
+                    <h6>4) Technical Coding</h6>
+                    <h4>{{ module_scores.coding }}%</h4>
+                    <small class="text-muted d-block mb-2">Coding interview challenges</small>
+                    {% if next_locked.coding %}
+                        <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-lock me-1"></i>Locked</button>
+                    {% else %}
+                        <a class="btn btn-sm btn-warning text-white" href="{{ url_for('placement_start_module', module='coding') }}">Start</a>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row g-4">
+    <div class="row g-4" id="gdRound">
         <div class="col-lg-7">
             <div class="card">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-microphone-alt me-2"></i>AI Group Discussion / Interview Practice</h5>
+                    <h5 class="mb-0"><i class="fas fa-microphone-alt me-2"></i>Group Discussion Round (Voice + AI)</h5>
                 </div>
                 <div class="card-body">
+                    {% if next_locked.group_discussion %}
+                    <div class="alert alert-secondary mb-3">
+                        Complete Aptitude module (>=60%) to unlock Group Discussion.
+                    </div>
+                    {% endif %}
                     <div class="mb-3">
                         <label class="form-label">Topic</label>
-                        <input type="text" class="form-control" id="gdTopic" placeholder="e.g., AI replacing jobs, Remote work, Startup culture">
+                        <input type="text" class="form-control" id="gdTopic" placeholder="e.g., AI replacing jobs, Remote work, Startup culture" {% if next_locked.group_discussion %}disabled{% endif %}>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Your Response</label>
-                        <textarea class="form-control" id="gdResponse" rows="6" placeholder="Write your group discussion/interview response..."></textarea>
+                        <label class="form-label">Your Response (voice transcription supported)</label>
+                        <textarea class="form-control" id="gdResponse" rows="6" placeholder="Speak or type your group discussion response..." {% if next_locked.group_discussion %}disabled{% endif %}></textarea>
+                    </div>
+                    <div class="mb-3 d-flex gap-2 flex-wrap">
+                        <button class="btn btn-outline-secondary" id="startVoiceBtn" {% if next_locked.group_discussion %}disabled{% endif %}>
+                            <i class="fas fa-microphone me-1"></i>Start Voice
+                        </button>
+                        <button class="btn btn-outline-danger" id="stopVoiceBtn" disabled>
+                            <i class="fas fa-stop me-1"></i>Stop Voice
+                        </button>
+                        <span class="small text-muted align-self-center" id="voiceStatus">Voice input idle</span>
                     </div>
                     <button class="btn btn-primary" id="evaluateGdBtn">
                         <i class="fas fa-wand-magic-sparkles me-1"></i>Evaluate with AI
@@ -136,6 +168,45 @@ document.addEventListener('DOMContentLoaded', function () {
     const topicInput = document.getElementById('gdTopic');
     const responseInput = document.getElementById('gdResponse');
     const resultBox = document.getElementById('gdResult');
+    const startVoiceBtn = document.getElementById('startVoiceBtn');
+    const stopVoiceBtn = document.getElementById('stopVoiceBtn');
+    const voiceStatus = document.getElementById('voiceStatus');
+    let recognition = null;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition && startVoiceBtn && stopVoiceBtn) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onstart = function () {
+            voiceStatus.textContent = 'Listening...';
+            startVoiceBtn.disabled = true;
+            stopVoiceBtn.disabled = false;
+        };
+        recognition.onerror = function () {
+            voiceStatus.textContent = 'Voice input error. You can still type.';
+            startVoiceBtn.disabled = false;
+            stopVoiceBtn.disabled = true;
+        };
+        recognition.onend = function () {
+            voiceStatus.textContent = 'Voice input stopped.';
+            startVoiceBtn.disabled = false;
+            stopVoiceBtn.disabled = true;
+        };
+        recognition.onresult = function (event) {
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                transcript += event.results[i][0].transcript;
+            }
+            responseInput.value = `${responseInput.value} ${transcript}`.trim();
+        };
+        startVoiceBtn.addEventListener('click', function () { recognition.start(); });
+        stopVoiceBtn.addEventListener('click', function () { recognition.stop(); });
+    } else if (voiceStatus) {
+        voiceStatus.textContent = 'Voice transcription not supported in this browser.';
+        if (startVoiceBtn) startVoiceBtn.disabled = true;
+    }
 
     btn.addEventListener('click', async function () {
         const topic = (topicInput.value || '').trim() || 'General';
@@ -166,6 +237,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div class="card border-success">
                     <div class="card-body">
                         <h6 class="mb-2 text-success">AI Score: ${data.score}%</h6>
+                        <div class="row g-2 mb-2">
+                            <div class="col-6 col-md-3"><small class="text-muted">Clarity</small><div class="fw-semibold">${data.speech_clarity ?? 'N/A'}%</div></div>
+                            <div class="col-6 col-md-3"><small class="text-muted">Grammar</small><div class="fw-semibold">${data.grammar ?? 'N/A'}%</div></div>
+                            <div class="col-6 col-md-3"><small class="text-muted">Fluency</small><div class="fw-semibold">${data.fluency ?? 'N/A'}%</div></div>
+                            <div class="col-6 col-md-3"><small class="text-muted">Confidence</small><div class="fw-semibold">${data.confidence ?? 'N/A'}%</div></div>
+                        </div>
                         <p class="mb-2">${data.feedback || ''}</p>
                         <strong>Strengths</strong>
                         <ul>${strengths || '<li>No strengths provided</li>'}</ul>
@@ -176,6 +253,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     </div>
                 </div>
             `;
+            if (data.score >= 60) {
+                resultBox.innerHTML += '<div class="alert alert-success mt-2 mb-0">GD round cleared. CS Fundamentals is now unlocked.</div>';
+                setTimeout(function () { window.location.reload(); }, 900);
+            } else {
+                resultBox.innerHTML += '<div class="alert alert-warning mt-2 mb-0">Score below 60%. Reattempt GD to unlock the next module.</div>';
+            }
         } catch (err) {
             resultBox.innerHTML = `<div class="alert alert-danger mb-0">${err.message}</div>`;
         } finally {

@@ -4881,65 +4881,129 @@ def upload_pdf():
 @app.route('/ai_learn', methods=['POST'])
 @login_required
 def ai_learn():
-    """AI-powered learning content generation"""
+    """AI-powered learning content generation using Groq API"""
     try:
-        data = request.get_json()
-        topic = data.get('topic', '').strip()
-        level = data.get('level', 'intermediate')
-        style = data.get('style', 'theoretical')
-        
+        data = request.get_json() or {}
+        topic = (data.get('topic') or '').strip()
+        level = (data.get('level') or 'intermediate').strip()
+        style = (data.get('style') or 'theoretical').strip()
+        image_data_url = (data.get('image_data_url') or '').strip()
+        follow_up_question = (data.get('follow_up_question') or '').strip()
+        prior_content = (data.get('prior_content') or '').strip()
+
         if not topic:
             return jsonify({'success': False, 'error': 'Topic is required'})
-        
-        # Generate learning content using AI
-        # Use gemini-2.5-flash (current free tier) with fallback to gemini-2.5-flash-lite
-        try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
-        except:
-            try:
-                model = genai.GenerativeModel("gemini-2.5-flash-lite")
-            except:
-                try:
-                    model = genai.GenerativeModel("gemini-1.5-flash")
-                except:
-                    raise Exception("No working Gemini model found. Check API key and quota.")
-        prompt = f"""
-        Create a personalized learning path for {topic} at {level} level, 
-        focusing on {style} learning style.
-        
-        IMPORTANT: You MUST use this EXACT format with these EXACT section headers:
-        
-        ## OVERVIEW
-        [Write a brief 2-3 sentence overview of the topic here]
-        
-        ## KEY CONCEPTS
-        • [Write concept 1 with brief explanation here]
-        • [Write concept 2 with brief explanation here]
-        • [Write concept 3 with brief explanation here]
-        
-        ## LEARNING OBJECTIVES
-        ✓ [Write objective 1 here]
-        ✓ [Write objective 2 here]
-        ✓ [Write objective 3 here]
-        
-        ## STUDY APPROACH
-        [Write practical study recommendations based on {style} learning style here]
-        
-        ## COMMON MISCONCEPTIONS
-        ⚠️ [Write misconception 1 and why it's wrong here]
-        ⚠️ [Write misconception 2 and why it's wrong here]
-        
-        ## NEXT STEPS
-        [Write what to do after understanding these basics here]
-        
-        CRITICAL: Start your response immediately with "## OVERVIEW" and follow the exact format above. Do not add any introductory text or explanations before the sections.
-        """
-        
-        response = model.generate_content(prompt)
-        content = response.text.strip()
-        
+
+        groq_key = os.environ.get('GROQ_API_KEY')
+        if not groq_key:
+            return jsonify({
+                'success': False,
+                'error': 'GROQ_API_KEY is not set. Add it in your environment variables.'
+            }), 500
+
+        text_model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+        vision_model = os.environ.get('GROQ_VISION_MODEL', text_model)
+        use_vision = bool(image_data_url)
+        selected_model = vision_model if use_vision else text_model
+
+        if image_data_url and len(image_data_url) > 3_000_000:
+            return jsonify({
+                'success': False,
+                'error': 'Image too large. Please upload a smaller image (preferably under 2MB).'
+            }), 400
+
+        base_prompt = f"""
+Create a personalized learning path for topic: {topic}
+Level: {level}
+Learning style: {style}
+"""
+        if follow_up_question:
+            base_prompt += f"""
+
+The user has already seen this prior learning content:
+{prior_content[:2500]}
+
+Now answer this follow-up question interactively:
+{follow_up_question}
+
+Return concise, practical clarification while still using sectioned markdown.
+"""
+        else:
+            base_prompt += f"""
+IMPORTANT: Use this EXACT section format:
+
+## OVERVIEW
+[2-3 sentence overview]
+
+## KEY CONCEPTS
+• [concept 1]
+• [concept 2]
+• [concept 3]
+
+## LEARNING OBJECTIVES
+✓ [objective 1]
+✓ [objective 2]
+✓ [objective 3]
+
+## STUDY APPROACH
+[Recommendations based on {style}]
+
+## COMMON MISCONCEPTIONS
+⚠️ [misconception 1]
+⚠️ [misconception 2]
+
+## NEXT STEPS
+[Immediate action plan]
+"""
+
+        user_content = [{"type": "text", "text": base_prompt.strip()}]
+        if use_vision:
+            user_content.append({
+                "type": "image_url",
+                "image_url": {"url": image_data_url}
+            })
+
+        payload = {
+            "model": selected_model,
+            "temperature": 0.3,
+            "max_tokens": 1400,
+            "messages": [
+                {"role": "system", "content": "You are an expert tutor. Be structured, accurate, and practical."},
+                {"role": "user", "content": user_content if use_vision else base_prompt.strip()}
+            ]
+        }
+
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json=payload,
+            timeout=30
+        )
+        if response.status_code == 429:
+            return jsonify({
+                'success': False,
+                'error': 'Groq rate limit reached. Please wait 10-15 seconds and try again.'
+            }), 429
+        if response.status_code >= 400:
+            return jsonify({
+                'success': False,
+                'error': f"Groq API error ({response.status_code}): {response.text[:300]}"
+            }), 500
+
+        result = response.json()
+        content = (
+            result.get('choices', [{}])[0]
+            .get('message', {})
+            .get('content', '')
+            .strip()
+        )
+        if not content:
+            return jsonify({'success': False, 'error': 'Empty response from Groq API.'}), 500
+
         return jsonify({'success': True, 'content': content})
-        
     except Exception as e:
         return jsonify({'success': False, 'error': f'Error generating learning content: {str(e)}'})
 
@@ -4955,14 +5019,13 @@ def ai_doubt_resolver():
 
         if not question:
             return jsonify({'success': False, 'error': 'Question is required.'}), 400
-
-        try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
-        except Exception:
-            try:
-                model = genai.GenerativeModel("gemini-2.5-flash-lite")
-            except Exception:
-                model = genai.GenerativeModel("gemini-1.5-flash")
+        groq_key = os.environ.get('GROQ_API_KEY')
+        if not groq_key:
+            return jsonify({
+                'success': False,
+                'error': 'GROQ_API_KEY is not set. Add it in environment variables.'
+            }), 500
+        model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
 
         prompt = f"""
 You are an expert tutor. Resolve the student's doubt based on a wrong/weak answer.
@@ -4980,7 +5043,40 @@ Return STRICT JSON only:
   "practice_question": "one practice question based on same concept"
 }}
 """
-        raw = model.generate_content(prompt).text.strip()
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "temperature": 0.2,
+                "max_tokens": 900,
+                "messages": [
+                    {"role": "system", "content": "You are a precise tutor who always returns valid JSON."},
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=25
+        )
+        if response.status_code == 429:
+            return jsonify({
+                'success': False,
+                'error': 'Groq rate limit reached. Please retry after a few seconds.'
+            }), 429
+        if response.status_code >= 400:
+            return jsonify({
+                'success': False,
+                'error': f"Groq API error ({response.status_code}): {response.text[:250]}"
+            }), 500
+        raw = (
+            response.json()
+            .get('choices', [{}])[0]
+            .get('message', {})
+            .get('content', '')
+            .strip()
+        )
         cleaned = raw.replace("```json", "").replace("```", "").strip()
         parsed = json.loads(cleaned)
 

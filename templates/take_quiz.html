@@ -98,18 +98,26 @@
                                         Your Code:
                                         <span class="badge bg-success ms-2">{{ question.marks }} marks</span>
                                     </label>
+                                    {% set coding_langs = question.get('language_constraints', ['python', 'java', 'cpp', 'c']) %}
+                                    {% set default_lang = coding_langs[0] if coding_langs else 'python' %}
+                                    {% set starter_map = question.get('starter_code', {}) %}
                                     <textarea class="form-control font-monospace coding-answer"
                                               id="coding_{{ question_index }}"
                                               name="coding_answers[{{ question_index }}]"
                                               rows="12"
                                               placeholder="Write your code here..."
-                                              data-question-index="{{ question_index }}"></textarea>
+                                              data-question-index="{{ question_index }}">{{ starter_map.get(default_lang, '') }}</textarea>
 
                                     <div class="mt-2 d-flex align-items-center gap-2">
                                         <button type="button" class="btn btn-outline-primary btn-sm run-code-btn" data-question-index="{{ question_index }}">
                                             <i class="fas fa-play me-1"></i>Run Sample Tests
                                         </button>
                                         <small class="text-muted">Supports C, C++, Java, Python</small>
+                                    </div>
+                                    {% set visible_count = (question.get('test_cases', []) | selectattr('is_hidden', 'equalto', false) | list | length) %}
+                                    {% set hidden_count = (question.get('test_cases', []) | selectattr('is_hidden', 'equalto', true) | list | length) %}
+                                    <div class="small text-muted mt-1">
+                                        Test cases: {{ visible_count }} visible, {{ hidden_count }} hidden.
                                     </div>
                                     <div class="mt-2 small" id="test_result_{{ question_index }}"></div>
                                 </div>
@@ -202,9 +210,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     const passed = data.result.passed || 0;
                     const total = data.result.total || testCases.length;
                     if (resultEl) {
-                        resultEl.innerHTML = passed === total
-                            ? `<span class="text-success">Passed ${passed}/${total} sample tests</span>`
-                            : `<span class="text-danger">Passed ${passed}/${total} sample tests</span>`;
+                        let details = '';
+                        const rows = (data.result.results || []);
+                        rows.forEach((r, i) => {
+                            const ok = !!r.is_correct;
+                            details += `<div class="mt-1 ${ok ? 'text-success' : 'text-danger'}">Case ${i + 1}: ${ok ? 'Passed' : 'Failed'}</div>`;
+                        });
+                        resultEl.innerHTML = (passed === total
+                            ? `<span class="text-success">Passed ${passed}/${total} visible sample tests</span>`
+                            : `<span class="text-danger">Passed ${passed}/${total} visible sample tests</span>`) + details;
                     }
                 } else if (resultEl) {
                     resultEl.innerHTML = `<span class="text-danger">${data.error || 'Execution failed'}</span>`;
@@ -216,6 +230,43 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
+
+    document.querySelectorAll('.coding-answer').forEach(area => {
+        area.addEventListener('keydown', function (e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                const spaces = '    ';
+                this.value = this.value.substring(0, start) + spaces + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + spaces.length;
+            }
+        });
+    });
+
+    const quizForm = document.querySelector('form[action*="submit_quiz"]');
+    if (quizForm) {
+        quizForm.addEventListener('submit', function (e) {
+            let firstMissing = null;
+            quizQuestions.forEach((q, idx) => {
+                if (firstMissing !== null) return;
+                if ((q.type || '') === 'coding') {
+                    const el = document.querySelector(`textarea[name="coding_answers[${idx}]"]`);
+                    if (!el || !(el.value || '').trim()) firstMissing = idx + 1;
+                } else if ((q.type || '') === 'subjective') {
+                    const el = document.querySelector(`textarea[name="subjective_answers[${idx}]"]`);
+                    if (!el || !(el.value || '').trim()) firstMissing = idx + 1;
+                } else if ((q.type || '') === 'mcq') {
+                    const checked = document.querySelector(`input[name="question_${idx}"]:checked`);
+                    if (!checked) firstMissing = idx + 1;
+                }
+            });
+            if (firstMissing !== null) {
+                e.preventDefault();
+                alert(`Please answer question ${firstMissing} before submitting.`);
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

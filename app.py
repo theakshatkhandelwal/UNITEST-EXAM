@@ -963,7 +963,23 @@ def _normalize_coding_question(q):
     normalized['memory_limit_mb'] = int(normalized.get('memory_limit_mb', 256) or 256)
     normalized['language_constraints'] = normalized.get('language_constraints') or _language_constraints()
     normalized['starter_code'] = normalized.get('starter_code') or _starter_code_templates()
-    normalized['test_cases'] = normalized.get('test_cases') or []
+    test_cases = normalized.get('test_cases') or []
+    visible_cases = [tc for tc in test_cases if not tc.get('is_hidden')]
+    hidden_cases = [tc for tc in test_cases if tc.get('is_hidden')]
+    if not visible_cases and normalized.get('sample_input') is not None and normalized.get('sample_output') is not None:
+        visible_cases = [{
+            "input": str(normalized.get('sample_input', '')),
+            "expected_output": str(normalized.get('sample_output', '')),
+            "is_hidden": False
+        }]
+    if not visible_cases:
+        visible_cases = [{"input": "1\n1", "expected_output": "1", "is_hidden": False}]
+    if len(hidden_cases) < 2:
+        seed_input = str(visible_cases[0].get('input', '1\n1'))
+        seed_output = str(visible_cases[0].get('expected_output', '1'))
+        while len(hidden_cases) < 2:
+            hidden_cases.append({"input": seed_input, "expected_output": seed_output, "is_hidden": True})
+    normalized['test_cases'] = [visible_cases[0], hidden_cases[0], hidden_cases[1]]
     return normalized
 
 def _pick_leetcode_mix():
@@ -5107,8 +5123,9 @@ def submit_quiz():
             # For subjective questions, get from subjective_answers array
             answer = request.form.get(f'subjective_answers[{i}]')
         
-        if not answer:
-            return jsonify({'error': f'Please answer question {i+1}'})
+        if not answer or not str(answer).strip():
+            flash(f'Please answer question {i+1} before submitting.', 'error')
+            return redirect(url_for('take_quiz'))
         user_answers.append(answer)
 
     # Calculate scores

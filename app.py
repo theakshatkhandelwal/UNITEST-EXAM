@@ -25,6 +25,7 @@ import time
 import base64
 import csv
 import smtplib
+import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from urllib.parse import urlencode
@@ -672,6 +673,254 @@ PLACEMENT_APTITUDE_BANK = [
     {"question": "What is the next number in series: 3, 7, 15, 31, 63, ?", "options": ["A. 95", "B. 111", "C. 127", "D. 131"], "answer": "C", "type": "mcq", "solution": "Each term is (previous*2)+1, or 2^n-1 sequence. Next=63*2+1=127. Option C."},
 ]
 
+PLACEMENT_LEETCODE_BANK = [
+    {
+        "leetcode_id": 1,
+        "leetcode_title": "Two Sum",
+        "leetcode_url": "https://leetcode.com/problems/two-sum/",
+        "difficulty": "easy",
+        "question": "Given an array of integers and a target, print two indices (0-based) whose values add up to target.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "4\n2 7 11 15\n9",
+        "sample_output": "0 1",
+        "solution": "Use a hash map from value to index. For each value x, check if target-x exists in map.",
+        "test_cases": [
+            {"input": "4\n2 7 11 15\n9", "expected_output": "0 1", "is_hidden": False},
+            {"input": "3\n3 2 4\n6", "expected_output": "1 2", "is_hidden": True},
+            {"input": "2\n3 3\n6", "expected_output": "0 1", "is_hidden": True}
+        ]
+    },
+    {
+        "leetcode_id": 9,
+        "leetcode_title": "Palindrome Number",
+        "leetcode_url": "https://leetcode.com/problems/palindrome-number/",
+        "difficulty": "easy",
+        "question": "Given an integer x, print true if it is a palindrome, else false.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "121",
+        "sample_output": "true",
+        "solution": "Reverse digits and compare with original, or compare string with reverse.",
+        "test_cases": [
+            {"input": "121", "expected_output": "true", "is_hidden": False},
+            {"input": "-121", "expected_output": "false", "is_hidden": True},
+            {"input": "10", "expected_output": "false", "is_hidden": True}
+        ]
+    },
+    {
+        "leetcode_id": 136,
+        "leetcode_title": "Single Number",
+        "leetcode_url": "https://leetcode.com/problems/single-number/",
+        "difficulty": "easy",
+        "question": "Every element appears twice except one. Print that single element.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "3\n2 2 1",
+        "sample_output": "1",
+        "solution": "XOR all numbers; duplicates cancel out and unique remains.",
+        "test_cases": [
+            {"input": "3\n2 2 1", "expected_output": "1", "is_hidden": False},
+            {"input": "5\n4 1 2 1 2", "expected_output": "4", "is_hidden": True}
+        ]
+    },
+    {
+        "leetcode_id": 53,
+        "leetcode_title": "Maximum Subarray",
+        "leetcode_url": "https://leetcode.com/problems/maximum-subarray/",
+        "difficulty": "medium",
+        "question": "Given an integer array, print the maximum subarray sum.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "9\n-2 1 -3 4 -1 2 1 -5 4",
+        "sample_output": "6",
+        "solution": "Kadane's algorithm: maintain best-ending-here and global best.",
+        "test_cases": [
+            {"input": "9\n-2 1 -3 4 -1 2 1 -5 4", "expected_output": "6", "is_hidden": False},
+            {"input": "1\n1", "expected_output": "1", "is_hidden": True},
+            {"input": "5\n5 4 -1 7 8", "expected_output": "23", "is_hidden": True}
+        ]
+    },
+    {
+        "leetcode_id": 3,
+        "leetcode_title": "Longest Substring Without Repeating Characters",
+        "leetcode_url": "https://leetcode.com/problems/longest-substring-without-repeating-characters/",
+        "difficulty": "medium",
+        "question": "Given a string s, print length of longest substring without repeating characters.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "abcabcbb",
+        "sample_output": "3",
+        "solution": "Use sliding window with last seen index map.",
+        "test_cases": [
+            {"input": "abcabcbb", "expected_output": "3", "is_hidden": False},
+            {"input": "bbbbb", "expected_output": "1", "is_hidden": True},
+            {"input": "pwwkew", "expected_output": "3", "is_hidden": True}
+        ]
+    },
+    {
+        "leetcode_id": 15,
+        "leetcode_title": "3Sum",
+        "leetcode_url": "https://leetcode.com/problems/3sum/",
+        "difficulty": "medium",
+        "question": "Given array nums, print count of unique triplets with sum 0.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "6\n-1 0 1 2 -1 -4",
+        "sample_output": "2",
+        "solution": "Sort and use two pointers for each fixed i, skipping duplicates.",
+        "test_cases": [
+            {"input": "6\n-1 0 1 2 -1 -4", "expected_output": "2", "is_hidden": False},
+            {"input": "3\n0 0 0", "expected_output": "1", "is_hidden": True}
+        ]
+    },
+    {
+        "leetcode_id": 33,
+        "leetcode_title": "Search in Rotated Sorted Array",
+        "leetcode_url": "https://leetcode.com/problems/search-in-rotated-sorted-array/",
+        "difficulty": "medium",
+        "question": "Given rotated sorted array and target, print index if found else -1.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "7\n4 5 6 7 0 1 2\n0",
+        "sample_output": "4",
+        "solution": "Modified binary search; decide sorted half each step.",
+        "test_cases": [
+            {"input": "7\n4 5 6 7 0 1 2\n0", "expected_output": "4", "is_hidden": False},
+            {"input": "7\n4 5 6 7 0 1 2\n3", "expected_output": "-1", "is_hidden": True}
+        ]
+    },
+    {
+        "leetcode_id": 139,
+        "leetcode_title": "Word Break",
+        "leetcode_url": "https://leetcode.com/problems/word-break/",
+        "difficulty": "medium",
+        "question": "Given a string s and dictionary words, print true if s can be segmented into dictionary words.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "leetcode\n2\nleet code",
+        "sample_output": "true",
+        "solution": "DP: dp[i]=True if any dp[j] and s[j:i] in dict.",
+        "test_cases": [
+            {"input": "leetcode\n2\nleet code", "expected_output": "true", "is_hidden": False},
+            {"input": "catsandog\n5\ncats dog sand and cat", "expected_output": "false", "is_hidden": True}
+        ]
+    },
+    {
+        "leetcode_id": 124,
+        "leetcode_title": "Binary Tree Maximum Path Sum",
+        "leetcode_url": "https://leetcode.com/problems/binary-tree-maximum-path-sum/",
+        "difficulty": "hard",
+        "question": "Given binary tree in level-order with null as -1000000, print maximum path sum.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "3\n1 2 3",
+        "sample_output": "6",
+        "solution": "DFS returns max gain from node; update global best with left+node+right.",
+        "test_cases": [
+            {"input": "3\n1 2 3", "expected_output": "6", "is_hidden": False},
+            {"input": "3\n-10 9 20 15 7", "expected_output": "42", "is_hidden": True}
+        ]
+    },
+    {
+        "leetcode_id": 23,
+        "leetcode_title": "Merge k Sorted Lists",
+        "leetcode_url": "https://leetcode.com/problems/merge-k-sorted-lists/",
+        "difficulty": "hard",
+        "question": "Given k sorted arrays, merge all and print one sorted line.",
+        "type": "coding",
+        "marks": 10,
+        "sample_input": "3\n3 1 4 5\n3 1 3 4\n2 2 6",
+        "sample_output": "1 1 2 3 4 4 5 6",
+        "solution": "Use min-heap over k heads or divide-and-conquer merges.",
+        "test_cases": [
+            {"input": "3\n3 1 4 5\n3 1 3 4\n2 2 6", "expected_output": "1 1 2 3 4 4 5 6", "is_hidden": False}
+        ]
+    },
+]
+
+LEETCODE_PRACTICE_POOL = [
+    {"leetcode_id": 1, "leetcode_title": "Two Sum", "leetcode_url": "https://leetcode.com/problems/two-sum/", "difficulty": "easy"},
+    {"leetcode_id": 9, "leetcode_title": "Palindrome Number", "leetcode_url": "https://leetcode.com/problems/palindrome-number/", "difficulty": "easy"},
+    {"leetcode_id": 13, "leetcode_title": "Roman to Integer", "leetcode_url": "https://leetcode.com/problems/roman-to-integer/", "difficulty": "easy"},
+    {"leetcode_id": 14, "leetcode_title": "Longest Common Prefix", "leetcode_url": "https://leetcode.com/problems/longest-common-prefix/", "difficulty": "easy"},
+    {"leetcode_id": 20, "leetcode_title": "Valid Parentheses", "leetcode_url": "https://leetcode.com/problems/valid-parentheses/", "difficulty": "easy"},
+    {"leetcode_id": 21, "leetcode_title": "Merge Two Sorted Lists", "leetcode_url": "https://leetcode.com/problems/merge-two-sorted-lists/", "difficulty": "easy"},
+    {"leetcode_id": 26, "leetcode_title": "Remove Duplicates from Sorted Array", "leetcode_url": "https://leetcode.com/problems/remove-duplicates-from-sorted-array/", "difficulty": "easy"},
+    {"leetcode_id": 27, "leetcode_title": "Remove Element", "leetcode_url": "https://leetcode.com/problems/remove-element/", "difficulty": "easy"},
+    {"leetcode_id": 35, "leetcode_title": "Search Insert Position", "leetcode_url": "https://leetcode.com/problems/search-insert-position/", "difficulty": "easy"},
+    {"leetcode_id": 53, "leetcode_title": "Maximum Subarray", "leetcode_url": "https://leetcode.com/problems/maximum-subarray/", "difficulty": "medium"},
+    {"leetcode_id": 58, "leetcode_title": "Length of Last Word", "leetcode_url": "https://leetcode.com/problems/length-of-last-word/", "difficulty": "easy"},
+    {"leetcode_id": 66, "leetcode_title": "Plus One", "leetcode_url": "https://leetcode.com/problems/plus-one/", "difficulty": "easy"},
+    {"leetcode_id": 67, "leetcode_title": "Add Binary", "leetcode_url": "https://leetcode.com/problems/add-binary/", "difficulty": "easy"},
+    {"leetcode_id": 70, "leetcode_title": "Climbing Stairs", "leetcode_url": "https://leetcode.com/problems/climbing-stairs/", "difficulty": "easy"},
+    {"leetcode_id": 88, "leetcode_title": "Merge Sorted Array", "leetcode_url": "https://leetcode.com/problems/merge-sorted-array/", "difficulty": "easy"},
+    {"leetcode_id": 94, "leetcode_title": "Binary Tree Inorder Traversal", "leetcode_url": "https://leetcode.com/problems/binary-tree-inorder-traversal/", "difficulty": "easy"},
+    {"leetcode_id": 100, "leetcode_title": "Same Tree", "leetcode_url": "https://leetcode.com/problems/same-tree/", "difficulty": "easy"},
+    {"leetcode_id": 101, "leetcode_title": "Symmetric Tree", "leetcode_url": "https://leetcode.com/problems/symmetric-tree/", "difficulty": "easy"},
+    {"leetcode_id": 104, "leetcode_title": "Maximum Depth of Binary Tree", "leetcode_url": "https://leetcode.com/problems/maximum-depth-of-binary-tree/", "difficulty": "easy"},
+    {"leetcode_id": 121, "leetcode_title": "Best Time to Buy and Sell Stock", "leetcode_url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock/", "difficulty": "easy"},
+    {"leetcode_id": 125, "leetcode_title": "Valid Palindrome", "leetcode_url": "https://leetcode.com/problems/valid-palindrome/", "difficulty": "easy"},
+    {"leetcode_id": 136, "leetcode_title": "Single Number", "leetcode_url": "https://leetcode.com/problems/single-number/", "difficulty": "easy"},
+    {"leetcode_id": 141, "leetcode_title": "Linked List Cycle", "leetcode_url": "https://leetcode.com/problems/linked-list-cycle/", "difficulty": "easy"},
+    {"leetcode_id": 160, "leetcode_title": "Intersection of Two Linked Lists", "leetcode_url": "https://leetcode.com/problems/intersection-of-two-linked-lists/", "difficulty": "easy"},
+    {"leetcode_id": 169, "leetcode_title": "Majority Element", "leetcode_url": "https://leetcode.com/problems/majority-element/", "difficulty": "easy"},
+    {"leetcode_id": 206, "leetcode_title": "Reverse Linked List", "leetcode_url": "https://leetcode.com/problems/reverse-linked-list/", "difficulty": "easy"},
+    {"leetcode_id": 217, "leetcode_title": "Contains Duplicate", "leetcode_url": "https://leetcode.com/problems/contains-duplicate/", "difficulty": "easy"},
+    {"leetcode_id": 226, "leetcode_title": "Invert Binary Tree", "leetcode_url": "https://leetcode.com/problems/invert-binary-tree/", "difficulty": "easy"},
+    {"leetcode_id": 242, "leetcode_title": "Valid Anagram", "leetcode_url": "https://leetcode.com/problems/valid-anagram/", "difficulty": "easy"},
+    {"leetcode_id": 283, "leetcode_title": "Move Zeroes", "leetcode_url": "https://leetcode.com/problems/move-zeroes/", "difficulty": "easy"},
+    {"leetcode_id": 3, "leetcode_title": "Longest Substring Without Repeating Characters", "leetcode_url": "https://leetcode.com/problems/longest-substring-without-repeating-characters/", "difficulty": "medium"},
+    {"leetcode_id": 11, "leetcode_title": "Container With Most Water", "leetcode_url": "https://leetcode.com/problems/container-with-most-water/", "difficulty": "medium"},
+    {"leetcode_id": 15, "leetcode_title": "3Sum", "leetcode_url": "https://leetcode.com/problems/3sum/", "difficulty": "medium"},
+    {"leetcode_id": 17, "leetcode_title": "Letter Combinations of a Phone Number", "leetcode_url": "https://leetcode.com/problems/letter-combinations-of-a-phone-number/", "difficulty": "medium"},
+    {"leetcode_id": 19, "leetcode_title": "Remove Nth Node From End of List", "leetcode_url": "https://leetcode.com/problems/remove-nth-node-from-end-of-list/", "difficulty": "medium"},
+    {"leetcode_id": 22, "leetcode_title": "Generate Parentheses", "leetcode_url": "https://leetcode.com/problems/generate-parentheses/", "difficulty": "medium"},
+    {"leetcode_id": 33, "leetcode_title": "Search in Rotated Sorted Array", "leetcode_url": "https://leetcode.com/problems/search-in-rotated-sorted-array/", "difficulty": "medium"},
+    {"leetcode_id": 39, "leetcode_title": "Combination Sum", "leetcode_url": "https://leetcode.com/problems/combination-sum/", "difficulty": "medium"},
+    {"leetcode_id": 46, "leetcode_title": "Permutations", "leetcode_url": "https://leetcode.com/problems/permutations/", "difficulty": "medium"},
+    {"leetcode_id": 49, "leetcode_title": "Group Anagrams", "leetcode_url": "https://leetcode.com/problems/group-anagrams/", "difficulty": "medium"},
+    {"leetcode_id": 56, "leetcode_title": "Merge Intervals", "leetcode_url": "https://leetcode.com/problems/merge-intervals/", "difficulty": "medium"},
+    {"leetcode_id": 62, "leetcode_title": "Unique Paths", "leetcode_url": "https://leetcode.com/problems/unique-paths/", "difficulty": "medium"},
+    {"leetcode_id": 73, "leetcode_title": "Set Matrix Zeroes", "leetcode_url": "https://leetcode.com/problems/set-matrix-zeroes/", "difficulty": "medium"},
+    {"leetcode_id": 78, "leetcode_title": "Subsets", "leetcode_url": "https://leetcode.com/problems/subsets/", "difficulty": "medium"},
+    {"leetcode_id": 98, "leetcode_title": "Validate Binary Search Tree", "leetcode_url": "https://leetcode.com/problems/validate-binary-search-tree/", "difficulty": "medium"},
+    {"leetcode_id": 102, "leetcode_title": "Binary Tree Level Order Traversal", "leetcode_url": "https://leetcode.com/problems/binary-tree-level-order-traversal/", "difficulty": "medium"},
+    {"leetcode_id": 103, "leetcode_title": "Binary Tree Zigzag Level Order Traversal", "leetcode_url": "https://leetcode.com/problems/binary-tree-zigzag-level-order-traversal/", "difficulty": "medium"},
+    {"leetcode_id": 128, "leetcode_title": "Longest Consecutive Sequence", "leetcode_url": "https://leetcode.com/problems/longest-consecutive-sequence/", "difficulty": "medium"},
+    {"leetcode_id": 130, "leetcode_title": "Surrounded Regions", "leetcode_url": "https://leetcode.com/problems/surrounded-regions/", "difficulty": "medium"},
+    {"leetcode_id": 131, "leetcode_title": "Palindrome Partitioning", "leetcode_url": "https://leetcode.com/problems/palindrome-partitioning/", "difficulty": "medium"},
+    {"leetcode_id": 133, "leetcode_title": "Clone Graph", "leetcode_url": "https://leetcode.com/problems/clone-graph/", "difficulty": "medium"},
+    {"leetcode_id": 134, "leetcode_title": "Gas Station", "leetcode_url": "https://leetcode.com/problems/gas-station/", "difficulty": "medium"},
+    {"leetcode_id": 138, "leetcode_title": "Copy List with Random Pointer", "leetcode_url": "https://leetcode.com/problems/copy-list-with-random-pointer/", "difficulty": "medium"},
+    {"leetcode_id": 139, "leetcode_title": "Word Break", "leetcode_url": "https://leetcode.com/problems/word-break/", "difficulty": "medium"},
+    {"leetcode_id": 146, "leetcode_title": "LRU Cache", "leetcode_url": "https://leetcode.com/problems/lru-cache/", "difficulty": "medium"},
+    {"leetcode_id": 200, "leetcode_title": "Number of Islands", "leetcode_url": "https://leetcode.com/problems/number-of-islands/", "difficulty": "medium"},
+    {"leetcode_id": 207, "leetcode_title": "Course Schedule", "leetcode_url": "https://leetcode.com/problems/course-schedule/", "difficulty": "medium"},
+    {"leetcode_id": 208, "leetcode_title": "Implement Trie", "leetcode_url": "https://leetcode.com/problems/implement-trie-prefix-tree/", "difficulty": "medium"},
+    {"leetcode_id": 210, "leetcode_title": "Course Schedule II", "leetcode_url": "https://leetcode.com/problems/course-schedule-ii/", "difficulty": "medium"},
+    {"leetcode_id": 215, "leetcode_title": "Kth Largest Element in an Array", "leetcode_url": "https://leetcode.com/problems/kth-largest-element-in-an-array/", "difficulty": "medium"},
+    {"leetcode_id": 230, "leetcode_title": "Kth Smallest Element in a BST", "leetcode_url": "https://leetcode.com/problems/kth-smallest-element-in-a-bst/", "difficulty": "medium"},
+    {"leetcode_id": 238, "leetcode_title": "Product of Array Except Self", "leetcode_url": "https://leetcode.com/problems/product-of-array-except-self/", "difficulty": "medium"},
+    {"leetcode_id": 240, "leetcode_title": "Search a 2D Matrix II", "leetcode_url": "https://leetcode.com/problems/search-a-2d-matrix-ii/", "difficulty": "medium"},
+    {"leetcode_id": 300, "leetcode_title": "Longest Increasing Subsequence", "leetcode_url": "https://leetcode.com/problems/longest-increasing-subsequence/", "difficulty": "medium"},
+    {"leetcode_id": 5, "leetcode_title": "Longest Palindromic Substring", "leetcode_url": "https://leetcode.com/problems/longest-palindromic-substring/", "difficulty": "hard"},
+    {"leetcode_id": 10, "leetcode_title": "Regular Expression Matching", "leetcode_url": "https://leetcode.com/problems/regular-expression-matching/", "difficulty": "hard"},
+    {"leetcode_id": 23, "leetcode_title": "Merge k Sorted Lists", "leetcode_url": "https://leetcode.com/problems/merge-k-sorted-lists/", "difficulty": "hard"},
+    {"leetcode_id": 25, "leetcode_title": "Reverse Nodes in k-Group", "leetcode_url": "https://leetcode.com/problems/reverse-nodes-in-k-group/", "difficulty": "hard"},
+    {"leetcode_id": 32, "leetcode_title": "Longest Valid Parentheses", "leetcode_url": "https://leetcode.com/problems/longest-valid-parentheses/", "difficulty": "hard"},
+    {"leetcode_id": 37, "leetcode_title": "Sudoku Solver", "leetcode_url": "https://leetcode.com/problems/sudoku-solver/", "difficulty": "hard"},
+    {"leetcode_id": 41, "leetcode_title": "First Missing Positive", "leetcode_url": "https://leetcode.com/problems/first-missing-positive/", "difficulty": "hard"},
+    {"leetcode_id": 42, "leetcode_title": "Trapping Rain Water", "leetcode_url": "https://leetcode.com/problems/trapping-rain-water/", "difficulty": "hard"},
+    {"leetcode_id": 51, "leetcode_title": "N-Queens", "leetcode_url": "https://leetcode.com/problems/n-queens/", "difficulty": "hard"},
+    {"leetcode_id": 72, "leetcode_title": "Edit Distance", "leetcode_url": "https://leetcode.com/problems/edit-distance/", "difficulty": "hard"},
+    {"leetcode_id": 76, "leetcode_title": "Minimum Window Substring", "leetcode_url": "https://leetcode.com/problems/minimum-window-substring/", "difficulty": "hard"},
+    {"leetcode_id": 84, "leetcode_title": "Largest Rectangle in Histogram", "leetcode_url": "https://leetcode.com/problems/largest-rectangle-in-histogram/", "difficulty": "hard"},
+    {"leetcode_id": 124, "leetcode_title": "Binary Tree Maximum Path Sum", "leetcode_url": "https://leetcode.com/problems/binary-tree-maximum-path-sum/", "difficulty": "hard"},
+    {"leetcode_id": 212, "leetcode_title": "Word Search II", "leetcode_url": "https://leetcode.com/problems/word-search-ii/", "difficulty": "hard"},
+    {"leetcode_id": 297, "leetcode_title": "Serialize and Deserialize Binary Tree", "leetcode_url": "https://leetcode.com/problems/serialize-and-deserialize-binary-tree/", "difficulty": "hard"},
+]
+
 def _default_placement_state():
     return {
         'current_stage': 'aptitude',
@@ -694,6 +943,48 @@ def _get_placement_state():
 def _save_placement_state(state):
     session['placement_track_state'] = state
     session.modified = True
+
+def _language_constraints():
+    return ['python', 'java', 'cpp', 'c']
+
+def _starter_code_templates():
+    return {
+        'python': "def solve():\n    # Write your solution\n    pass\n\nif __name__ == '__main__':\n    solve()\n",
+        'java': "import java.io.*;\nimport java.util.*;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        // Write your solution here\n    }\n}\n",
+        'cpp': "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    // Write your solution here\n    return 0;\n}\n",
+        'c': "#include <stdio.h>\n\nint main() {\n    // Write your solution here\n    return 0;\n}\n",
+    }
+
+def _normalize_coding_question(q):
+    normalized = dict(q)
+    normalized['type'] = 'coding'
+    normalized['marks'] = int(normalized.get('marks', 10) or 10)
+    normalized['time_limit_seconds'] = int(normalized.get('time_limit_seconds', 2) or 2)
+    normalized['memory_limit_mb'] = int(normalized.get('memory_limit_mb', 256) or 256)
+    normalized['language_constraints'] = normalized.get('language_constraints') or _language_constraints()
+    normalized['starter_code'] = normalized.get('starter_code') or _starter_code_templates()
+    normalized['test_cases'] = normalized.get('test_cases') or []
+    return normalized
+
+def _pick_leetcode_mix():
+    easy = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') == 'easy']
+    medium = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') == 'medium']
+    hard = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') == 'hard']
+    selected = random.sample(easy, min(2, len(easy))) + random.sample(medium, min(2, len(medium))) + random.sample(hard, min(1, len(hard)))
+    random.shuffle(selected)
+    return [_normalize_coding_question(q) for q in selected]
+
+def _pick_practice_recommendations(count=10):
+    easy = [q for q in LEETCODE_PRACTICE_POOL if q.get('difficulty') == 'easy']
+    medium = [q for q in LEETCODE_PRACTICE_POOL if q.get('difficulty') == 'medium']
+    hard = [q for q in LEETCODE_PRACTICE_POOL if q.get('difficulty') == 'hard']
+    picked = (
+        random.sample(easy, min(3, len(easy))) +
+        random.sample(medium, min(5, len(medium))) +
+        random.sample(hard, min(2, len(hard)))
+    )
+    random.shuffle(picked)
+    return picked[:count]
 
 def _generate_placement_questions_groq(topic, module_name, num_questions=10):
     groq_key = os.environ.get('GROQ_API_KEY')
@@ -2893,7 +3184,12 @@ def placement_start_module(module):
 
     if module == 'coding':
         topic = 'Technical Coding: arrays, strings, hash maps, linked list, recursion, DP basics'
-        questions = _generate_placement_questions_groq(topic, 'coding', 3)
+        questions = _pick_leetcode_mix()
+        practice_recommendations = _pick_practice_recommendations(10)
+        if not questions:
+            questions = _generate_placement_questions_groq(topic, 'coding', 5) or []
+            questions = [_normalize_coding_question(q) for q in questions if isinstance(q, dict)]
+            practice_recommendations = _pick_practice_recommendations(10)
         if not questions:
             flash('Could not generate coding questions. Please try again.', 'error')
             return redirect(url_for('placement_track'))
@@ -2902,7 +3198,8 @@ def placement_start_module(module):
             'topic': topic,
             'bloom_level': 1,
             'difficulty_level': 'advanced',
-            'placement_module': 'coding'
+            'placement_module': 'coding',
+            'practice_recommendations': practice_recommendations
         }
         return redirect(url_for('take_quiz'))
 
@@ -4795,6 +5092,7 @@ def submit_quiz():
     topic = quiz_data['topic']
     bloom_level = quiz_data['bloom_level']
     difficulty_level = quiz_data.get('difficulty_level', 'beginner')
+    practice_recommendations = quiz_data.get('practice_recommendations', [])
     
     # Get answers for each question
     user_answers = []
@@ -4803,6 +5101,8 @@ def submit_quiz():
         if question.get('type') == 'mcq':
             # For MCQ questions, get from question group
             answer = request.form.get(f'question_{i}')
+        elif question.get('type') == 'coding':
+            answer = request.form.get(f'coding_answers[{i}]')
         else:
             # For subjective questions, get from subjective_answers array
             answer = request.form.get(f'subjective_answers[{i}]')
@@ -4831,6 +5131,48 @@ def submit_quiz():
                 'type': 'mcq',
                 'solution': q.get('solution', '')
             })
+        elif q.get('type') == 'coding':
+            marks = q.get('marks', 10)
+            total_marks += marks
+            language = request.form.get(f'language_{i}', 'python')
+            test_cases = q.get('test_cases') or []
+            time_limit = int(q.get('time_limit_seconds', 2) or 2)
+            memory_limit = int(q.get('memory_limit_mb', 256) or 256)
+            ai_score = 0.0
+            passed_test_cases = 0
+            total_test_cases = len(test_cases)
+            run_error = None
+            if user_ans.strip():
+                try:
+                    test_run = run_test_cases(user_ans, language, test_cases, time_limit, memory_limit)
+                    passed_test_cases = int(test_run.get('passed', 0))
+                    total_test_cases = int(test_run.get('total', total_test_cases))
+                    ai_score = (passed_test_cases / total_test_cases) if total_test_cases > 0 else 0.0
+                    scored_marks += ai_score * marks
+                    if ai_score >= 0.6:
+                        correct_answers += 1
+                except Exception as eval_err:
+                    run_error = str(eval_err)
+
+            results.append({
+                'question': q['question'],
+                'user_answer': user_ans,
+                'marks': marks,
+                'ai_score': ai_score,
+                'scored_marks': ai_score * marks,
+                'type': 'coding',
+                'solution': q.get('solution', ''),
+                'sample_input': q.get('sample_input', ''),
+                'sample_output': q.get('sample_output', ''),
+                'leetcode_id': q.get('leetcode_id'),
+                'leetcode_title': q.get('leetcode_title'),
+                'leetcode_url': q.get('leetcode_url'),
+                'difficulty': q.get('difficulty', 'medium'),
+                'language': language,
+                'passed_test_cases': passed_test_cases,
+                'total_test_cases': total_test_cases,
+                'run_error': run_error
+            })
         else:  # subjective
             marks = q.get('marks', 10)
             total_marks += marks
@@ -4855,9 +5197,9 @@ def submit_quiz():
             })
 
     # Calculate final score
-    has_subjective = any(q.get('type') == 'subjective' for q in questions)
+    has_graded_questions = any(q.get('type') in ('subjective', 'coding') for q in questions)
     
-    if has_subjective:
+    if has_graded_questions:
         percentage = (scored_marks / total_marks) * 100 if total_marks > 0 else 0
         passed = percentage >= 60
         final_score = f"{scored_marks:.1f}/{total_marks} marks"
@@ -4904,7 +5246,8 @@ def submit_quiz():
                          topic=topic,
                          bloom_level=bloom_level,
                          difficulty_level=difficulty_level,
-                         placement_module=placement_module)
+                         placement_module=placement_module,
+                         practice_recommendations=practice_recommendations)
 
 @app.route('/next_level', methods=['POST'])
 @login_required

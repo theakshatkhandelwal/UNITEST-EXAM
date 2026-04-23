@@ -59,6 +59,60 @@
                                         </div>
                                     {% endfor %}
                                 </div>
+                            {% elif question.type == 'coding' %}
+                                <div class="mb-3">
+                                    <div class="d-flex flex-wrap gap-2 mb-2">
+                                        <span class="badge bg-dark text-uppercase">{{ question.get('difficulty', 'medium') }}</span>
+                                        {% if question.get('leetcode_id') %}
+                                            <span class="badge bg-info text-dark">LeetCode #{{ question.leetcode_id }}</span>
+                                        {% endif %}
+                                        {% if question.get('leetcode_url') %}
+                                            <a class="badge bg-warning text-dark text-decoration-none" href="{{ question.leetcode_url }}" target="_blank" rel="noopener">Practice on LeetCode</a>
+                                        {% endif %}
+                                    </div>
+                                    {% if question.get('sample_input') %}
+                                        <div class="card border-0 bg-light mb-2">
+                                            <div class="card-body py-2">
+                                                <div class="small text-muted">Sample Input</div>
+                                                <pre class="mb-0"><code>{{ question.sample_input }}</code></pre>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                    {% if question.get('sample_output') %}
+                                        <div class="card border-0 bg-light mb-3">
+                                            <div class="card-body py-2">
+                                                <div class="small text-muted">Sample Output</div>
+                                                <pre class="mb-0"><code>{{ question.sample_output }}</code></pre>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+
+                                    <label class="form-label fw-bold" for="language_{{ question_index }}">Language</label>
+                                    <select class="form-select mb-2" id="language_{{ question_index }}" name="language_{{ question_index }}">
+                                        {% for lang in question.get('language_constraints', ['python', 'java', 'cpp', 'c']) %}
+                                            <option value="{{ lang }}">{{ lang|upper }}</option>
+                                        {% endfor %}
+                                    </select>
+
+                                    <label class="form-label fw-bold" for="coding_{{ question_index }}">
+                                        Your Code:
+                                        <span class="badge bg-success ms-2">{{ question.marks }} marks</span>
+                                    </label>
+                                    <textarea class="form-control font-monospace coding-answer"
+                                              id="coding_{{ question_index }}"
+                                              name="coding_answers[{{ question_index }}]"
+                                              rows="12"
+                                              placeholder="Write your code here..."
+                                              data-question-index="{{ question_index }}"></textarea>
+
+                                    <div class="mt-2 d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-outline-primary btn-sm run-code-btn" data-question-index="{{ question_index }}">
+                                            <i class="fas fa-play me-1"></i>Run Sample Tests
+                                        </button>
+                                        <small class="text-muted">Supports C, C++, Java, Python</small>
+                                    </div>
+                                    <div class="mt-2 small" id="test_result_{{ question_index }}"></div>
+                                </div>
                             {% else %}
                                 <!-- Subjective Answer -->
                                 <div class="mb-3">
@@ -97,4 +151,71 @@
         </div>
     </div>
 </div>
+<script id="quizQuestionsData" type="application/json">{{ quiz_data.questions | tojson }}</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    let quizQuestions = [];
+    try {
+        const raw = document.getElementById('quizQuestionsData');
+        quizQuestions = raw ? JSON.parse(raw.textContent) : [];
+    } catch (e) {
+        quizQuestions = [];
+    }
+
+    document.querySelectorAll('.run-code-btn').forEach(btn => {
+        btn.addEventListener('click', async function () {
+            const idx = parseInt(this.getAttribute('data-question-index'), 10);
+            const q = quizQuestions[idx] || {};
+            const codeEl = document.querySelector(`textarea[name="coding_answers[${idx}]"]`);
+            const langEl = document.getElementById(`language_${idx}`);
+            const resultEl = document.getElementById(`test_result_${idx}`);
+            const code = (codeEl && codeEl.value || '').trim();
+            const language = langEl ? langEl.value : 'python';
+            const testCases = (q.test_cases || []).filter(tc => !tc.is_hidden).slice(0, 2);
+
+            if (!code) {
+                if (resultEl) resultEl.innerHTML = '<span class="text-danger">Please write code first.</span>';
+                return;
+            }
+
+            if (!testCases.length) {
+                if (resultEl) resultEl.innerHTML = '<span class="text-warning">No visible sample tests available.</span>';
+                return;
+            }
+
+            if (resultEl) resultEl.innerHTML = '<span class="text-info">Running tests...</span>';
+            this.disabled = true;
+            try {
+                const response = await fetch('/api/run_test_cases', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        code,
+                        language,
+                        test_cases: testCases,
+                        time_limit: q.time_limit_seconds || 2,
+                        memory_limit: q.memory_limit_mb || 256
+                    })
+                });
+                const data = await response.json();
+                if (data.success && data.result) {
+                    const passed = data.result.passed || 0;
+                    const total = data.result.total || testCases.length;
+                    if (resultEl) {
+                        resultEl.innerHTML = passed === total
+                            ? `<span class="text-success">Passed ${passed}/${total} sample tests</span>`
+                            : `<span class="text-danger">Passed ${passed}/${total} sample tests</span>`;
+                    }
+                } else if (resultEl) {
+                    resultEl.innerHTML = `<span class="text-danger">${data.error || 'Execution failed'}</span>`;
+                }
+            } catch (err) {
+                if (resultEl) resultEl.innerHTML = `<span class="text-danger">${err.message}</span>`;
+            } finally {
+                this.disabled = false;
+            }
+        });
+    });
+});
+</script>
 {% endblock %}

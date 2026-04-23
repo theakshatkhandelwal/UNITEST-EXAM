@@ -213,6 +213,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 const data = await response.json();
                 if (data.success && data.result) {
+                    if (data.result.executor_unavailable) {
+                        if (resultEl) {
+                            resultEl.innerHTML = `<span class="text-warning">${data.result.executor_message || 'Code runner unavailable right now.'}</span>`;
+                        }
+                        return;
+                    }
                     const passed = data.result.passed || 0;
                     const total = data.result.total || testCases.length;
                     if (resultEl) {

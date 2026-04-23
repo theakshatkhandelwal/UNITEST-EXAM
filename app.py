@@ -1451,6 +1451,8 @@ def run_test_cases(code, language, test_cases, time_limit=2, memory_limit=256):
     """Run multiple test cases and return results"""
     results = []
     passed = 0
+    executor_unavailable = False
+    executor_message = ''
     
     for test_case in test_cases:
         test_input = test_case.get('input', '') if isinstance(test_case, dict) else ''
@@ -1468,6 +1470,21 @@ def run_test_cases(code, language, test_cases, time_limit=2, memory_limit=256):
                 'stderr': ''
             }
         
+        error_blob = (
+            f"{exec_result.get('message', '')} {exec_result.get('stderr', '')} {exec_result.get('output', '')}"
+        ).lower()
+        if (
+            'public piston api is now whitelist only' in error_blob or
+            'whitelist only' in error_blob or
+            'contact engineermon on discord' in error_blob
+        ):
+            executor_unavailable = True
+            executor_message = (
+                'Code execution service is temporarily unavailable (provider whitelist mode). '
+                'Please retry later or deploy with your own runner key.'
+            )
+            break
+
         if exec_result.get('status') == 'success':
             actual_output = exec_result.get('output', '').strip()
             is_correct = actual_output == expected_output
@@ -1492,7 +1509,9 @@ def run_test_cases(code, language, test_cases, time_limit=2, memory_limit=256):
         'results': results,
         'passed': passed,
         'total': total,
-        'percentage': percentage
+        'percentage': percentage,
+        'executor_unavailable': executor_unavailable,
+        'executor_message': executor_message
     }
 
 def get_difficulty_from_bloom_level(bloom_level):
@@ -5117,7 +5136,18 @@ def take_quiz():
     if not quiz_data:
         flash('No quiz available', 'error')
         return redirect(url_for('quiz'))
-    
+    # Re-normalize coding questions to enforce stable testcase shape/count
+    changed = False
+    questions = quiz_data.get('questions', [])
+    for idx, q in enumerate(questions):
+        if isinstance(q, dict) and q.get('type') == 'coding':
+            questions[idx] = _normalize_coding_question(q)
+            changed = True
+    if changed:
+        quiz_data['questions'] = questions
+        session['current_quiz'] = quiz_data
+        session.modified = True
+
     return render_template('take_quiz.html', quiz_data=quiz_data)
 
 @app.route('/submit_quiz', methods=['POST'])
@@ -5185,12 +5215,19 @@ def submit_quiz():
             if user_ans.strip():
                 try:
                     test_run = run_test_cases(user_ans, language, test_cases, time_limit, memory_limit)
-                    passed_test_cases = int(test_run.get('passed', 0))
-                    total_test_cases = int(test_run.get('total', total_test_cases))
-                    ai_score = (passed_test_cases / total_test_cases) if total_test_cases > 0 else 0.0
-                    scored_marks += ai_score * marks
-                    if ai_score >= 0.6:
+                    if test_run.get('executor_unavailable'):
+                        # Avoid penalizing users when external compiler service is down.
+                        ai_score = 0.7
+                        scored_marks += ai_score * marks
                         correct_answers += 1
+                        run_error = test_run.get('executor_message') or 'Code runner is temporarily unavailable.'
+                    else:
+                        passed_test_cases = int(test_run.get('passed', 0))
+                        total_test_cases = int(test_run.get('total', total_test_cases))
+                        ai_score = (passed_test_cases / total_test_cases) if total_test_cases > 0 else 0.0
+                        scored_marks += ai_score * marks
+                        if ai_score >= 0.6:
+                            correct_answers += 1
                 except Exception as eval_err:
                     run_error = str(eval_err)
 

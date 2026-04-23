@@ -39,7 +39,7 @@
     </div>
 
     <div class="row g-4 mb-4">
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-6 col-lg">
             <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="fas fa-calculator fa-2x text-primary mb-2"></i>
@@ -52,7 +52,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-6 col-lg">
             <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="fas fa-comments fa-2x text-success mb-2"></i>
@@ -67,7 +67,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-6 col-lg">
             <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="fas fa-book fa-2x text-info mb-2"></i>
@@ -82,11 +82,26 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-6 col-lg">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-terminal fa-2x text-secondary mb-2"></i>
+                    <h6>4) Basic Coding</h6>
+                    <h4>{{ module_scores.basic_coding }}%</h4>
+                    <small class="text-muted d-block mb-2">Fibonacci, factorial, prime, patterns</small>
+                    {% if next_locked.basic_coding %}
+                        <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-lock me-1"></i>Locked</button>
+                    {% else %}
+                        <a class="btn btn-sm btn-secondary text-white" href="{{ url_for('placement_start_module', module='basic_coding') }}">Start</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg">
             <div class="card h-100">
                 <div class="card-body text-center">
                     <i class="fas fa-code fa-2x text-warning mb-2"></i>
-                    <h6>4) Technical Coding</h6>
+                    <h6>5) Technical Coding</h6>
                     <h4>{{ module_scores.coding }}%</h4>
                     <small class="text-muted d-block mb-2">Coding interview challenges</small>
                     {% if next_locked.coding %}

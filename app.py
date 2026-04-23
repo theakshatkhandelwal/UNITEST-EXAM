@@ -659,7 +659,7 @@ class PlacementInterview(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     user = db.relationship('User', backref='placement_interviews')
 
-PLACEMENT_SEQUENCE = ['aptitude', 'group_discussion', 'fundamentals', 'coding']
+PLACEMENT_SEQUENCE = ['aptitude', 'group_discussion', 'fundamentals', 'basic_coding', 'coding']
 PLACEMENT_APTITUDE_BANK = [
     {"question": "A train 120 m long crosses a pole in 6 seconds. What is its speed?", "options": ["A. 10 m/s", "B. 15 m/s", "C. 20 m/s", "D. 25 m/s"], "answer": "C", "type": "mcq", "solution": "Speed = distance/time = 120/6 = 20 m/s. Hence option C."},
     {"question": "If 12 men can complete a work in 18 days, how many men are needed to complete it in 12 days?", "options": ["A. 16", "B. 18", "C. 20", "D. 24"], "answer": "B", "type": "mcq", "solution": "Work (man-days) = 12*18 = 216. Required men for 12 days = 216/12 = 18. Option B."},
@@ -924,8 +924,20 @@ LEETCODE_PRACTICE_POOL = [
 def _default_placement_state():
     return {
         'current_stage': 'aptitude',
-        'scores': {'aptitude': 0.0, 'group_discussion': 0.0, 'fundamentals': 0.0, 'coding': 0.0},
-        'completed': {'aptitude': False, 'group_discussion': False, 'fundamentals': False, 'coding': False}
+        'scores': {
+            'aptitude': 0.0,
+            'group_discussion': 0.0,
+            'fundamentals': 0.0,
+            'basic_coding': 0.0,
+            'coding': 0.0
+        },
+        'completed': {
+            'aptitude': False,
+            'group_discussion': False,
+            'fundamentals': False,
+            'basic_coding': False,
+            'coding': False
+        }
     }
 
 def _get_placement_state():
@@ -1024,6 +1036,69 @@ def _pick_practice_recommendations(count=10):
     )
     random.shuffle(picked)
     return picked[:count]
+
+def _generate_basic_coding_questions_groq(num_questions=5):
+    groq_key = os.environ.get('GROQ_API_KEY')
+    if not groq_key:
+        raise Exception('GROQ_API_KEY is not configured.')
+    model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+    prompt = f"""
+Generate exactly {num_questions} beginner coding interview questions.
+Topics should be basic coding practice: fibonacci, factorial, prime check, palindrome, reverse number, patterns, sum/digits loops, basic arrays/strings.
+
+Return STRICT JSON array only. Each item must be:
+{{
+  "question": "clear problem statement",
+  "type": "coding",
+  "marks": 10,
+  "difficulty": "easy",
+  "sample_input": "input text",
+  "sample_output": "output text",
+  "solution": "short approach",
+  "test_cases": [
+    {{"input": "...", "expected_output": "...", "is_hidden": false}},
+    {{"input": "...", "expected_output": "...", "is_hidden": true}},
+    {{"input": "...", "expected_output": "...", "is_hidden": true}}
+  ]
+}}
+
+Rules:
+- Ensure each question is executable in C/C++/Java/Python with stdin/stdout.
+- Exactly 1 visible and 2 hidden test cases.
+- Keep language constraints to python/java/cpp/c by default.
+"""
+    response = requests.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {groq_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": model,
+            "temperature": 0.3,
+            "max_tokens": 2600,
+            "messages": [
+                {"role": "system", "content": "You are a coding question generator. Output strictly valid JSON array only."},
+                {"role": "user", "content": prompt}
+            ]
+        },
+        timeout=35
+    )
+    if response.status_code >= 400:
+        raise Exception(f"Groq API error ({response.status_code}): {response.text[:200]}")
+
+    raw = (
+        response.json()
+        .get('choices', [{}])[0]
+        .get('message', {})
+        .get('content', '')
+        .strip()
+    )
+    cleaned = raw.replace('```json', '').replace('```', '').strip()
+    parsed = json.loads(cleaned)
+    if not isinstance(parsed, list) or not parsed:
+        raise Exception('Invalid basic coding response format from Groq.')
+    return [_normalize_coding_question(q) for q in parsed if isinstance(q, dict)][:num_questions]
 
 def _generate_placement_questions_groq(topic, module_name, num_questions=10):
     groq_key = os.environ.get('GROQ_API_KEY')
@@ -3228,10 +3303,11 @@ def placement_track():
 
     # Weighted readiness index.
     readiness_index = (
-        float(scores.get('aptitude', 0.0)) * 0.30 +
-        float(scores.get('group_discussion', 0.0)) * 0.25 +
-        float(scores.get('coding', 0.0)) * 0.25 +
-        float(scores.get('fundamentals', 0.0)) * 0.20
+        float(scores.get('aptitude', 0.0)) * 0.25 +
+        float(scores.get('group_discussion', 0.0)) * 0.20 +
+        float(scores.get('fundamentals', 0.0)) * 0.20 +
+        float(scores.get('basic_coding', 0.0)) * 0.15 +
+        float(scores.get('coding', 0.0)) * 0.20
     )
 
     module_scores = {
@@ -3239,12 +3315,14 @@ def placement_track():
         'group_discussion': round(float(scores.get('group_discussion', 0.0)), 1),
         'coding': round(float(scores.get('coding', 0.0)), 1),
         'fundamentals': round(float(scores.get('fundamentals', 0.0)), 1),
+        'basic_coding': round(float(scores.get('basic_coding', 0.0)), 1),
     }
 
     next_locked = {
         'group_discussion': not completed.get('aptitude', False),
         'fundamentals': not completed.get('group_discussion', False),
-        'coding': not completed.get('fundamentals', False),
+        'basic_coding': not completed.get('fundamentals', False),
+        'coding': not completed.get('basic_coding', False),
     }
 
     return render_template(
@@ -3274,8 +3352,11 @@ def placement_start_module(module):
     if module == 'fundamentals' and not completed.get('group_discussion', False):
         flash('Complete Group Discussion first to unlock CS Fundamentals.', 'error')
         return redirect(url_for('placement_track'))
-    if module == 'coding' and not completed.get('fundamentals', False):
-        flash('Complete CS Fundamentals first to unlock Technical Coding.', 'error')
+    if module == 'basic_coding' and not completed.get('fundamentals', False):
+        flash('Complete CS Fundamentals first to unlock Basic Coding.', 'error')
+        return redirect(url_for('placement_track'))
+    if module == 'coding' and not completed.get('basic_coding', False):
+        flash('Complete Basic Coding first to unlock Technical Coding.', 'error')
         return redirect(url_for('placement_track'))
 
     state['current_stage'] = module
@@ -3334,6 +3415,27 @@ def placement_start_module(module):
             'difficulty_level': 'advanced',
             'placement_module': 'coding',
             'practice_recommendations': practice_recommendations
+        }
+        return redirect(url_for('take_quiz'))
+
+    if module == 'basic_coding':
+        topic = 'Basic Coding: fibonacci, factorial, prime, palindrome, patterns, loops'
+        try:
+            questions = _generate_basic_coding_questions_groq(5)
+        except Exception as e:
+            print(f"Groq basic coding generation failed, fallback to easy technical mix: {e}")
+            questions = _pick_leetcode_mix()
+            questions = [q for q in questions if str(q.get('difficulty', '')).lower() == 'easy'][:5] or questions[:5]
+            questions = [_normalize_coding_question(q) for q in questions]
+        if not questions:
+            flash('Could not generate basic coding questions. Please try again.', 'error')
+            return redirect(url_for('placement_track'))
+        session['current_quiz'] = {
+            'questions': questions,
+            'topic': topic,
+            'bloom_level': 1,
+            'difficulty_level': 'beginner',
+            'placement_module': 'basic_coding'
         }
         return redirect(url_for('take_quiz'))
 
@@ -5381,6 +5483,8 @@ def submit_quiz():
             if placement_module == 'aptitude':
                 state['current_stage'] = 'group_discussion'
             elif placement_module == 'fundamentals':
+                state['current_stage'] = 'basic_coding'
+            elif placement_module == 'basic_coding':
                 state['current_stage'] = 'coding'
         _save_placement_state(state)
 

@@ -164,6 +164,13 @@
         margin: 0 auto 3rem;
         line-height: 1.7;
     }
+
+    .typewriter-cursor {
+        display: inline-block;
+        margin-left: 4px;
+        color: var(--primary-color);
+        animation: blinkCursor 1s steps(2, start) infinite;
+    }
     
     .cta-buttons {
         display: flex;
@@ -188,6 +195,10 @@
         transform: translateY(-2px);
         box-shadow: 0 6px 20px color-mix(in srgb, var(--primary-color) 60%, transparent);
         color: white;
+    }
+
+    .magnetic-btn {
+        will-change: transform;
     }
     
     .btn-hero-secondary {
@@ -244,6 +255,26 @@
         overflow: hidden;
         backdrop-filter: blur(4px);
     }
+
+    .spotlight-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.25s ease;
+        background: radial-gradient(
+            220px circle at var(--mx, 50%) var(--my, 50%),
+            color-mix(in srgb, var(--primary-color) 22%, transparent) 0%,
+            color-mix(in srgb, var(--secondary-color) 12%, transparent) 28%,
+            transparent 65%
+        );
+    }
+
+    .spotlight-card.is-spotlit::after {
+        opacity: 1;
+    }
     
     .feature-card-large::before {
         content: '';
@@ -261,6 +292,11 @@
         transform: translateY(-10px);
         box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
         border-color: color-mix(in srgb, var(--primary-color) 60%, transparent);
+    }
+
+    .tilt-card {
+        transform-style: preserve-3d;
+        will-change: transform;
     }
     
     .feature-card-large:hover::before {
@@ -321,6 +357,33 @@
     .trending-section {
         background: linear-gradient(180deg, var(--home-bg-1), var(--home-bg-2));
         padding: 5rem 0;
+    }
+
+    .feature-marquee {
+        position: relative;
+        overflow: hidden;
+        margin: 1.25rem auto 2.2rem;
+        max-width: 860px;
+        mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+        -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+    }
+
+    .feature-marquee-track {
+        display: flex;
+        width: max-content;
+        gap: 0.75rem;
+        animation: marqueeScroll 24s linear infinite;
+    }
+
+    .feature-pill {
+        border: 1px solid var(--home-glass-border);
+        background: color-mix(in srgb, var(--home-glass) 78%, transparent);
+        color: var(--home-text-1);
+        border-radius: 999px;
+        padding: 0.45rem 0.9rem;
+        white-space: nowrap;
+        font-size: 0.9rem;
+        backdrop-filter: blur(6px);
     }
     
     .trending-card {
@@ -401,6 +464,16 @@
             transform: translateX(-50%) translateY(-5px);
         }
     }
+
+    @keyframes blinkCursor {
+        0%, 49% { opacity: 1; }
+        50%, 100% { opacity: 0; }
+    }
+
+    @keyframes marqueeScroll {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+    }
     
     /* Light text for better visibility */
     .text-light-custom {
@@ -473,6 +546,15 @@
         transform: none !important;
     }
 
+    body.motion-disabled .feature-marquee-track {
+        animation: none !important;
+        transform: none !important;
+    }
+
+    body.motion-disabled .spotlight-card::after {
+        display: none !important;
+    }
+
     @keyframes gradientShift {
         0% { filter: hue-rotate(0deg); }
         100% { filter: hue-rotate(8deg); }
@@ -516,24 +598,40 @@
             <div class="mb-4">
                 <i class="fas fa-graduation-cap" style="font-size: 4rem; color: var(--primary-color);"></i>
     </div>
-            <h1 class="hero-title">UNITEST - #1 AI Quiz Generator & AI Learning Platform</h1>
+            <h1 class="hero-title" id="heroTypeTitle" data-text="UNITEST - #1 AI Quiz Generator & AI Learning Platform">UNITEST - #1 AI Quiz Generator & AI Learning Platform<span class="typewriter-cursor">|</span></h1>
             <p class="hero-subtitle">The Best AI-Based Quiz Generator for Students and Teachers</p>
             <p class="hero-description">
                 UNITEST is the #1 AI-based quiz generator and AI learning platform. Create personalized AI-generated quizzes, coding questions, and assessments with Google Gemini AI. The best AI quiz generator for students and teachers. Experience AI learning at its finest with our AI-powered quiz platform.
             </p>
+            <div class="feature-marquee reveal-on-scroll">
+                <div class="feature-marquee-track">
+                    <span class="feature-pill">AI Quiz Generation</span>
+                    <span class="feature-pill">Coding Practice</span>
+                    <span class="feature-pill">PDF to Questions</span>
+                    <span class="feature-pill">Placement Track</span>
+                    <span class="feature-pill">AI Doubt Resolver</span>
+                    <span class="feature-pill">Adaptive Difficulty</span>
+                    <span class="feature-pill">AI Quiz Generation</span>
+                    <span class="feature-pill">Coding Practice</span>
+                    <span class="feature-pill">PDF to Questions</span>
+                    <span class="feature-pill">Placement Track</span>
+                    <span class="feature-pill">AI Doubt Resolver</span>
+                    <span class="feature-pill">Adaptive Difficulty</span>
+                </div>
+            </div>
             <div class="cta-buttons">
                 {% if not current_user.is_authenticated %}
-                    <a href="{{ url_for('signup') }}" class="btn btn-hero-primary">
+                    <a href="{{ url_for('signup') }}" class="btn btn-hero-primary magnetic-btn">
                         <i class="fas fa-rocket me-2"></i>Get Started
                     </a>
-                    <a href="{{ url_for('login') }}" class="btn btn-hero-secondary">
+                    <a href="{{ url_for('login') }}" class="btn btn-hero-secondary magnetic-btn">
                         <i class="fas fa-sign-in-alt me-2"></i>Login
                     </a>
                 {% else %}
-                    <a href="{{ url_for('dashboard') }}" class="btn btn-hero-primary">
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-hero-primary magnetic-btn">
                         <i class="fas fa-tachometer-alt me-2"></i>Go to Dashboard
                     </a>
-                    <a href="{{ url_for('quiz') }}" class="btn btn-hero-secondary">
+                    <a href="{{ url_for('quiz') }}" class="btn btn-hero-secondary magnetic-btn">
                         <i class="fas fa-question-circle me-2"></i>Start Learning
                     </a>
                 {% endif %}
@@ -555,7 +653,7 @@
         
         <div class="row g-4">
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large reveal-on-scroll">
+                <div class="feature-card-large reveal-on-scroll tilt-card spotlight-card">
                     <div class="feature-icon text-primary">
                         <i class="fas fa-brain"></i>
                     </div>
@@ -567,7 +665,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large reveal-on-scroll">
+                <div class="feature-card-large reveal-on-scroll tilt-card spotlight-card">
                     <div class="feature-icon text-success">
                         <i class="fas fa-chart-line"></i>
                     </div>
@@ -579,7 +677,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large reveal-on-scroll">
+                <div class="feature-card-large reveal-on-scroll tilt-card spotlight-card">
                     <div class="feature-icon text-warning">
                         <i class="fas fa-robot"></i>
                     </div>
@@ -591,7 +689,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large reveal-on-scroll">
+                <div class="feature-card-large reveal-on-scroll tilt-card spotlight-card">
                     <div class="feature-icon text-info">
                         <i class="fas fa-code"></i>
                     </div>
@@ -603,7 +701,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large reveal-on-scroll">
+                <div class="feature-card-large reveal-on-scroll tilt-card spotlight-card">
                     <div class="feature-icon text-danger">
                         <i class="fas fa-file-upload"></i>
                     </div>
@@ -615,7 +713,7 @@
             </div>
             
             <div class="col-md-6 col-lg-4">
-                <div class="feature-card-large reveal-on-scroll">
+                <div class="feature-card-large reveal-on-scroll tilt-card spotlight-card">
                     <div class="feature-icon text-secondary">
                         <i class="fas fa-chart-bar"></i>
                     </div>
@@ -848,6 +946,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
     applyMotionPreference(motionEnabled);
 
+    const typeTitle = document.getElementById('heroTypeTitle');
+    if (typeTitle) {
+        const fullText = typeTitle.getAttribute('data-text') || '';
+        const runTypewriter = () => {
+            let idx = 0;
+            const cursor = '<span class="typewriter-cursor">|</span>';
+            typeTitle.innerHTML = cursor;
+            const timer = setInterval(() => {
+                idx += 1;
+                typeTitle.innerHTML = `${fullText.slice(0, idx)}${cursor}`;
+                if (idx >= fullText.length) clearInterval(timer);
+            }, 20);
+        };
+        if (motionEnabled) runTypewriter();
+        else typeTitle.textContent = fullText;
+    }
+
     const revealTargets = document.querySelectorAll('.reveal-on-scroll');
     if (revealTargets.length) {
         if (motionEnabled && 'IntersectionObserver' in window) {
@@ -899,6 +1014,53 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    const tiltCards = document.querySelectorAll('.tilt-card');
+    if (motionEnabled && !prefersReducedMotion && isDesktop && tiltCards.length) {
+        tiltCards.forEach((card) => {
+            card.addEventListener('mousemove', (event) => {
+                const rect = card.getBoundingClientRect();
+                const x = (event.clientX - rect.left) / rect.width - 0.5;
+                const y = (event.clientY - rect.top) / rect.height - 0.5;
+                card.style.transform = `rotateX(${(-y * 6).toFixed(2)}deg) rotateY(${(x * 8).toFixed(2)}deg) translateY(-8px)`;
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = '';
+            });
+        });
+    }
+
+    const spotlightCards = document.querySelectorAll('.spotlight-card');
+    if (motionEnabled && !prefersReducedMotion && spotlightCards.length) {
+        spotlightCards.forEach((card) => {
+            card.addEventListener('mousemove', (event) => {
+                const rect = card.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                card.style.setProperty('--mx', `${x}px`);
+                card.style.setProperty('--my', `${y}px`);
+                card.classList.add('is-spotlit');
+            });
+            card.addEventListener('mouseleave', () => {
+                card.classList.remove('is-spotlit');
+            });
+        });
+    }
+
+    const magneticButtons = document.querySelectorAll('.magnetic-btn');
+    if (motionEnabled && !prefersReducedMotion && isDesktop && magneticButtons.length) {
+        magneticButtons.forEach((btnEl) => {
+            btnEl.addEventListener('mousemove', (event) => {
+                const rect = btnEl.getBoundingClientRect();
+                const x = (event.clientX - rect.left) / rect.width - 0.5;
+                const y = (event.clientY - rect.top) / rect.height - 0.5;
+                btnEl.style.transform = `translate(${x * 8}px, ${y * 6}px)`;
+            });
+            btnEl.addEventListener('mouseleave', () => {
+                btnEl.style.transform = '';
+            });
+        });
+    }
+
     window.addEventListener('motionPreferenceChanged', function (event) {
         const enabled = !!(event && event.detail && event.detail.enabled);
         applyMotionPreference(enabled);
@@ -907,6 +1069,13 @@ document.addEventListener('DOMContentLoaded', function () {
             parallaxItems.forEach((item) => {
                 item.style.transform = 'translate3d(0, 0, 0)';
             });
+            document.querySelectorAll('.tilt-card, .magnetic-btn').forEach((el) => {
+                el.style.transform = '';
+            });
+            document.querySelectorAll('.spotlight-card').forEach((el) => {
+                el.classList.remove('is-spotlit');
+            });
+            if (typeTitle) typeTitle.textContent = typeTitle.getAttribute('data-text') || typeTitle.textContent;
         }
     });
 });

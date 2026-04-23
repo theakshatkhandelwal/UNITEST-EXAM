@@ -113,7 +113,16 @@
                     {% endif %}
                     <div class="mb-3">
                         <label class="form-label">Topic</label>
-                        <input type="text" class="form-control" id="gdTopic" placeholder="e.g., AI replacing jobs, Remote work, Startup culture" {% if next_locked.group_discussion %}disabled{% endif %}>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="gdTopic" placeholder="AI topic will appear automatically..." {% if next_locked.group_discussion %}disabled{% endif %} readonly>
+                            <button class="btn btn-outline-secondary" type="button" id="regenerateTopicBtn" title="Generate random topic" {% if next_locked.group_discussion %}disabled{% endif %}>
+                                <i class="fas fa-shuffle"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary" type="button" id="editTopicBtn" title="Edit topic" {% if next_locked.group_discussion %}disabled{% endif %}>
+                                <i class="fas fa-pencil-alt"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">Use shuffle for random AI topic, or pencil to edit manually.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Your Response (voice transcription supported)</label>
@@ -171,10 +180,51 @@ document.addEventListener('DOMContentLoaded', function () {
     const startVoiceBtn = document.getElementById('startVoiceBtn');
     const stopVoiceBtn = document.getElementById('stopVoiceBtn');
     const voiceStatus = document.getElementById('voiceStatus');
+    const regenerateTopicBtn = document.getElementById('regenerateTopicBtn');
+    const editTopicBtn = document.getElementById('editTopicBtn');
+    let isEditingTopic = false;
     let recognition = null;
+    let mediaRecorder = null;
+    let mediaStream = null;
+    let voiceChunks = [];
+    let usingSpeechRecognition = false;
+    let lastStableTranscript = '';
+
+    async function fetchRandomTopic() {
+        if (!topicInput || topicInput.disabled) return;
+        topicInput.value = 'Generating random topic...';
+        try {
+            const res = await fetch('/placement_track/suggest_topic');
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Could not generate topic');
+            topicInput.value = data.topic || 'Discuss the role of AI in modern workplaces.';
+        } catch (err) {
+            topicInput.value = 'AI in education: opportunity or overdependence?';
+        }
+    }
+
+    if (regenerateTopicBtn) {
+        regenerateTopicBtn.addEventListener('click', fetchRandomTopic);
+    }
+    if (editTopicBtn && topicInput) {
+        editTopicBtn.addEventListener('click', function() {
+            isEditingTopic = !isEditingTopic;
+            topicInput.readOnly = !isEditingTopic;
+            editTopicBtn.innerHTML = isEditingTopic
+                ? '<i class="fas fa-check"></i>'
+                : '<i class="fas fa-pencil-alt"></i>';
+            if (isEditingTopic) {
+                topicInput.focus();
+            }
+        });
+    }
+    if (topicInput && !topicInput.disabled) {
+        fetchRandomTopic();
+    }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition && startVoiceBtn && stopVoiceBtn) {
+        usingSpeechRecognition = true;
         recognition = new SpeechRecognition();
         recognition.lang = 'en-US';
         recognition.continuous = true;
@@ -195,17 +245,84 @@ document.addEventListener('DOMContentLoaded', function () {
             stopVoiceBtn.disabled = true;
         };
         recognition.onresult = function (event) {
-            let transcript = '';
+            let finalTranscript = '';
             for (let i = event.resultIndex; i < event.results.length; i += 1) {
-                transcript += event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript + ' ';
+                }
             }
-            responseInput.value = `${responseInput.value} ${transcript}`.trim();
+            if (finalTranscript.trim()) {
+                const merged = `${responseInput.value} ${finalTranscript}`.replace(/\s+/g, ' ').trim();
+                responseInput.value = merged;
+                lastStableTranscript = merged;
+            }
         };
         startVoiceBtn.addEventListener('click', function () { recognition.start(); });
         stopVoiceBtn.addEventListener('click', function () { recognition.stop(); });
     } else if (voiceStatus) {
-        voiceStatus.textContent = 'Voice transcription not supported in this browser.';
-        if (startVoiceBtn) startVoiceBtn.disabled = true;
+        voiceStatus.textContent = 'Using audio recording + AI transcription.';
+    }
+
+    async function startRecorderFallback() {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(mediaStream);
+        voiceChunks = [];
+        mediaRecorder.ondataavailable = function(e) {
+            if (e.data && e.data.size > 0) voiceChunks.push(e.data);
+        };
+        mediaRecorder.onstart = function() {
+            voiceStatus.textContent = 'Recording audio...';
+            startVoiceBtn.disabled = true;
+            stopVoiceBtn.disabled = false;
+        };
+        mediaRecorder.onstop = async function() {
+            stopVoiceBtn.disabled = true;
+            voiceStatus.textContent = 'Transcribing with AI...';
+            try {
+                const blob = new Blob(voiceChunks, { type: 'audio/webm' });
+                const dataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result || '');
+                    reader.onerror = () => reject(new Error('Could not read recorded audio.'));
+                    reader.readAsDataURL(blob);
+                });
+                const res = await fetch('/placement_track/transcribe_voice', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audio_data_url: dataUrl })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Transcription failed');
+                const merged = `${responseInput.value} ${data.transcript || ''}`.replace(/\s+/g, ' ').trim();
+                responseInput.value = merged;
+                voiceStatus.textContent = 'Transcription completed.';
+            } catch (err) {
+                voiceStatus.textContent = err.message || 'Transcription failed.';
+            } finally {
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach((t) => t.stop());
+                }
+                startVoiceBtn.disabled = false;
+            }
+        };
+        mediaRecorder.start();
+    }
+
+    if (startVoiceBtn && stopVoiceBtn) {
+        startVoiceBtn.addEventListener('click', async function () {
+            if (usingSpeechRecognition) return;
+            try {
+                await startRecorderFallback();
+            } catch (err) {
+                voiceStatus.textContent = 'Microphone access denied.';
+            }
+        });
+        stopVoiceBtn.addEventListener('click', function () {
+            if (usingSpeechRecognition) return;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+        });
     }
 
     btn.addEventListener('click', async function () {

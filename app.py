@@ -701,13 +701,15 @@ def _generate_placement_questions_groq(topic, module_name, num_questions=10):
         raise Exception('GROQ_API_KEY is not configured.')
     model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
 
-    module_prompt = "CS fundamentals"
+    module_prompt = "placement aptitude"
     if module_name == 'fundamentals':
         module_prompt = "CS fundamentals: OOPs, Computer Networks, DBMS, SQL, DSA basics"
     elif module_name == 'coding':
         module_prompt = "technical coding interview problems (algorithmic thinking, clean logic)"
+    elif module_name == 'aptitude':
+        module_prompt = "quantitative aptitude, logical reasoning, number series, coding-decoding, time-work, averages"
 
-    if module_name == 'fundamentals':
+    if module_name in ('fundamentals', 'aptitude'):
         schema_hint = """
 Return strict JSON array with each item:
 {
@@ -2855,8 +2857,18 @@ def placement_start_module(module):
     _save_placement_state(state)
 
     if module == 'aptitude':
+        try:
+            generated = _generate_placement_questions_groq(
+                'Placement Aptitude: quantitative + logical reasoning',
+                'aptitude',
+                10
+            )
+            questions = generated[:10]
+        except Exception as e:
+            print(f"Groq aptitude generation failed, using fallback bank: {e}")
+            questions = PLACEMENT_APTITUDE_BANK[:10]
         session['current_quiz'] = {
-            'questions': PLACEMENT_APTITUDE_BANK[:10],
+            'questions': questions,
             'topic': 'Placement Aptitude - Most Asked Questions',
             'bloom_level': 1,
             'difficulty_level': 'intermediate',
@@ -3007,6 +3019,97 @@ Return STRICT JSON only in this exact schema:
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': f'AI interview evaluation failed: {str(e)}'}), 500
+
+@app.route('/placement_track/suggest_topic')
+@login_required
+def placement_suggest_topic():
+    try:
+        groq_key = os.environ.get('GROQ_API_KEY')
+        if not groq_key:
+            return jsonify({'success': False, 'error': 'GROQ_API_KEY is not configured.'}), 500
+        model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+        prompt = (
+            "Give one random Group Discussion / interview topic suitable for campus placements. "
+            "Return plain text only in less than 12 words."
+        )
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "temperature": 0.9,
+                "max_tokens": 40,
+                "messages": [
+                    {"role": "system", "content": "Return only a short topic title."},
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=20
+        )
+        if response.status_code >= 400:
+            return jsonify({'success': False, 'error': 'Could not generate topic right now.'}), 500
+        topic = (
+            response.json()
+            .get('choices', [{}])[0]
+            .get('message', {})
+            .get('content', '')
+            .strip()
+        )
+        topic = topic.replace('"', '').replace('\n', ' ').strip()
+        if not topic:
+            topic = "AI in education: opportunity or overdependence?"
+        return jsonify({'success': True, 'topic': topic[:140]})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/placement_track/transcribe_voice', methods=['POST'])
+@login_required
+def placement_transcribe_voice():
+    try:
+        data = request.get_json(silent=True) or {}
+        audio_data_url = (data.get('audio_data_url') or '').strip()
+        if not audio_data_url or ',' not in audio_data_url:
+            return jsonify({'success': False, 'error': 'Audio data is required.'}), 400
+
+        groq_key = os.environ.get('GROQ_API_KEY')
+        if not groq_key:
+            return jsonify({'success': False, 'error': 'GROQ_API_KEY is not configured.'}), 500
+        transcribe_model = os.environ.get('GROQ_TRANSCRIBE_MODEL', 'whisper-large-v3-turbo')
+
+        header, b64 = audio_data_url.split(',', 1)
+        mime = 'audio/webm'
+        if 'audio/wav' in header:
+            mime = 'audio/wav'
+        elif 'audio/mp4' in header or 'audio/m4a' in header:
+            mime = 'audio/mp4'
+        audio_bytes = base64.b64decode(b64)
+
+        files = {
+            'file': ('speech_input.webm', audio_bytes, mime),
+        }
+        payload = {
+            'model': transcribe_model,
+            'temperature': '0',
+            'response_format': 'json'
+        }
+        response = requests.post(
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {groq_key}"},
+            data=payload,
+            files=files,
+            timeout=45
+        )
+        if response.status_code == 429:
+            return jsonify({'success': False, 'error': 'Groq transcription rate limit reached. Retry in a few seconds.'}), 429
+        if response.status_code >= 400:
+            return jsonify({'success': False, 'error': f"Transcription failed ({response.status_code})."}), 500
+        transcript = (response.json().get('text') or '').strip()
+        return jsonify({'success': True, 'transcript': transcript})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Transcription failed: {str(e)}'}), 500
 
 def generate_quiz_code(length=6):
     import random, string

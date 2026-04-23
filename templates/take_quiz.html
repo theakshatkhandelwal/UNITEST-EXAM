@@ -114,10 +114,16 @@
                                         </button>
                                         <small class="text-muted">Supports C, C++, Java, Python</small>
                                     </div>
-                                    {% set visible_count = (question.get('test_cases', []) | selectattr('is_hidden', 'equalto', false) | list | length) %}
-                                    {% set hidden_count = (question.get('test_cases', []) | selectattr('is_hidden', 'equalto', true) | list | length) %}
+                                    {% set counts = namespace(visible=0, hidden=0) %}
+                                    {% for tc in question.get('test_cases', []) %}
+                                        {% if tc.get('is_hidden') %}
+                                            {% set counts.hidden = counts.hidden + 1 %}
+                                        {% else %}
+                                            {% set counts.visible = counts.visible + 1 %}
+                                        {% endif %}
+                                    {% endfor %}
                                     <div class="small text-muted mt-1">
-                                        Test cases: {{ visible_count }} visible, {{ hidden_count }} hidden.
+                                        Test cases: {{ counts.visible }} visible, {{ counts.hidden }} hidden.
                                     </div>
                                     <div class="mt-2 small" id="test_result_{{ question_index }}"></div>
                                 </div>
@@ -214,7 +220,12 @@ document.addEventListener('DOMContentLoaded', function () {
                         const rows = (data.result.results || []);
                         rows.forEach((r, i) => {
                             const ok = !!r.is_correct;
-                            details += `<div class="mt-1 ${ok ? 'text-success' : 'text-danger'}">Case ${i + 1}: ${ok ? 'Passed' : 'Failed'}</div>`;
+                            const expected = (r.expected_output || '').toString();
+                            const actual = (r.actual_output || '').toString();
+                            const compareText = ok
+                                ? ''
+                                : `<div class="small text-muted">Expected: <code>${expected.replace(/</g, '&lt;')}</code> | Got: <code>${actual.replace(/</g, '&lt;')}</code></div>`;
+                            details += `<div class="mt-1 ${ok ? 'text-success' : 'text-danger'}">Case ${i + 1}: ${ok ? 'Passed' : 'Failed'}</div>${compareText}`;
                         });
                         resultEl.innerHTML = (passed === total
                             ? `<span class="text-success">Passed ${passed}/${total} visible sample tests</span>`

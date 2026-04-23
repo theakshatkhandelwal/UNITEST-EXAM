@@ -963,9 +963,28 @@ def _normalize_coding_question(q):
     normalized['memory_limit_mb'] = int(normalized.get('memory_limit_mb', 256) or 256)
     normalized['language_constraints'] = normalized.get('language_constraints') or _language_constraints()
     normalized['starter_code'] = normalized.get('starter_code') or _starter_code_templates()
-    test_cases = normalized.get('test_cases') or []
-    visible_cases = [tc for tc in test_cases if not tc.get('is_hidden')]
-    hidden_cases = [tc for tc in test_cases if tc.get('is_hidden')]
+    def _to_bool(val):
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, (int, float)):
+            return val != 0
+        if isinstance(val, str):
+            return val.strip().lower() in ('1', 'true', 'yes', 'y')
+        return False
+
+    raw_cases = normalized.get('test_cases') or []
+    test_cases = []
+    for tc in raw_cases:
+        if not isinstance(tc, dict):
+            continue
+        test_cases.append({
+            "input": str(tc.get('input', '')),
+            "expected_output": str(tc.get('expected_output', '')),
+            "is_hidden": _to_bool(tc.get('is_hidden', False))
+        })
+
+    visible_cases = [tc for tc in test_cases if not tc.get('is_hidden', False)]
+    hidden_cases = [tc for tc in test_cases if tc.get('is_hidden', False)]
     if not visible_cases and normalized.get('sample_input') is not None and normalized.get('sample_output') is not None:
         visible_cases = [{
             "input": str(normalized.get('sample_input', '')),
@@ -979,7 +998,11 @@ def _normalize_coding_question(q):
         seed_output = str(visible_cases[0].get('expected_output', '1'))
         while len(hidden_cases) < 2:
             hidden_cases.append({"input": seed_input, "expected_output": seed_output, "is_hidden": True})
-    normalized['test_cases'] = [visible_cases[0], hidden_cases[0], hidden_cases[1]]
+    normalized['test_cases'] = [
+        {**visible_cases[0], "is_hidden": False},
+        {**hidden_cases[0], "is_hidden": True},
+        {**hidden_cases[1], "is_hidden": True}
+    ]
     return normalized
 
 def _pick_leetcode_mix():
@@ -1329,8 +1352,8 @@ def execute_code(code, language, test_input, time_limit=2, memory_limit=256):
     piston_url = "https://emkc.org/api/v2/piston/execute"
     
     piston_languages = {
-        'python': 'python3',
-        'python3': 'python3',
+        'python': 'python',
+        'python3': 'python',
         'java': 'java',
         'cpp': 'cpp',
         'c': 'c'

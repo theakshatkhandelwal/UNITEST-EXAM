@@ -1514,6 +1514,82 @@ def run_test_cases(code, language, test_cases, time_limit=2, memory_limit=256):
         'executor_message': executor_message
     }
 
+def evaluate_coding_answer_ai(question, user_code, language, sample_input='', sample_output='', solution=''):
+    """Fallback AI evaluator for coding answers when runtime service is unavailable."""
+    groq_key = os.environ.get('GROQ_API_KEY')
+    if not groq_key or not (user_code or '').strip():
+        return 0.7, "AI fallback used due to runner outage. Baseline credit applied."
+
+    model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+    prompt = f"""
+You are evaluating a student's coding interview answer.
+Return ONLY strict JSON with keys:
+{{
+  "score": <float between 0 and 1>,
+  "feedback": "<1-2 line concise feedback>"
+}}
+
+Question:
+{question}
+
+Language:
+{language}
+
+Student code:
+{user_code}
+
+Sample input:
+{sample_input}
+
+Expected sample output:
+{sample_output}
+
+Reference approach:
+{solution}
+
+Scoring rubric:
+- Correctness and logical validity: 50%
+- Handling edge cases: 20%
+- Time/space complexity quality: 20%
+- Code clarity/structure: 10%
+"""
+    try:
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "temperature": 0.1,
+                "max_tokens": 220,
+                "messages": [
+                    {"role": "system", "content": "You are a strict coding evaluator. Output valid JSON only."},
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=25
+        )
+        if response.status_code >= 400:
+            return 0.7, "AI fallback partially unavailable; baseline credit applied."
+
+        raw = (
+            response.json()
+            .get('choices', [{}])[0]
+            .get('message', {})
+            .get('content', '')
+            .strip()
+        )
+        cleaned = raw.replace('```json', '').replace('```', '').strip()
+        parsed = json.loads(cleaned)
+        score = float(parsed.get('score', 0.7))
+        feedback = str(parsed.get('feedback', 'AI fallback used for evaluation.')).strip()
+        score = min(max(score, 0.0), 1.0)
+        return score, feedback[:400]
+    except Exception:
+        return 0.7, "AI fallback evaluation failed; baseline credit applied."
+
 def get_difficulty_from_bloom_level(bloom_level):
     """Map Bloom's taxonomy level to difficulty level"""
     if bloom_level <= 2:
@@ -5217,10 +5293,21 @@ def submit_quiz():
                     test_run = run_test_cases(user_ans, language, test_cases, time_limit, memory_limit)
                     if test_run.get('executor_unavailable'):
                         # Avoid penalizing users when external compiler service is down.
-                        ai_score = 0.7
+                        ai_score, ai_feedback = evaluate_coding_answer_ai(
+                            q.get('question', ''),
+                            user_ans,
+                            language,
+                            q.get('sample_input', ''),
+                            q.get('sample_output', ''),
+                            q.get('solution', '')
+                        )
                         scored_marks += ai_score * marks
-                        correct_answers += 1
-                        run_error = test_run.get('executor_message') or 'Code runner is temporarily unavailable.'
+                        if ai_score >= 0.6:
+                            correct_answers += 1
+                        run_error = (
+                            (test_run.get('executor_message') or 'Code runner is temporarily unavailable.')
+                            + f" AI evaluation used: {ai_feedback}"
+                        )
                     else:
                         passed_test_cases = int(test_run.get('passed', 0))
                         total_test_cases = int(test_run.get('total', total_test_cases))

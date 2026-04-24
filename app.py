@@ -20,6 +20,7 @@ import io
 from datetime import datetime, timedelta
 import requests
 import secrets
+import uuid
 import hashlib
 import time
 import base64
@@ -659,6 +660,17 @@ class PlacementInterview(db.Model):
     follow_up_question = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     user = db.relationship('User', backref='placement_interviews')
+
+
+class MockInterviewState(db.Model):
+    """Temporary server-side interview state (avoids oversized Flask session cookies)."""
+    __tablename__ = 'mock_interview_state'
+
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    state_json = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user = db.relationship('User', backref='mock_interview_drafts')
 
 
 class MockInterviewSession(db.Model):
@@ -3879,7 +3891,14 @@ def mock_interview_start():
         if not question:
             return jsonify({'success': False, 'error': 'AI did not return a question. Try again.'}), 500
 
-        session[MOCK_INTERVIEW_SESSION_KEY] = {
+        # Store full state in DB — large resume/JD + rounds exceed browser cookie limits for Flask sessions.
+        try:
+            MockInterviewState.query.filter_by(user_id=current_user.id).delete()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        sid = str(uuid.uuid4())
+        full_state = {
             'persona': persona,
             'role': role[:255],
             'job_description': jd[:8000] if jd else '',
@@ -3891,6 +3910,12 @@ def mock_interview_start():
             'total_questions': total_questions,
             'round_plan': round_plan,
         }
+        db.session.add(
+            MockInterviewState(id=sid, user_id=current_user.id, state_json=json.dumps(full_state))
+        )
+        db.session.commit()
+        session[MOCK_INTERVIEW_SESSION_KEY] = {'state_id': sid}
+        session.modified = True
         return jsonify(
             {
                 'success': True,
@@ -3917,8 +3942,20 @@ def mock_interview_submit_answer():
     if not answer:
         return jsonify({'success': False, 'error': 'Please provide your answer (type or transcribe).'}), 400
 
-    st = session.get(MOCK_INTERVIEW_SESSION_KEY)
-    if not st or not st.get('pending_question'):
+    meta = session.get(MOCK_INTERVIEW_SESSION_KEY) or {}
+    sid = meta.get('state_id')
+    row = (
+        MockInterviewState.query.filter_by(id=sid, user_id=current_user.id).first()
+        if sid
+        else None
+    )
+    if not row:
+        return jsonify({'success': False, 'error': 'No active interview. Start again from the setup page.'}), 400
+    try:
+        st = json.loads(row.state_json) if row.state_json else {}
+    except json.JSONDecodeError:
+        st = {}
+    if not st.get('pending_question'):
         return jsonify({'success': False, 'error': 'No active interview. Start again from the setup page.'}), 400
 
     persona = st.get('persona', 'alex')
@@ -4072,6 +4109,11 @@ def mock_interview_submit_answer():
             )
             db.session.add(row)
             db.session.commit()
+        try:
+            MockInterviewState.query.filter_by(id=sid).delete()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
         session.pop(MOCK_INTERVIEW_SESSION_KEY, None)
         return jsonify(
             {
@@ -4091,8 +4133,8 @@ def mock_interview_submit_answer():
     st['rounds'] = rounds
     st['pending_question'] = next_question
     st['pending_round_kind'] = next_kind
-    session[MOCK_INTERVIEW_SESSION_KEY] = st
-    session.modified = True
+    row.state_json = json.dumps(st)
+    db.session.commit()
     return jsonify(
         {
             'success': True,

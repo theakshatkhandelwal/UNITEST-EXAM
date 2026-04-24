@@ -23,6 +23,7 @@ import secrets
 import hashlib
 import time
 import base64
+import tempfile
 import csv
 import smtplib
 import random
@@ -502,8 +503,8 @@ login_manager.login_view = 'login'
 # Get your API key from: https://makersuite.google.com/app/apikey
 api_key = os.environ.get('GOOGLE_AI_API_KEY')
 if not api_key:
-    print("⚠️ WARNING: GOOGLE_AI_API_KEY environment variable not set. Quiz generation will not work.")
-    print("   Set it in Vercel: Settings → Environment Variables → Add GOOGLE_AI_API_KEY")
+    print("[WARNING] GOOGLE_AI_API_KEY environment variable not set. Quiz generation will not work.")
+    print("   Set it in Vercel: Settings -> Environment Variables -> Add GOOGLE_AI_API_KEY")
 genai.configure(api_key=api_key or '')
 
 # Database Models
@@ -658,6 +659,127 @@ class PlacementInterview(db.Model):
     follow_up_question = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     user = db.relationship('User', backref='placement_interviews')
+
+
+class MockInterviewSession(db.Model):
+    """Persisted AI mock interview (resume + role based)."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    persona = db.Column(db.String(20), nullable=False, default='alex')
+    role = db.Column(db.String(255), nullable=False)
+    job_description = db.Column(db.Text, nullable=True)
+    resume_excerpt = db.Column(db.Text, nullable=True)
+    transcript_json = db.Column(db.Text, nullable=True)
+    final_score = db.Column(db.Float, nullable=False, default=0.0)
+    final_report_json = db.Column(db.Text, nullable=True)
+    is_preview = db.Column(db.Boolean, nullable=False, default=False)
+    question_count = db.Column(db.Integer, nullable=False, default=5)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user = db.relationship('User', backref='mock_interviews')
+
+
+MOCK_INTERVIEW_SESSION_KEY = 'ai_mock_interview'
+MOCK_INTERVIEW_MIN_QUESTIONS = 3
+MOCK_INTERVIEW_DEFAULT_QUESTIONS = 5
+MOCK_INTERVIEW_MAX_QUESTIONS_CAP = 10
+MOCK_INTERVIEW_RESUME_CHARS = 8000
+
+MOCK_INTERVIEW_ROUND_SPECS = {
+    'warm_up': (
+        'Warm-up',
+        'Non-technical rapport: motivation, goals, light background—no deep stack or coding drilling.',
+    ),
+    'technical': (
+        'Technical',
+        'Role-specific depth: tools, trade-offs, problem-solving aligned with the role and JD.',
+    ),
+    'behavioral': (
+        'Behavioral',
+        'STAR-style situations: teamwork, conflict, ownership, leadership, ethics—typical HR signals.',
+    ),
+}
+
+
+def _mock_interview_round_plan(n):
+    """Build ordered round kinds: always start warm-up, then technical/behavioral alternate."""
+    n = max(MOCK_INTERVIEW_MIN_QUESTIONS, min(MOCK_INTERVIEW_MAX_QUESTIONS_CAP, int(n)))
+    plan = ['warm_up', 'technical', 'behavioral']
+    if n <= 3:
+        return plan[:n]
+    while len(plan) < n:
+        plan.append('technical' if plan[-1] == 'behavioral' else 'behavioral')
+    return plan
+
+
+def _mock_interview_round_instruction(kind):
+    title, desc = MOCK_INTERVIEW_ROUND_SPECS.get(kind, ('Interview', 'Ask one clear verbal question.'))
+    return f'Current interview round: {title}. Requirement: {desc}'
+
+
+def _mock_interview_parse_total_questions(raw):
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        v = MOCK_INTERVIEW_DEFAULT_QUESTIONS
+    return max(MOCK_INTERVIEW_MIN_QUESTIONS, min(MOCK_INTERVIEW_MAX_QUESTIONS_CAP, v))
+
+
+def _groq_chat_json(system_prompt, user_prompt, max_tokens=900):
+    groq_key = os.environ.get('GROQ_API_KEY')
+    if not groq_key:
+        raise Exception('GROQ_API_KEY is not configured.')
+    model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+    response = requests.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        headers={
+            'Authorization': f'Bearer {groq_key}',
+            'Content-Type': 'application/json',
+        },
+        json={
+            'model': model,
+            'temperature': 0.25,
+            'max_tokens': max_tokens,
+            'messages': [
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': user_prompt},
+            ],
+        },
+        timeout=50,
+    )
+    if response.status_code == 429:
+        raise Exception('Groq rate limit reached. Please retry in a few seconds.')
+    if response.status_code >= 400:
+        raise Exception(f'Groq API error ({response.status_code}): {response.text[:240]}')
+    raw = (
+        response.json()
+        .get('choices', [{}])[0]
+        .get('message', {})
+        .get('content', '')
+        .strip()
+    )
+    cleaned = raw.replace('```json', '').replace('```JSON', '').replace('```', '').strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find('{')
+        end = cleaned.rfind('}')
+        if start >= 0 and end > start:
+            return json.loads(cleaned[start : end + 1])
+        raise
+
+
+def _mock_interview_persona_voice(persona):
+    p = (persona or 'alex').lower()
+    if p == 'carie':
+        return (
+            'You are Carie, a warm, supportive interview coach. Speak clearly and encouragingly while '
+            'still asking realistic interview questions. Keep questions concise for verbal delivery.'
+        )
+    return (
+        'You are Alex, a professional hiring manager. Be direct, fair, and realistic. '
+        'Ask questions typical of real interviews. Keep each question concise for verbal delivery.'
+    )
+
 
 PLACEMENT_SEQUENCE = ['aptitude', 'group_discussion', 'fundamentals', 'basic_coding', 'coding']
 PLACEMENT_APTITUDE_BANK = [
@@ -1853,6 +1975,20 @@ Generate questions based ONLY on the information provided in the PDF content abo
     is_advanced = difficulty_level in ("advanced", "difficult")
     is_graph_topic = ("graph" in (topic or "").lower()) or ("dsa" in (topic or "").lower())
 
+    adv_level_block = (
+        "- At least 70% questions must be scenario/case based and require algorithm choice, complexity reasoning, or edge-case analysis.\n"
+        "- Include topics like shortest paths, MST, topological sort, SCC/bridges/articulation points, flows/matching, DAG DP, and proof-style properties.\n"
+        "- Do NOT ask only recall questions like 'what is graph' or 'what is cycle'."
+        if is_advanced
+        else "- Keep question depth aligned to selected difficulty."
+    )
+    image_req_block = (
+        "- Include image_url in at least 2 questions (graph diagrams/adjacency visuals) when possible.\n"
+        "- image_url must be a direct public image link."
+        if (is_advanced and is_graph_topic and num_questions >= 3)
+        else "- image_url is optional."
+    )
+
     if question_type == "mcq":
         prompt = f"""CRITICAL: You MUST generate questions ONLY on the topic: "{topic}"
 
@@ -1873,13 +2009,10 @@ IMPORTANT REQUIREMENTS:
 {pdf_context if pdf_content else ''}
 
 ADVANCED-LEVEL REQUIREMENTS:
-{("- At least 70% questions must be scenario/case based and require algorithm choice, complexity reasoning, or edge-case analysis.\n"
-  "- Include topics like shortest paths, MST, topological sort, SCC/bridges/articulation points, flows/matching, DAG DP, and proof-style properties.\n"
-  "- Do NOT ask only recall questions like 'what is graph' or 'what is cycle'.") if is_advanced else "- Keep question depth aligned to selected difficulty."}
+{adv_level_block}
 
 IMAGE REQUIREMENT:
-{("- Include image_url in at least 2 questions (graph diagrams/adjacency visuals) when possible.\n"
-  "- image_url must be a direct public image link.") if (is_advanced and is_graph_topic and num_questions >= 3) else "- image_url is optional."}
+{image_req_block}
 
 Return output in valid JSON format ONLY (no explanations, no markdown):
 [
@@ -2156,6 +2289,20 @@ Generate questions based ONLY on the information provided in the PDF content abo
         is_advanced = difficulty_level in ("advanced", "difficult")
         is_graph_topic = ("graph" in (topic or "").lower()) or ("dsa" in (topic or "").lower())
 
+        adv_level_block_gemini = (
+            "- At least 70% questions must be scenario/case based and require algorithm choice, complexity reasoning, or edge-case analysis.\n"
+            "- Include topics like shortest paths, MST, topological sort, SCC/bridges/articulation points, flows/matching, DAG DP, and proof-style properties.\n"
+            "- Do NOT ask only recall questions like 'what is graph' or 'what is cycle'."
+            if is_advanced
+            else "- Keep question depth aligned to selected difficulty."
+        )
+        image_req_block_gemini = (
+            "- Include image_url in at least 2 questions (graph diagrams/adjacency visuals) when possible.\n"
+            "- image_url must be a direct public image link."
+            if (is_advanced and is_graph_topic and num_questions >= 3)
+            else "- image_url is optional."
+        )
+
         if question_type == "mcq":
             prompt = f"""
 CRITICAL: You MUST generate questions ONLY on the topic: "{topic}"
@@ -2177,13 +2324,10 @@ IMPORTANT REQUIREMENTS:
 {pdf_context if pdf_content else ''}
 
 ADVANCED-LEVEL REQUIREMENTS:
-{("- At least 70% questions must be scenario/case based and require algorithm choice, complexity reasoning, or edge-case analysis.\n"
-  "- Include topics like shortest paths, MST, topological sort, SCC/bridges/articulation points, flows/matching, DAG DP, and proof-style properties.\n"
-  "- Do NOT ask only recall questions like 'what is graph' or 'what is cycle'.") if is_advanced else "- Keep question depth aligned to selected difficulty."}
+{adv_level_block_gemini}
 
 IMAGE REQUIREMENT:
-{("- Include image_url in at least 2 questions (graph diagrams/adjacency visuals) when possible.\n"
-  "- image_url must be a direct public image link.") if (is_advanced and is_graph_topic and num_questions >= 3) else "- image_url is optional."}
+{image_req_block_gemini}
 
 Return output in valid JSON format ONLY (no explanations, no markdown):
 [
@@ -3644,6 +3788,325 @@ def placement_transcribe_voice():
     except Exception as e:
         return jsonify({'success': False, 'error': f'Transcription failed: {str(e)}'}), 500
 
+
+def _mock_interview_extract_resume_text(upload_file):
+    if not upload_file or not upload_file.filename:
+        return ''
+    name = (upload_file.filename or '').lower()
+    tmp = None
+    try:
+        suffix = '.pdf' if name.endswith('.pdf') else '.txt'
+        fd, tmp = tempfile.mkstemp(suffix=suffix)
+        os.close(fd)
+        upload_file.save(tmp)
+        if name.endswith('.pdf'):
+            parts = extract_pdf_content([tmp])
+            text = '\n'.join(parts) if parts else ''
+        else:
+            with open(tmp, 'r', encoding='utf-8', errors='ignore') as f:
+                text = f.read()
+        text = (text or '').strip()
+        if len(text) > MOCK_INTERVIEW_RESUME_CHARS:
+            text = text[:MOCK_INTERVIEW_RESUME_CHARS] + '\n[truncated]'
+        return text
+    finally:
+        if tmp and os.path.isfile(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+@app.route('/mock_interview')
+@login_required
+def mock_interview_page():
+    is_teacher = getattr(current_user, 'role', 'student') == 'teacher'
+    recent = (
+        MockInterviewSession.query.filter_by(user_id=current_user.id)
+        .order_by(MockInterviewSession.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    return render_template(
+        'mock_interview.html',
+        recent_sessions=recent,
+        is_teacher=is_teacher,
+    )
+
+
+@app.route('/mock_interview/start', methods=['POST'])
+@login_required
+def mock_interview_start():
+    try:
+        persona = (request.form.get('persona') or 'alex').strip().lower()
+        if persona not in ('alex', 'carie'):
+            persona = 'alex'
+        role = (request.form.get('role') or '').strip()
+        if not role:
+            return jsonify({'success': False, 'error': 'Please enter the role you are practicing for.'}), 400
+        jd = (request.form.get('job_description') or '').strip()
+        total_questions = _mock_interview_parse_total_questions(request.form.get('question_count'))
+        round_plan = _mock_interview_round_plan(total_questions)
+        resume_file = request.files.get('resume')
+        resume_text = _mock_interview_extract_resume_text(resume_file)
+        if resume_file and resume_file.filename and not resume_text:
+            return jsonify({'success': False, 'error': 'Could not read the resume file. Try PDF or plain text.'}), 400
+
+        first_kind = round_plan[0]
+        rt = MOCK_INTERVIEW_ROUND_SPECS.get(first_kind, ('Round 1', ''))[0]
+
+        system = (
+            _mock_interview_persona_voice(persona)
+            + ' You output ONLY valid JSON, no markdown. Keys must match exactly.'
+        )
+        ctx = (
+            f"Candidate target role: {role}\n"
+            f"Optional company/job description:\n{jd or '(none provided)'}\n\n"
+            f"Resume excerpt (may be empty):\n{resume_text or '(no resume uploaded)'}\n"
+        )
+        user_prompt = (
+            ctx
+            + f"This mock interview has exactly {total_questions} verbal questions in a structured arc "
+            + "(warm-up, then technical and behavioral rounds as specified for each question).\n"
+            + _mock_interview_round_instruction(first_kind)
+            + '\nReturn JSON with keys: '
+            '"intro" (2 short sentences you would say aloud as welcome—briefly mention warm-up / technical / behavioral flow), '
+            '"question" (one clear interview question for THIS first round only; suitable to ask verbally; align with role, resume, and JD).'
+        )
+        data = _groq_chat_json(system, user_prompt, max_tokens=500)
+        intro = (data.get('intro') or '').strip()
+        question = (data.get('question') or '').strip()
+        if not question:
+            return jsonify({'success': False, 'error': 'AI did not return a question. Try again.'}), 500
+
+        session[MOCK_INTERVIEW_SESSION_KEY] = {
+            'persona': persona,
+            'role': role[:255],
+            'job_description': jd[:8000] if jd else '',
+            'resume_excerpt': resume_text[:MOCK_INTERVIEW_RESUME_CHARS],
+            'pending_question': question,
+            'pending_round_kind': first_kind,
+            'intro': intro,
+            'rounds': [],
+            'total_questions': total_questions,
+            'round_plan': round_plan,
+        }
+        return jsonify(
+            {
+                'success': True,
+                'intro': intro,
+                'question': question,
+                'persona': persona,
+                'total_questions': total_questions,
+                'round_kind': first_kind,
+                'round_title': rt,
+                'teacher_preview': getattr(current_user, 'role', 'student') == 'teacher',
+            }
+        )
+    except json.JSONDecodeError as e:
+        return jsonify({'success': False, 'error': f'AI response parse error: {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/mock_interview/submit_answer', methods=['POST'])
+@login_required
+def mock_interview_submit_answer():
+    payload = request.get_json(silent=True) or {}
+    answer = (payload.get('answer') or '').strip()
+    if not answer:
+        return jsonify({'success': False, 'error': 'Please provide your answer (type or transcribe).'}), 400
+
+    st = session.get(MOCK_INTERVIEW_SESSION_KEY)
+    if not st or not st.get('pending_question'):
+        return jsonify({'success': False, 'error': 'No active interview. Start again from the setup page.'}), 400
+
+    persona = st.get('persona', 'alex')
+    role = st.get('role', '')
+    jd = st.get('job_description', '')
+    resume_excerpt = st.get('resume_excerpt', '')
+    pending_q = st['pending_question']
+    rounds = list(st.get('rounds') or [])
+    total_questions = int(st.get('total_questions') or MOCK_INTERVIEW_DEFAULT_QUESTIONS)
+    round_plan = list(st.get('round_plan') or _mock_interview_round_plan(total_questions))
+    pending_kind = st.get('pending_round_kind') or (round_plan[0] if round_plan else 'warm_up')
+    rt_cur, _rd_cur = MOCK_INTERVIEW_ROUND_SPECS.get(pending_kind, ('Interview', ''))
+
+    system_eval = (
+        _mock_interview_persona_voice(persona)
+        + ' Evaluate interview answers fairly. Output ONLY valid JSON with keys: '
+        '"articulation" (0-100 int), "domain_knowledge" (0-100 int), "relevance" (0-100 int), '
+        '"communication" (0-100 int), "step_score" (0-100 int average of the four), '
+        '"strengths" (array of 2-4 short strings), "improvements" (array of 2-4 short strings), '
+        '"brief_feedback" (2-3 sentences for the candidate).'
+    )
+    user_eval = (
+        f"Role: {role}\nJob description context:\n{jd or '(none)'}\n\n"
+        f"Resume context:\n{resume_excerpt or '(none)'}\n\n"
+        + _mock_interview_round_instruction(pending_kind)
+        + f"\n\nQuestion:\n{pending_q}\n\nCandidate answer (may be from speech-to-text):\n{answer}\n"
+    )
+    try:
+        ev = _groq_chat_json(system_eval, user_eval, max_tokens=700)
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Evaluation failed: {str(e)}'}), 500
+
+    def _num(x, default=70):
+        try:
+            v = int(float(x))
+            return max(0, min(100, v))
+        except (TypeError, ValueError):
+            return default
+
+    evaluation = {
+        'articulation': _num(ev.get('articulation')),
+        'domain_knowledge': _num(ev.get('domain_knowledge')),
+        'relevance': _num(ev.get('relevance')),
+        'communication': _num(ev.get('communication')),
+        'step_score': _num(ev.get('step_score')),
+        'strengths': ev.get('strengths') or [],
+        'improvements': ev.get('improvements') or [],
+        'brief_feedback': (ev.get('brief_feedback') or '').strip(),
+    }
+    if not evaluation['step_score']:
+        evaluation['step_score'] = (
+            evaluation['articulation']
+            + evaluation['domain_knowledge']
+            + evaluation['relevance']
+            + evaluation['communication']
+        ) // 4
+
+    rounds.append(
+        {
+            'question': pending_q,
+            'answer': answer,
+            'round_kind': pending_kind,
+            'round_title': rt_cur,
+            'evaluation': evaluation,
+        }
+    )
+
+    done = len(rounds) >= total_questions
+    next_question = None
+    final_payload = None
+    is_teacher = getattr(current_user, 'role', 'student') == 'teacher'
+
+    if not done:
+        next_idx = len(rounds)
+        next_kind = round_plan[next_idx] if next_idx < len(round_plan) else 'technical'
+        system_q = (
+            _mock_interview_persona_voice(persona)
+            + ' Continue the interview. Output ONLY valid JSON with key "question" (one next question, verbal, concise). '
+            + 'The question MUST match the round type described in the user message.'
+        )
+        hist_lines = []
+        for i, r in enumerate(rounds, start=1):
+            rk = r.get('round_kind', '')
+            rt = r.get('round_title', rk)
+            hist_lines.append(
+                f"Q{i} ({rt}): {r['question']}\nA{i}: {r['answer'][:1200]}"
+            )
+        user_q = (
+            f"Role: {role}\nJD:\n{jd or '(none)'}\nResume:\n{resume_excerpt or '(none)'}\n\n"
+            "Prior Q&A:\n" + '\n\n'.join(hist_lines) + '\n\n'
+            + _mock_interview_round_instruction(next_kind)
+            + f"\nAsk the next question only (question {next_idx + 1} of {total_questions}). "
+            + 'Avoid repeating earlier questions.'
+        )
+        try:
+            nxt = _groq_chat_json(system_q, user_q, max_tokens=400)
+            next_question = (nxt.get('question') or '').strip()
+        except Exception:
+            next_question = ''
+        if not next_question:
+            done = True
+
+    if done:
+        system_final = (
+            _mock_interview_persona_voice(persona)
+            + ' Summarize the full mock interview. Output ONLY valid JSON with keys: '
+            '"final_score" (0-100 int), "hiring_readiness" (one of: not_ready, ready, strong), '
+            '"summary" (3-5 sentences), "top_strengths" (array of strings), "top_gaps" (array of strings).'
+        )
+        recap = []
+        for i, r in enumerate(rounds, start=1):
+            rt = r.get('round_title', r.get('round_kind', ''))
+            recap.append(
+                f"Q{i} ({rt}): {r['question']}\nA{i}: {r['answer'][:1500]}\nScores: {r['evaluation']}\n"
+            )
+        user_final = 'Interview recap:\n\n' + '\n'.join(recap)
+        try:
+            final_payload = _groq_chat_json(system_final, user_final, max_tokens=900)
+        except Exception as e:
+            final_payload = {
+                'final_score': evaluation['step_score'],
+                'hiring_readiness': 'ready',
+                'summary': f'Could not generate full summary ({str(e)}). Average step score used.',
+                'top_strengths': evaluation.get('strengths') or [],
+                'top_gaps': evaluation.get('improvements') or [],
+            }
+        fs = _num(final_payload.get('final_score'), evaluation['step_score'])
+        transcript = {
+            'persona': persona,
+            'role': role,
+            'job_description': jd,
+            'resume_excerpt': resume_excerpt[:2000],
+            'total_questions': total_questions,
+            'round_plan': round_plan,
+            'rounds': rounds,
+            'final': final_payload,
+            'teacher_preview': is_teacher,
+        }
+        if not is_teacher:
+            row = MockInterviewSession(
+                user_id=current_user.id,
+                persona=persona,
+                role=role[:255],
+                job_description=jd[:12000] if jd else None,
+                resume_excerpt=resume_excerpt[:12000] if resume_excerpt else None,
+                transcript_json=json.dumps(transcript),
+                final_score=float(fs),
+                final_report_json=json.dumps(final_payload),
+                is_preview=False,
+                question_count=total_questions,
+            )
+            db.session.add(row)
+            db.session.commit()
+        session.pop(MOCK_INTERVIEW_SESSION_KEY, None)
+        return jsonify(
+            {
+                'success': True,
+                'complete': True,
+                'evaluation': evaluation,
+                'final_score': fs,
+                'final_report': final_payload,
+                'saved': not is_teacher,
+                'teacher_preview': is_teacher,
+            }
+        )
+
+    next_kind = round_plan[len(rounds)] if len(rounds) < len(round_plan) else 'technical'
+    rt_next = MOCK_INTERVIEW_ROUND_SPECS.get(next_kind, ('Interview', ''))[0]
+
+    st['rounds'] = rounds
+    st['pending_question'] = next_question
+    st['pending_round_kind'] = next_kind
+    session[MOCK_INTERVIEW_SESSION_KEY] = st
+    session.modified = True
+    return jsonify(
+        {
+            'success': True,
+            'complete': False,
+            'evaluation': evaluation,
+            'question_index': len(rounds),
+            'total_questions': total_questions,
+            'next_question': next_question,
+            'round_kind': next_kind,
+            'round_title': rt_next,
+        }
+    )
+
+
 def generate_quiz_code(length=6):
     import random, string
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
@@ -4980,6 +5443,23 @@ def dev_migrate():
             except Exception as e:
                 print(f"ALTER TABLE quiz_submission add columns failed (may exist): {e}")
 
+            try:
+                mi_res = conn.execute(text("PRAGMA table_info(mock_interview_session);"))
+                mi_cols = [str(r[1]) for r in mi_res]
+                if mi_cols:
+                    if 'is_preview' not in mi_cols:
+                        conn.execute(
+                            text("ALTER TABLE mock_interview_session ADD COLUMN is_preview BOOLEAN DEFAULT 0;")
+                        )
+                    if 'question_count' not in mi_cols:
+                        conn.execute(
+                            text(
+                                "ALTER TABLE mock_interview_session ADD COLUMN question_count INTEGER DEFAULT 5;"
+                            )
+                        )
+            except Exception as mi_e:
+                print(f"dev/migrate mock_interview_session: {mi_e}")
+
         # Create any new tables
         db.create_all()
         flash('Migration completed. If you were logged in, reload the page. Next, visit /dev/promote_me.', 'success')
@@ -6260,6 +6740,65 @@ def internal_error(error):
 def not_found_error(error):
     return render_template('error.html', error="Page Not Found"), 404
 
+def _ensure_mock_interview_session_columns(is_sqlite):
+    """Add is_preview / question_count to mock_interview_session on existing deployments."""
+    from sqlalchemy import text
+
+    try:
+        if is_sqlite:
+            with db.engine.begin() as conn:
+                mi_res = conn.execute(text("PRAGMA table_info(mock_interview_session);"))
+                mi_cols = [str(r[1]) for r in mi_res]
+                if not mi_cols:
+                    return
+                if 'is_preview' not in mi_cols:
+                    conn.execute(
+                        text("ALTER TABLE mock_interview_session ADD COLUMN is_preview BOOLEAN DEFAULT 0;")
+                    )
+                    print("✅ Added is_preview to mock_interview_session")
+                if 'question_count' not in mi_cols:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE mock_interview_session ADD COLUMN question_count INTEGER DEFAULT 5;"
+                        )
+                    )
+                    print("✅ Added question_count to mock_interview_session")
+        else:
+            tbl = db.session.execute(
+                text(
+                    "SELECT 1 FROM information_schema.tables WHERE table_schema='public' "
+                    "AND table_name='mock_interview_session'"
+                )
+            )
+            if not tbl.fetchone():
+                return
+            rcols = db.session.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema='public' AND table_name='mock_interview_session'"
+                )
+            )
+            existing_mi = {row[0] for row in rcols}
+            if 'is_preview' not in existing_mi:
+                db.session.execute(
+                    text('ALTER TABLE mock_interview_session ADD COLUMN is_preview BOOLEAN DEFAULT FALSE')
+                )
+                db.session.commit()
+                print("Added is_preview to mock_interview_session")
+            if 'question_count' not in existing_mi:
+                db.session.execute(
+                    text('ALTER TABLE mock_interview_session ADD COLUMN question_count INTEGER DEFAULT 5')
+                )
+                db.session.commit()
+                print("Added question_count to mock_interview_session")
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        print(f"ensure_mock_interview_session_columns: {e}")
+
+
 # Initialize database tables
 def init_db():
     try:
@@ -6496,6 +7035,11 @@ def init_db():
                 print("Created login_history table if it didn't exist")
             except Exception as e:
                 print(f"Login history table creation failed (may already exist): {e}")
+
+            try:
+                _ensure_mock_interview_session_columns(is_sqlite)
+            except Exception as mi_ensure_e:
+                print(f"Mock interview session column ensure: {mi_ensure_e}")
             
             print("Database tables created successfully!")
             print(f"Using database: {app.config['SQLALCHEMY_DATABASE_URI']}")

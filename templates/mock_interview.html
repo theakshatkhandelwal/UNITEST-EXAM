@@ -1,0 +1,525 @@
+{% extends "base.html" %}
+
+{% block title %}AI Mock Interview - UniTest{% endblock %}
+
+{% block content %}
+{% set is_teacher = is_teacher | default(false) %}
+<div class="container py-4">
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header text-white" style="background: linear-gradient(135deg, #5b21b6, #7c3aed);">
+            <h3 class="mb-0"><i class="fas fa-user-tie me-2"></i>AI Based Mock Interview</h3>
+            <small class="opacity-75">Alex or Carie asks realistic questions from your resume, role, and optional job description. Answer out loud or type—each answer is scored before the next question. Rounds move through <strong>Warm-up</strong>, <strong>Technical</strong>, and <strong>Behavioral</strong> styles.</small>
+        </div>
+    </div>
+
+    {% if is_teacher %}
+    <div class="alert alert-info border-0 shadow-sm mb-4">
+        <strong><i class="fas fa-chalkboard-teacher me-2"></i>Teacher preview mode.</strong>
+        You can run the full interview flow to demo or test it. Sessions are <strong>not saved</strong> to history and do not affect student records.
+    </div>
+    {% endif %}
+
+    <div id="setupPanel" class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="mb-3">1. Choose your interviewer</h5>
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="w-100">
+                        <input type="radio" name="persona" value="alex" class="d-none mi-persona-radio" checked>
+                        <div class="border rounded p-3 h-100 mi-persona-card text-center" data-persona="alex" style="cursor:pointer;">
+                            <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-2" style="width:48px;height:48px;"><i class="fas fa-user"></i></div>
+                            <h6 class="mb-1">Alex</h6>
+                            <small class="text-muted">Professional, direct—like a hiring manager.</small>
+                        </div>
+                    </label>
+                </div>
+                <div class="col-md-6">
+                    <label class="w-100">
+                        <input type="radio" name="persona" value="carie" class="d-none mi-persona-radio">
+                        <div class="border rounded p-3 h-100 mi-persona-card text-center" data-persona="carie" style="cursor:pointer;">
+                            <div class="rounded-circle text-white d-inline-flex align-items-center justify-content-center mb-2" style="width:48px;height:48px;background:#db2777;"><i class="fas fa-user"></i></div>
+                            <h6 class="mb-1">Carie</h6>
+                            <small class="text-muted">Warm and supportive—still asks real interview questions.</small>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <h5 class="mb-3">2. Upload your resume <span class="text-muted fw-normal">(optional)</span></h5>
+            <p class="text-muted small">PDF or TXT. Questions will align with your experience when provided.</p>
+            <input type="file" class="form-control mb-4" id="resumeFile" accept=".pdf,.txt">
+
+            <h5 class="mb-3">3. Role you are practicing for <span class="text-danger">*</span></h5>
+            <input type="text" class="form-control mb-4" id="roleInput" placeholder="e.g. Data Analyst, Software Engineer" maxlength="255">
+
+            <h5 class="mb-3">4. Job description <span class="text-muted fw-normal">(optional)</span></h5>
+            <textarea class="form-control mb-4" id="jdInput" rows="4" placeholder="Paste the job posting or key requirements so questions match the company stack and expectations."></textarea>
+
+            <h5 class="mb-3">5. Interview length</h5>
+            <p class="text-muted small mb-2">Shorter runs are quicker; longer runs add more technical/behavioral depth. Each question is one round type (warm-up → technical ↔ behavioral).</p>
+            <div class="row g-2 mb-4">
+                <div class="col-6 col-md-3">
+                    <label class="w-100">
+                        <input type="radio" name="question_count" value="3" class="d-none mi-len-radio">
+                        <div class="border rounded p-2 text-center mi-len-card h-100" data-len="3" style="cursor:pointer;">
+                            <strong>Short</strong><br><small class="text-muted">3 questions</small>
+                        </div>
+                    </label>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="w-100">
+                        <input type="radio" name="question_count" value="5" class="d-none mi-len-radio" checked>
+                        <div class="border rounded p-2 text-center mi-len-card h-100 border-primary bg-light" data-len="5" style="cursor:pointer;">
+                            <strong>Standard</strong><br><small class="text-muted">5 questions</small>
+                        </div>
+                    </label>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="w-100">
+                        <input type="radio" name="question_count" value="7" class="d-none mi-len-radio">
+                        <div class="border rounded p-2 text-center mi-len-card h-100" data-len="7" style="cursor:pointer;">
+                            <strong>Long</strong><br><small class="text-muted">7 questions</small>
+                        </div>
+                    </label>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="w-100">
+                        <input type="radio" name="question_count" value="10" class="d-none mi-len-radio">
+                        <div class="border rounded p-2 text-center mi-len-card h-100" data-len="10" style="cursor:pointer;">
+                            <strong>Extended</strong><br><small class="text-muted">10 questions</small>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <button type="button" class="btn btn-primary btn-lg" id="startInterviewBtn">
+                    <i class="fas fa-play me-2"></i>Begin interview
+                </button>
+                <div class="form-check ms-md-3">
+                    <input class="form-check-input" type="checkbox" id="speakQuestions" checked>
+                    <label class="form-check-label" for="speakQuestions">Read questions aloud (browser)</label>
+                </div>
+            </div>
+            <div id="setupError" class="alert alert-danger mt-3 d-none mb-0"></div>
+        </div>
+    </div>
+
+    <div id="interviewPanel" class="d-none">
+        <div class="card shadow-sm mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between flex-wrap gap-2 mb-2">
+                    <div>
+                        <span class="badge bg-secondary me-1" id="roundBadge">Question 1 / 5</span>
+                        <span class="badge rounded-pill text-white" id="roundTypeBadge" style="background:#6d28d9;">Warm-up</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="repeatQuestionBtn"><i class="fas fa-redo me-1"></i>Repeat question</button>
+                </div>
+                <p class="text-muted small mb-2 d-none" id="roundTypeDesc"></p>
+                <p class="text-primary small mb-1" id="introLine"></p>
+                <h5 class="mb-0" id="questionText"></h5>
+            </div>
+        </div>
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-light"><strong>Your answer</strong> <small class="text-muted">— speak or type</small></div>
+            <div class="card-body">
+                <textarea class="form-control mb-3" id="answerInput" rows="6" placeholder="Click Start voice, speak clearly, then Stop—or type your answer."></textarea>
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                    <button type="button" class="btn btn-outline-secondary" id="miStartVoice"><i class="fas fa-microphone me-1"></i>Start voice</button>
+                    <button type="button" class="btn btn-outline-danger" id="miStopVoice" disabled><i class="fas fa-stop me-1"></i>Stop voice</button>
+                    <span class="small text-muted" id="miVoiceStatus">Voice idle</span>
+                </div>
+                <button type="button" class="btn btn-success" id="submitAnswerBtn">
+                    <i class="fas fa-paper-plane me-1"></i>Submit answer &amp; get feedback
+                </button>
+            </div>
+        </div>
+        <div id="stepFeedback" class="card border-success mb-3 d-none">
+            <div class="card-body">
+                <h6 class="text-success mb-2">This answer — quick scores</h6>
+                <div class="row g-2 small mb-2" id="stepScoresRow"></div>
+                <p class="mb-2" id="stepBrief"></p>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong class="small">Strengths</strong>
+                        <ul class="small mb-0" id="stepStrengths"></ul>
+                    </div>
+                    <div class="col-md-6">
+                        <strong class="small">Could improve</strong>
+                        <ul class="small mb-0" id="stepImprove"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="interviewError" class="alert alert-danger d-none"></div>
+    </div>
+
+    <div id="finalPanel" class="card shadow-sm d-none mb-4">
+        <div class="card-header text-white" style="background: linear-gradient(135deg, #047857, #059669);">
+            <h4 class="mb-0"><i class="fas fa-award me-2"></i>Interview complete</h4>
+        </div>
+        <div class="card-body">
+            <div class="display-6 mb-2">Final score: <span id="finalScoreNum">—</span> / 100</div>
+            <p id="finalPreviewNote" class="alert alert-info py-2 d-none small mb-3">Preview only: this session was not saved to your history.</p>
+            <p class="text-capitalize mb-2"><strong>Readiness:</strong> <span id="finalReadiness">—</span></p>
+            <p id="finalSummary" class="mb-3"></p>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <strong>Top strengths</strong>
+                    <ul id="finalStrengths"></ul>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <strong>Focus areas</strong>
+                    <ul id="finalGaps"></ul>
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary" id="newSessionBtn">Start another interview</button>
+        </div>
+    </div>
+
+    {% if recent_sessions and not is_teacher %}
+    <div class="card shadow-sm">
+        <div class="card-header"><i class="fas fa-history me-2"></i>Recent sessions</div>
+        <div class="card-body p-0">
+            <ul class="list-group list-group-flush">
+                {% for s in recent_sessions %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>{{ s.role }}</strong>
+                        <span class="text-muted">· {{ s.persona|capitalize }}</span>
+                        {% if s.is_preview %}<span class="badge bg-secondary ms-1">Preview</span>{% endif %}
+                        <br><small class="text-muted">{{ s.created_at.strftime('%Y-%m-%d %H:%M') }} · {{ s.question_count or 5 }} questions</small>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">{{ "%.0f"|format(s.final_score) }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.mi-persona-card.border-primary { box-shadow: 0 0 0 2px #7c3aed; background: #faf5ff; }
+.mi-len-card.border-primary { box-shadow: 0 0 0 2px #7c3aed; background: #faf5ff !important; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const setupPanel = document.getElementById('setupPanel');
+    const interviewPanel = document.getElementById('interviewPanel');
+    const finalPanel = document.getElementById('finalPanel');
+    const startBtn = document.getElementById('startInterviewBtn');
+    const setupError = document.getElementById('setupError');
+    const roleInput = document.getElementById('roleInput');
+    const jdInput = document.getElementById('jdInput');
+    const resumeFile = document.getElementById('resumeFile');
+    const speakQuestions = document.getElementById('speakQuestions');
+    const questionText = document.getElementById('questionText');
+    const introLine = document.getElementById('introLine');
+    const roundBadge = document.getElementById('roundBadge');
+    const answerInput = document.getElementById('answerInput');
+    const submitAnswerBtn = document.getElementById('submitAnswerBtn');
+    const stepFeedback = document.getElementById('stepFeedback');
+    const interviewError = document.getElementById('interviewError');
+    const repeatQuestionBtn = document.getElementById('repeatQuestionBtn');
+    const newSessionBtn = document.getElementById('newSessionBtn');
+    const roundTypeBadge = document.getElementById('roundTypeBadge');
+    const roundTypeDesc = document.getElementById('roundTypeDesc');
+    const finalPreviewNote = document.getElementById('finalPreviewNote');
+
+    const ROUND_BLURB = {
+        warm_up: 'Non-technical icebreaker: motivation, goals, light background.',
+        technical: 'Role-specific: tools, trade-offs, depth aligned with the role and JD.',
+        behavioral: 'STAR-style: teamwork, conflict, ownership, leadership, ethics.'
+    };
+
+    let currentQuestion = '';
+    let questionIndex = 1;
+    let totalQuestions = 5;
+
+    function selectedInterviewLength() {
+        const r = document.querySelector('input[name="question_count"]:checked');
+        return r ? parseInt(r.value, 10) || 5 : 5;
+    }
+
+    function setRoundUi(data) {
+        const tq = data.total_questions || totalQuestions;
+        const rt = data.round_title || 'Interview';
+        const rk = data.round_kind || '';
+        if (roundTypeBadge) roundTypeBadge.textContent = rt;
+        if (roundTypeDesc) {
+            roundTypeDesc.textContent = ROUND_BLURB[rk] || '';
+            roundTypeDesc.classList.toggle('d-none', !ROUND_BLURB[rk]);
+        }
+    }
+
+    document.querySelectorAll('.mi-len-card').forEach(function (el) {
+        el.addEventListener('click', function () {
+            const len = el.getAttribute('data-len');
+            const radio = document.querySelector('input.mi-len-radio[value="' + len + '"]');
+            if (radio) radio.checked = true;
+            document.querySelectorAll('.mi-len-card').forEach(function (c) { c.classList.remove('border-primary', 'bg-light'); });
+            el.classList.add('border-primary', 'bg-light');
+        });
+    });
+
+    function selectedPersona() {
+        const r = document.querySelector('input[name="persona"]:checked');
+        return r ? r.value : 'alex';
+    }
+
+    document.querySelectorAll('.mi-persona-card').forEach(function (el) {
+        el.addEventListener('click', function () {
+            const p = el.getAttribute('data-persona');
+            const radio = document.querySelector('input.mi-persona-radio[value="' + p + '"]');
+            if (radio) radio.checked = true;
+            document.querySelectorAll('.mi-persona-card').forEach(function (c) { c.classList.remove('border-primary'); });
+            el.classList.add('border-primary');
+        });
+    });
+    document.querySelector('.mi-persona-card[data-persona="alex"]').classList.add('border-primary');
+
+    function speakAloud(text) {
+        if (!speakQuestions || !speakQuestions.checked || !text) return;
+        try {
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.rate = 0.92;
+            window.speechSynthesis.speak(u);
+        } catch (e) { /* ignore */ }
+    }
+
+    function listToItems(arr) {
+        if (!arr) return '<li class="text-muted">—</li>';
+        if (typeof arr === 'string') return '<li>' + arr + '</li>';
+        if (!Array.isArray(arr) || !arr.length) return '<li class="text-muted">—</li>';
+        return arr.map(function (x) { return '<li>' + String(x) + '</li>'; }).join('');
+    }
+
+    function showStepEval(ev) {
+        stepFeedback.classList.remove('d-none');
+        document.getElementById('stepScoresRow').innerHTML =
+            '<div class="col-6 col-md-3"><span class="text-muted">Articulation</span><div class="fw-bold">' + (ev.articulation ?? '—') + '</div></div>' +
+            '<div class="col-6 col-md-3"><span class="text-muted">Domain</span><div class="fw-bold">' + (ev.domain_knowledge ?? '—') + '</div></div>' +
+            '<div class="col-6 col-md-3"><span class="text-muted">Relevance</span><div class="fw-bold">' + (ev.relevance ?? '—') + '</div></div>' +
+            '<div class="col-6 col-md-3"><span class="text-muted">Communication</span><div class="fw-bold">' + (ev.communication ?? '—') + '</div></div>' +
+            '<div class="col-12 mt-1"><span class="text-muted">Step score</span> <span class="fw-bold text-success">' + (ev.step_score ?? '—') + '</span></div>';
+        document.getElementById('stepBrief').textContent = ev.brief_feedback || '';
+        document.getElementById('stepStrengths').innerHTML = listToItems(ev.strengths);
+        document.getElementById('stepImprove').innerHTML = listToItems(ev.improvements);
+    }
+
+    startBtn.addEventListener('click', async function () {
+        setupError.classList.add('d-none');
+        const role = (roleInput.value || '').trim();
+        if (!role) {
+            setupError.textContent = 'Please enter the role you are practicing for.';
+            setupError.classList.remove('d-none');
+            return;
+        }
+        const fd = new FormData();
+        fd.append('persona', selectedPersona());
+        fd.append('role', role);
+        fd.append('job_description', (jdInput.value || '').trim());
+        fd.append('question_count', String(selectedInterviewLength()));
+        if (resumeFile.files && resumeFile.files[0]) {
+            fd.append('resume', resumeFile.files[0]);
+        }
+        startBtn.disabled = true;
+        startBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Starting…';
+        try {
+            const res = await fetch('{{ url_for("mock_interview_start") }}', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Could not start');
+            setupPanel.classList.add('d-none');
+            interviewPanel.classList.remove('d-none');
+            finalPanel.classList.add('d-none');
+            currentQuestion = data.question || '';
+            questionIndex = 1;
+            totalQuestions = data.total_questions || 5;
+            introLine.textContent = data.intro || '';
+            questionText.textContent = currentQuestion;
+            roundBadge.textContent = 'Question ' + questionIndex + ' / ' + totalQuestions;
+            setRoundUi(data);
+            answerInput.value = '';
+            stepFeedback.classList.add('d-none');
+            interviewError.classList.add('d-none');
+            speakAloud((data.intro ? data.intro + ' ' : '') + data.question);
+        } catch (err) {
+            setupError.textContent = err.message;
+            setupError.classList.remove('d-none');
+        } finally {
+            startBtn.disabled = false;
+            startBtn.innerHTML = '<i class="fas fa-play me-2"></i>Begin interview';
+        }
+    });
+
+    repeatQuestionBtn.addEventListener('click', function () {
+        speakAloud(currentQuestion);
+    });
+
+    /* Voice: same pattern as placement GD */
+    const miStartVoice = document.getElementById('miStartVoice');
+    const miStopVoice = document.getElementById('miStopVoice');
+    const miVoiceStatus = document.getElementById('miVoiceStatus');
+    let recognition = null;
+    let mediaRecorder = null;
+    let mediaStream = null;
+    let voiceChunks = [];
+    let usingSpeechRecognition = false;
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition && miStartVoice && miStopVoice) {
+        usingSpeechRecognition = true;
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onstart = function () {
+            miVoiceStatus.textContent = 'Listening…';
+            miStartVoice.disabled = true;
+            miStopVoice.disabled = false;
+        };
+        recognition.onerror = function () {
+            miVoiceStatus.textContent = 'Voice error—type or use recording.';
+            miStartVoice.disabled = false;
+            miStopVoice.disabled = true;
+        };
+        recognition.onend = function () {
+            miVoiceStatus.textContent = 'Voice stopped.';
+            miStartVoice.disabled = false;
+            miStopVoice.disabled = true;
+        };
+        recognition.onresult = function (event) {
+            let finalTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript + ' ';
+                }
+            }
+            if (finalTranscript.trim()) {
+                answerInput.value = (answerInput.value + ' ' + finalTranscript).replace(/\s+/g, ' ').trim();
+            }
+        };
+        miStartVoice.addEventListener('click', function () { recognition.start(); });
+        miStopVoice.addEventListener('click', function () { recognition.stop(); });
+    } else if (miVoiceStatus) {
+        miVoiceStatus.textContent = 'Recording + AI transcription (Groq).';
+    }
+
+    async function startRecorderFallback() {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(mediaStream);
+        voiceChunks = [];
+        mediaRecorder.ondataavailable = function (e) {
+            if (e.data && e.data.size > 0) voiceChunks.push(e.data);
+        };
+        mediaRecorder.onstart = function () {
+            miVoiceStatus.textContent = 'Recording…';
+            miStartVoice.disabled = true;
+            miStopVoice.disabled = false;
+        };
+        mediaRecorder.onstop = async function () {
+            miStopVoice.disabled = true;
+            miVoiceStatus.textContent = 'Transcribing…';
+            try {
+                const blob = new Blob(voiceChunks, { type: 'audio/webm' });
+                const dataUrl = await new Promise(function (resolve, reject) {
+                    const reader = new FileReader();
+                    reader.onload = function () { resolve(reader.result || ''); };
+                    reader.onerror = function () { reject(new Error('Could not read audio.')); };
+                    reader.readAsDataURL(blob);
+                });
+                const res = await fetch('/placement_track/transcribe_voice', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ audio_data_url: dataUrl })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Transcription failed');
+                answerInput.value = (answerInput.value + ' ' + (data.transcript || '')).replace(/\s+/g, ' ').trim();
+                miVoiceStatus.textContent = 'Done.';
+            } catch (err) {
+                miVoiceStatus.textContent = err.message || 'Failed.';
+            } finally {
+                if (mediaStream) mediaStream.getTracks().forEach(function (t) { t.stop(); });
+                miStartVoice.disabled = false;
+            }
+        };
+        mediaRecorder.start();
+    }
+
+    if (miStartVoice && miStopVoice) {
+        miStartVoice.addEventListener('click', async function () {
+            if (usingSpeechRecognition) return;
+            try {
+                await startRecorderFallback();
+            } catch (err) {
+                miVoiceStatus.textContent = 'Microphone denied.';
+            }
+        });
+        miStopVoice.addEventListener('click', function () {
+            if (usingSpeechRecognition) return;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        });
+    }
+
+    submitAnswerBtn.addEventListener('click', async function () {
+        const ans = (answerInput.value || '').trim();
+        if (!ans) {
+            interviewError.textContent = 'Add an answer before submitting.';
+            interviewError.classList.remove('d-none');
+            return;
+        }
+        interviewError.classList.add('d-none');
+        submitAnswerBtn.disabled = true;
+        submitAnswerBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Evaluating…';
+        try {
+            const res = await fetch('{{ url_for("mock_interview_submit_answer") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ answer: ans })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Request failed');
+            showStepEval(data.evaluation);
+            if (data.complete) {
+                interviewPanel.classList.add('d-none');
+                finalPanel.classList.remove('d-none');
+                document.getElementById('finalScoreNum').textContent = String(data.final_score ?? '—');
+                const fr = data.final_report || {};
+                const hr = (fr.hiring_readiness || '').replace(/_/g, ' ');
+                document.getElementById('finalReadiness').textContent = hr || '—';
+                document.getElementById('finalSummary').textContent = fr.summary || '';
+                document.getElementById('finalStrengths').innerHTML = listToItems(fr.top_strengths);
+                document.getElementById('finalGaps').innerHTML = listToItems(fr.top_gaps);
+                if (finalPreviewNote) {
+                    finalPreviewNote.classList.toggle('d-none', !data.teacher_preview);
+                }
+                speakAloud('Your mock interview is complete. Your final score is ' + String(data.final_score) + ' out of one hundred.');
+            } else {
+                answerInput.value = '';
+                currentQuestion = data.next_question || '';
+                questionText.textContent = currentQuestion;
+                questionIndex = (data.question_index || 0) + 1;
+                totalQuestions = data.total_questions || totalQuestions;
+                roundBadge.textContent = 'Question ' + questionIndex + ' / ' + totalQuestions;
+                setRoundUi(data);
+                speakAloud(currentQuestion);
+            }
+        } catch (err) {
+            interviewError.textContent = err.message;
+            interviewError.classList.remove('d-none');
+        } finally {
+            submitAnswerBtn.disabled = false;
+            submitAnswerBtn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Submit answer &amp; get feedback';
+        }
+    });
+
+    newSessionBtn.addEventListener('click', function () {
+        window.location.reload();
+    });
+});
+</script>
+{% endblock %}

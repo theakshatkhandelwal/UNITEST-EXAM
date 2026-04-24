@@ -108,7 +108,7 @@
     <div id="interviewPanel" class="d-none">
         <div class="row g-3">
             <div class="col-lg-5">
-                <div class="card shadow-sm h-100 border-primary border-opacity-25">
+                <div id="miQuestionPanel" class="card shadow-sm h-100 border-primary border-opacity-25">
                     <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
                             <span class="badge bg-secondary me-1" id="roundBadge">Question 1 / 5</span>
@@ -170,6 +170,15 @@
             </div>
         </div>
         <div id="interviewError" class="alert alert-danger d-none"></div>
+    </div>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="miToastContainer" style="z-index: 1080;">
+        <div id="miNextQuestionToast" class="toast align-items-center text-bg-primary border-0 shadow" role="status" aria-live="polite" aria-atomic="true" data-bs-delay="3400">
+            <div class="d-flex">
+                <div class="toast-body fw-semibold" id="miNextQuestionToastBody">Next question</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
     </div>
 
     <div id="finalPanel" class="card shadow-sm d-none mb-4">
@@ -331,6 +340,30 @@ document.addEventListener('DOMContentLoaded', function () {
             webcamStream = null;
         }
         if (v) v.srcObject = null;
+    }
+
+    function showNextQuestionToast(roundTitle, qNum, total) {
+        const body = document.getElementById('miNextQuestionToastBody');
+        const toastEl = document.getElementById('miNextQuestionToast');
+        if (body) {
+            const rt = (roundTitle || '').trim();
+            if (rt) {
+                body.textContent = 'Next question — ' + rt + ' · Question ' + qNum + ' of ' + total;
+            } else {
+                body.textContent = 'Next question · Question ' + qNum + ' of ' + total;
+            }
+        }
+        if (toastEl && typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+            const t = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 3400 });
+            t.show();
+        }
+    }
+
+    function scrollToQuestionPanel() {
+        const el = document.getElementById('miQuestionPanel');
+        if (el && typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     }
 
     function selectedInterviewLength() {
@@ -618,6 +651,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 roundBadge.textContent = 'Question ' + questionIndex + ' / ' + totalQuestions;
                 setRoundUi(data);
                 speakAloud(currentQuestion);
+                showNextQuestionToast(data.round_title || '', questionIndex, totalQuestions);
+                setTimeout(function () {
+                    scrollToQuestionPanel();
+                }, 80);
             }
         } catch (err) {
             interviewError.textContent = err.message;

@@ -1099,8 +1099,9 @@ def _remember_placement_signatures(state, module, level, questions, max_keep=120
     recent_map[key] = existing[:max_keep]
 
 
-def _default_placement_state():
+def _default_placement_state(user_id=None):
     return {
+        'user_id': user_id,
         'current_stage': 'aptitude',
         'scores': {
             'aptitude': 0.0,
@@ -1122,11 +1123,19 @@ def _default_placement_state():
 
 def _get_placement_state():
     state = session.get('placement_track_state')
+    expected_user_id = getattr(current_user, 'id', None)
+    default_state = _default_placement_state(expected_user_id)
     if not state or not isinstance(state, dict):
-        state = _default_placement_state()
+        state = default_state
+    # Critical isolation guard: if another account logs in on same browser,
+    # do not reuse the previous account's placement session progress.
+    if state.get('user_id') != expected_user_id:
+        state = default_state
+
+    state.setdefault('user_id', expected_user_id)
     state.setdefault('current_stage', 'aptitude')
-    state.setdefault('scores', _default_placement_state()['scores'])
-    state.setdefault('completed', _default_placement_state()['completed'])
+    state.setdefault('scores', default_state['scores'])
+    state.setdefault('completed', default_state['completed'])
     state.setdefault('levels', _default_placement_levels())
     state.setdefault('recent_questions', {})
     for key in PLACEMENT_SEQUENCE:

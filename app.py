@@ -1754,7 +1754,8 @@ Return JSON only, no markdown fences. Close all strings and brackets; output mus
             max_tokens = min(8192, 1200 + ask_count * 400)
 
         inner_ok = False
-        for _ in range(3):
+        max_groq_attempts = 10
+        for groq_attempt in range(max_groq_attempts):
             response = requests.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={
@@ -1780,7 +1781,16 @@ Return JSON only, no markdown fences. Close all strings and brackets; output mus
                 timeout=90,
             )
             if response.status_code == 429:
-                last_error = Exception('Groq rate limit reached. Please retry in a few seconds.')
+                last_error = Exception('Groq rate limit reached. Backing off and retrying.')
+                ra = (response.headers or {}).get('Retry-After')
+                if ra:
+                    try:
+                        wait_s = min(25.0, float(ra))
+                    except (TypeError, ValueError):
+                        wait_s = min(25.0, 2.0 ** min(groq_attempt, 5) + random.uniform(0.1, 0.6))
+                else:
+                    wait_s = min(25.0, 2.0 ** min(groq_attempt, 5) + random.uniform(0.15, 0.85))
+                time.sleep(wait_s)
                 continue
             if response.status_code >= 400:
                 last_error = Exception(f"Groq API error ({response.status_code}): {response.text[:220]}")
@@ -1825,6 +1835,13 @@ Return JSON only, no markdown fences. Close all strings and brackets; output mus
 
         if not inner_ok:
             continue
+        # Space out multi-batch placement calls to stay under Groq RPM/TPM (esp. fundamentals L2).
+        if is_mcq_module and len(collected) < num_questions:
+            try:
+                batch_delay = float(os.environ.get('PLACEMENT_GROQ_BATCH_DELAY_SEC', '1.4'))
+            except ValueError:
+                batch_delay = 1.4
+            time.sleep(max(0.0, batch_delay))
 
     if len(collected) >= num_questions:
         return collected[:num_questions]

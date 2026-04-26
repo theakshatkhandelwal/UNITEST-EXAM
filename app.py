@@ -1099,6 +1099,49 @@ def _remember_placement_signatures(state, module, level, questions, max_keep=120
     recent_map[key] = existing[:max_keep]
 
 
+def _placement_level_match(question_obj, level, module_name):
+    """Heuristic guardrail to enforce practical L1/L2 separation."""
+    if not isinstance(question_obj, dict):
+        return False
+    level = (level or 'l1').lower()
+    module_name = (module_name or '').lower()
+    qtxt = str(question_obj.get('question', '')).strip().lower()
+    stxt = str(question_obj.get('solution', '')).strip().lower()
+    atxt = str(question_obj.get('answer', '')).strip().lower()
+    full = f"{qtxt} {stxt} {atxt}"
+    tokens = len(re.findall(r'\w+', qtxt))
+
+    advanced_markers = (
+        'scenario', 'case', 'optimize', 'optimization', 'trade-off', 'tradeoff',
+        'edge case', 'edge-case', 'constraint', 'complexity', 'time complexity',
+        'space complexity', 'design', 'reason', 'justify', 'multi-step', 'multistep',
+        'approach', 'strategy'
+    )
+    basic_markers = (
+        'formula', 'calculate', 'find', 'simplify', 'identify', 'basic', 'direct',
+        'definition', 'what is', 'compute'
+    )
+
+    is_advanced_text = any(m in full for m in advanced_markers) or tokens >= 28
+    is_basic_text = any(m in full for m in basic_markers) or tokens <= 18
+
+    if module_name in ('coding', 'basic_coding'):
+        difficulty = str(question_obj.get('difficulty', '')).strip().lower()
+        if level == 'l1':
+            if difficulty in ('hard',):
+                return False
+            return is_basic_text or difficulty in ('easy', 'medium')
+        if difficulty == 'easy':
+            return is_advanced_text
+        return is_advanced_text or difficulty in ('medium', 'hard')
+
+    if level == 'l1':
+        if is_advanced_text and not is_basic_text:
+            return False
+        return True
+    return is_advanced_text
+
+
 def _default_placement_state(user_id=None):
     return {
         'user_id': user_id,
@@ -1259,9 +1302,10 @@ def _generate_basic_coding_questions_groq(num_questions=5, level='l1', user_seed
     seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
     level = (level or 'l1').lower()
     level_guidance = (
-        "L1 only: simple direct logic and formula-style basics. Avoid complex multi-step edge cases."
+        "L1 strict: Bloom 1-2 only. Use direct/basic/formula-driven coding tasks. "
+        "Do not include optimization/complexity/edge-case heavy reasoning."
         if level == 'l1' else
-        "L2 only: moderately complex logic, edge-case handling, and slightly longer reasoning."
+        "L2 strict: Bloom 3-4 only. Require applied reasoning, constraints, and multi-step logic."
     )
     prompt = f"""
 Generate exactly {num_questions} coding interview questions.
@@ -1292,51 +1336,60 @@ Rules:
 - Exactly 1 visible and 2 hidden test cases.
 - Keep language constraints to python/java/cpp/c by default.
 """
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {groq_key}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": model,
-            "temperature": 0.72,
-            "top_p": 0.95,
-            "max_tokens": 2600,
-            "messages": [
-                {"role": "system", "content": "You are a coding question generator. Output strictly valid JSON array only."},
-                {"role": "user", "content": prompt}
-            ]
-        },
-        timeout=35
-    )
-    if response.status_code >= 400:
-        raise Exception(f"Groq API error ({response.status_code}): {response.text[:200]}")
+    last_error = None
+    for _ in range(2):
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "temperature": 0.72,
+                "top_p": 0.95,
+                "max_tokens": 2600,
+                "messages": [
+                    {"role": "system", "content": "You are a coding question generator. Output strictly valid JSON array only."},
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=35
+        )
+        if response.status_code >= 400:
+            last_error = Exception(f"Groq API error ({response.status_code}): {response.text[:200]}")
+            continue
 
-    raw = (
-        response.json()
-        .get('choices', [{}])[0]
-        .get('message', {})
-        .get('content', '')
-        .strip()
-    )
-    cleaned = raw.replace('```json', '').replace('```', '').strip()
-    parsed = json.loads(cleaned)
-    if not isinstance(parsed, list) or not parsed:
-        raise Exception('Invalid basic coding response format from Groq.')
-    unique = []
-    seen = set(excluded_signatures)
-    for q in parsed:
-        if not isinstance(q, dict):
+        raw = (
+            response.json()
+            .get('choices', [{}])[0]
+            .get('message', {})
+            .get('content', '')
+            .strip()
+        )
+        cleaned = raw.replace('```json', '').replace('```', '').strip()
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, list) or not parsed:
+            last_error = Exception('Invalid basic coding response format from Groq.')
             continue
-        nq = _normalize_coding_question(q)
-        sig = _placement_question_signature(nq)
-        if sig and sig in seen:
-            continue
-        if sig:
-            seen.add(sig)
-        unique.append(nq)
-    return unique[:num_questions]
+        unique = []
+        seen = set(excluded_signatures)
+        for q in parsed:
+            if not isinstance(q, dict):
+                continue
+            nq = _normalize_coding_question(q)
+            sig = _placement_question_signature(nq)
+            if sig and sig in seen:
+                continue
+            if not _placement_level_match(nq, level, 'basic_coding'):
+                continue
+            if sig:
+                seen.add(sig)
+            unique.append(nq)
+        if len(unique) >= max(2, min(num_questions, 3)):
+            return unique[:num_questions]
+        last_error = Exception('Generated coding set did not satisfy strict level constraints.')
+    raise last_error or Exception('Could not generate level-aligned basic coding questions.')
 
 def _generate_placement_questions_groq(topic, module_name, num_questions=10, level='l1', user_seed=None, excluded_signatures=None):
     groq_key = os.environ.get('GROQ_API_KEY')
@@ -1379,9 +1432,10 @@ Return strict JSON array with each item:
     level = (level or 'l1').lower()
     seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
     level_guidance = (
-        "L1 strict: Bloom levels 1-2 only (basic, formulas, direct logic). Do not generate complex scenario-based questions."
+        "L1 strict: Bloom 1-2 only. Keep direct/basic/formula-driven questions. "
+        "Forbid scenario/case-study/optimization/complexity reasoning."
         if level == 'l1' else
-        "L2 strict: Bloom levels 3-4 only (applied reasoning, complex logic, scenario-based, multi-step thinking)."
+        "L2 strict: Bloom 3-4 only. Require applied reasoning, scenario/case-based framing, and multi-step thinking."
     )
     prompt = f"""
 Generate exactly {num_questions} high-quality {module_prompt} questions for placement preparation.
@@ -1395,52 +1449,62 @@ Do not repeat or paraphrase these excluded question signatures:
 Return JSON only, no markdown fences.
 """
 
-    response = requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {groq_key}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": model,
-            "temperature": 0.75,
-            "top_p": 0.95,
-            "max_tokens": 2200,
-            "messages": [
-                {"role": "system", "content": "You are an expert placement test setter. Output strictly valid JSON."},
-                {"role": "user", "content": prompt}
-            ]
-        },
-        timeout=35
-    )
-    if response.status_code == 429:
-        raise Exception('Groq rate limit reached. Please retry in a few seconds.')
-    if response.status_code >= 400:
-        raise Exception(f"Groq API error ({response.status_code}): {response.text[:220]}")
+    last_error = None
+    for _ in range(2):
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "temperature": 0.75,
+                "top_p": 0.95,
+                "max_tokens": 2200,
+                "messages": [
+                    {"role": "system", "content": "You are an expert placement test setter. Output strictly valid JSON."},
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=35
+        )
+        if response.status_code == 429:
+            last_error = Exception('Groq rate limit reached. Please retry in a few seconds.')
+            continue
+        if response.status_code >= 400:
+            last_error = Exception(f"Groq API error ({response.status_code}): {response.text[:220]}")
+            continue
 
-    raw = (
-        response.json()
-        .get('choices', [{}])[0]
-        .get('message', {})
-        .get('content', '')
-        .strip()
-    )
-    cleaned = raw.replace('```json', '').replace('```', '').strip()
-    parsed = json.loads(cleaned)
-    if not isinstance(parsed, list) or not parsed:
-        raise Exception('Invalid response format from Groq question generator.')
-    unique = []
-    seen = set(excluded_signatures)
-    for q in parsed:
-        if not isinstance(q, dict):
+        raw = (
+            response.json()
+            .get('choices', [{}])[0]
+            .get('message', {})
+            .get('content', '')
+            .strip()
+        )
+        cleaned = raw.replace('```json', '').replace('```', '').strip()
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, list) or not parsed:
+            last_error = Exception('Invalid response format from Groq question generator.')
             continue
-        sig = _placement_question_signature(q)
-        if sig and sig in seen:
-            continue
-        if sig:
-            seen.add(sig)
-        unique.append(q)
-    return unique
+        unique = []
+        seen = set(excluded_signatures)
+        for q in parsed:
+            if not isinstance(q, dict):
+                continue
+            sig = _placement_question_signature(q)
+            if sig and sig in seen:
+                continue
+            if not _placement_level_match(q, level, module_name):
+                continue
+            if sig:
+                seen.add(sig)
+            unique.append(q)
+        if len(unique) >= max(3, min(num_questions, 5)):
+            return unique
+        last_error = Exception('Generated set did not satisfy strict level constraints.')
+    raise last_error or Exception('Could not generate level-aligned placement questions.')
 
 @login_manager.user_loader
 def load_user(user_id):

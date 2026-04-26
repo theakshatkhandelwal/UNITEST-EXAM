@@ -1072,6 +1072,33 @@ def _default_placement_levels():
     return levels
 
 
+def _placement_question_signature(q):
+    if not isinstance(q, dict):
+        return ''
+    base = str(q.get('question', '')).strip().lower()
+    base = re.sub(r'\s+', ' ', base)
+    return hashlib.sha256(base.encode('utf-8')).hexdigest()[:16] if base else ''
+
+
+def _get_recent_placement_signatures(state, module, level, limit=60):
+    key = f"{module}:{level}"
+    recent = (state.get('recent_questions', {}) or {}).get(key, [])
+    if not isinstance(recent, list):
+        return []
+    return [str(x) for x in recent[:limit] if isinstance(x, str)]
+
+
+def _remember_placement_signatures(state, module, level, questions, max_keep=120):
+    key = f"{module}:{level}"
+    recent_map = state.setdefault('recent_questions', {})
+    existing = list(recent_map.get(key, []) or [])
+    for q in questions:
+        sig = _placement_question_signature(q)
+        if sig and sig not in existing:
+            existing.insert(0, sig)
+    recent_map[key] = existing[:max_keep]
+
+
 def _default_placement_state():
     return {
         'current_stage': 'aptitude',
@@ -1090,6 +1117,7 @@ def _default_placement_state():
             'coding': False
         },
         'levels': _default_placement_levels(),
+        'recent_questions': {},
     }
 
 def _get_placement_state():
@@ -1100,6 +1128,7 @@ def _get_placement_state():
     state.setdefault('scores', _default_placement_state()['scores'])
     state.setdefault('completed', _default_placement_state()['completed'])
     state.setdefault('levels', _default_placement_levels())
+    state.setdefault('recent_questions', {})
     for key in PLACEMENT_SEQUENCE:
         state['scores'].setdefault(key, 0.0)
         state['completed'].setdefault(key, False)
@@ -1178,13 +1207,27 @@ def _normalize_coding_question(q):
     ]
     return normalized
 
-def _pick_leetcode_mix():
+def _pick_leetcode_mix(excluded_signatures=None, prefer=('easy', 'medium', 'hard')):
+    excluded_signatures = set(excluded_signatures or [])
     easy = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') == 'easy']
     medium = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') == 'medium']
     hard = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') == 'hard']
-    selected = random.sample(easy, min(2, len(easy))) + random.sample(medium, min(2, len(medium))) + random.sample(hard, min(1, len(hard)))
+    selected = []
+    if 'easy' in prefer:
+        selected.extend(random.sample(easy, min(2, len(easy))))
+    if 'medium' in prefer:
+        selected.extend(random.sample(medium, min(2, len(medium))))
+    if 'hard' in prefer:
+        selected.extend(random.sample(hard, min(1, len(hard))))
     random.shuffle(selected)
-    return [_normalize_coding_question(q) for q in selected]
+    out = []
+    for q in selected:
+        nq = _normalize_coding_question(q)
+        sig = _placement_question_signature(nq)
+        if sig and sig in excluded_signatures:
+            continue
+        out.append(nq)
+    return out
 
 def _pick_practice_recommendations(count=10):
     easy = [q for q in LEETCODE_PRACTICE_POOL if q.get('difficulty') == 'easy']
@@ -1198,14 +1241,26 @@ def _pick_practice_recommendations(count=10):
     random.shuffle(picked)
     return picked[:count]
 
-def _generate_basic_coding_questions_groq(num_questions=5):
+def _generate_basic_coding_questions_groq(num_questions=5, level='l1', user_seed=None, excluded_signatures=None):
     groq_key = os.environ.get('GROQ_API_KEY')
     if not groq_key:
         raise Exception('GROQ_API_KEY is not configured.')
     model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+    excluded_signatures = excluded_signatures or []
+    seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
+    level = (level or 'l1').lower()
+    level_guidance = (
+        "L1 only: simple direct logic and formula-style basics. Avoid complex multi-step edge cases."
+        if level == 'l1' else
+        "L2 only: moderately complex logic, edge-case handling, and slightly longer reasoning."
+    )
     prompt = f"""
-Generate exactly {num_questions} beginner coding interview questions.
-Topics should be basic coding practice: fibonacci, factorial, prime check, palindrome, reverse number, patterns, sum/digits loops, basic arrays/strings.
+Generate exactly {num_questions} coding interview questions.
+{level_guidance}
+Topics: fibonacci, factorial, prime check, palindrome, reverse number, patterns, sum/digits loops, basic arrays/strings.
+Randomization seed: {seed_line}
+Avoid repeating questions from excluded signatures:
+{json.dumps(excluded_signatures[:80])}
 
 Return STRICT JSON array only. Each item must be:
 {{
@@ -1236,7 +1291,8 @@ Rules:
         },
         json={
             "model": model,
-            "temperature": 0.3,
+            "temperature": 0.72,
+            "top_p": 0.95,
             "max_tokens": 2600,
             "messages": [
                 {"role": "system", "content": "You are a coding question generator. Output strictly valid JSON array only."},
@@ -1259,9 +1315,21 @@ Rules:
     parsed = json.loads(cleaned)
     if not isinstance(parsed, list) or not parsed:
         raise Exception('Invalid basic coding response format from Groq.')
-    return [_normalize_coding_question(q) for q in parsed if isinstance(q, dict)][:num_questions]
+    unique = []
+    seen = set(excluded_signatures)
+    for q in parsed:
+        if not isinstance(q, dict):
+            continue
+        nq = _normalize_coding_question(q)
+        sig = _placement_question_signature(nq)
+        if sig and sig in seen:
+            continue
+        if sig:
+            seen.add(sig)
+        unique.append(nq)
+    return unique[:num_questions]
 
-def _generate_placement_questions_groq(topic, module_name, num_questions=10):
+def _generate_placement_questions_groq(topic, module_name, num_questions=10, level='l1', user_seed=None, excluded_signatures=None):
     groq_key = os.environ.get('GROQ_API_KEY')
     if not groq_key:
         raise Exception('GROQ_API_KEY is not configured.')
@@ -1298,10 +1366,21 @@ Return strict JSON array with each item:
 }
 """
 
+    excluded_signatures = excluded_signatures or []
+    level = (level or 'l1').lower()
+    seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
+    level_guidance = (
+        "L1 strict: Bloom levels 1-2 only (basic, formulas, direct logic). Do not generate complex scenario-based questions."
+        if level == 'l1' else
+        "L2 strict: Bloom levels 3-4 only (applied reasoning, complex logic, scenario-based, multi-step thinking)."
+    )
     prompt = f"""
 Generate exactly {num_questions} high-quality {module_prompt} questions for placement preparation.
-Difficulty: medium to advanced.
+{level_guidance}
+Randomization seed: {seed_line}
 Avoid repeated/ambiguous questions.
+Do not repeat or paraphrase these excluded question signatures:
+{json.dumps(excluded_signatures[:80])}
 
 {schema_hint}
 Return JSON only, no markdown fences.
@@ -1315,7 +1394,8 @@ Return JSON only, no markdown fences.
         },
         json={
             "model": model,
-            "temperature": 0.2,
+            "temperature": 0.75,
+            "top_p": 0.95,
             "max_tokens": 2200,
             "messages": [
                 {"role": "system", "content": "You are an expert placement test setter. Output strictly valid JSON."},
@@ -1340,7 +1420,18 @@ Return JSON only, no markdown fences.
     parsed = json.loads(cleaned)
     if not isinstance(parsed, list) or not parsed:
         raise Exception('Invalid response format from Groq question generator.')
-    return parsed
+    unique = []
+    seen = set(excluded_signatures)
+    for q in parsed:
+        if not isinstance(q, dict):
+            continue
+        sig = _placement_question_signature(q)
+        if sig and sig in seen:
+            continue
+        if sig:
+            seen.add(sig)
+        unique.append(q)
+    return unique
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -3559,6 +3650,8 @@ def placement_start_module(module):
         return redirect(url_for('placement_track'))
 
     levels = state.get('levels', {})
+    attempt_seed = f"u{current_user.id}-{module}-{requested_level}-{int(time.time())}-{random.randint(100,999)}"
+    recent_signatures = _get_recent_placement_signatures(state, module, requested_level)
     level_data = levels.get(module, {})
     l1_passed = bool(level_data.get('l1_passed', False))
     if requested_level == 'l2' and not l1_passed:
@@ -3579,12 +3672,33 @@ def placement_start_module(module):
                 if is_l2 else
                 'Placement Aptitude: basics, formulas, and direct logical reasoning',
                 'aptitude',
-                10
+                10,
+                level=requested_level,
+                user_seed=attempt_seed,
+                excluded_signatures=recent_signatures
             )
             questions = generated[:10]
         except Exception as e:
             print(f"Groq aptitude generation failed, using fallback bank: {e}")
-            questions = PLACEMENT_APTITUDE_BANK[:10]
+            randomized = random.sample(PLACEMENT_APTITUDE_BANK, min(10, len(PLACEMENT_APTITUDE_BANK)))
+            questions = []
+            used = set(recent_signatures)
+            for q in randomized:
+                sig = _placement_question_signature(q)
+                if sig and sig in used:
+                    continue
+                if sig:
+                    used.add(sig)
+                questions.append(q)
+            if len(questions) < 10:
+                for q in randomized:
+                    if q not in questions:
+                        questions.append(q)
+                    if len(questions) >= 10:
+                        break
+            questions = questions[:10]
+        _remember_placement_signatures(state, module, requested_level, questions)
+        _save_placement_state(state)
         session['current_quiz'] = {
             'questions': questions,
             'topic': 'Placement Aptitude - Most Asked Questions',
@@ -3602,10 +3716,17 @@ def placement_start_module(module):
             if is_l2 else
             'CS Fundamentals L1: OOPs, CN, DBMS, SQL, DSA basics and formula/definition-driven questions'
         )
-        questions = _generate_placement_questions_groq(topic, 'fundamentals', 10)
+        questions = _generate_placement_questions_groq(
+            topic, 'fundamentals', 10,
+            level=requested_level,
+            user_seed=attempt_seed,
+            excluded_signatures=recent_signatures
+        )
         if not questions:
             flash('Could not generate fundamentals questions. Please try again.', 'error')
             return redirect(url_for('placement_track'))
+        _remember_placement_signatures(state, module, requested_level, questions)
+        _save_placement_state(state)
         session['current_quiz'] = {
             'questions': questions,
             'topic': topic,
@@ -3623,7 +3744,8 @@ def placement_start_module(module):
             if is_l2 else
             'Technical Coding L1: easy/medium coding basics for interview preparation'
         )
-        questions = _pick_leetcode_mix()
+        prefer = ('medium', 'hard') if is_l2 else ('easy', 'medium')
+        questions = _pick_leetcode_mix(excluded_signatures=recent_signatures, prefer=prefer)
         if is_l2:
             questions = [q for q in questions if str(q.get('difficulty', '')).lower() in ('medium', 'hard')] or questions
         else:
@@ -3631,12 +3753,19 @@ def placement_start_module(module):
         questions = questions[:5]
         practice_recommendations = _pick_practice_recommendations(10)
         if not questions:
-            questions = _generate_placement_questions_groq(topic, 'coding', 5) or []
+            questions = _generate_placement_questions_groq(
+                topic, 'coding', 5,
+                level=requested_level,
+                user_seed=attempt_seed,
+                excluded_signatures=recent_signatures
+            ) or []
             questions = [_normalize_coding_question(q) for q in questions if isinstance(q, dict)]
             practice_recommendations = _pick_practice_recommendations(10)
         if not questions:
             flash('Could not generate coding questions. Please try again.', 'error')
             return redirect(url_for('placement_track'))
+        _remember_placement_signatures(state, module, requested_level, questions)
+        _save_placement_state(state)
         session['current_quiz'] = {
             'questions': questions,
             'topic': topic,
@@ -3656,15 +3785,22 @@ def placement_start_module(module):
             'Basic Coding L1: fibonacci, factorial, prime, palindrome, patterns, loops'
         )
         try:
-            questions = _generate_basic_coding_questions_groq(5)
+            questions = _generate_basic_coding_questions_groq(
+                5,
+                level=requested_level,
+                user_seed=attempt_seed,
+                excluded_signatures=recent_signatures
+            )
         except Exception as e:
             print(f"Groq basic coding generation failed, fallback to easy technical mix: {e}")
-            questions = _pick_leetcode_mix()
+            questions = _pick_leetcode_mix(excluded_signatures=recent_signatures, prefer=('easy', 'medium'))
             questions = [q for q in questions if str(q.get('difficulty', '')).lower() == 'easy'][:5] or questions[:5]
             questions = [_normalize_coding_question(q) for q in questions]
         if not questions:
             flash('Could not generate basic coding questions. Please try again.', 'error')
             return redirect(url_for('placement_track'))
+        _remember_placement_signatures(state, module, requested_level, questions)
+        _save_placement_state(state)
         session['current_quiz'] = {
             'questions': questions,
             'topic': topic,

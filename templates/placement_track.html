@@ -250,11 +250,15 @@ document.addEventListener('DOMContentLoaded', function () {
     let usingSpeechRecognition = false;
     let lastStableTranscript = '';
 
+    function currentGdLevel() {
+        return gdLevelL2 && gdLevelL2.checked ? 'l2' : 'l1';
+    }
+
     async function fetchRandomTopic() {
         if (!topicInput || topicInput.disabled) return;
         topicInput.value = 'Generating random topic...';
         try {
-            const res = await fetch('/placement_track/suggest_topic');
+            const res = await fetch('/placement_track/suggest_topic?level=' + encodeURIComponent(currentGdLevel()));
             const data = await res.json();
             if (!data.success) throw new Error(data.error || 'Could not generate topic');
             topicInput.value = data.topic || 'Discuss the role of AI in modern workplaces.';
@@ -280,6 +284,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (topicInput && !topicInput.disabled) {
         fetchRandomTopic();
+    }
+    if (gdLevelL1) {
+        gdLevelL1.addEventListener('change', function () {
+            if (gdLevelL1.checked && topicInput && !topicInput.disabled) fetchRandomTopic();
+        });
+    }
+    if (gdLevelL2) {
+        gdLevelL2.addEventListener('change', function () {
+            if (gdLevelL2.checked && topicInput && !topicInput.disabled) fetchRandomTopic();
+        });
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;

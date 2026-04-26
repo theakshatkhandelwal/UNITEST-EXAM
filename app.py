@@ -1077,6 +1077,162 @@ LEETCODE_PRACTICE_POOL = [
 PLACEMENT_L1_PASS = 70.0
 PLACEMENT_L2_PASS = 50.0
 
+# Placement syllabus + generation style (L1 vs L2) — used in Groq prompts.
+PLACEMENT_SYLLABUS_TOPICS = {
+    'aptitude': {
+        'l1': [
+            'Percentages', 'Profit & Loss', 'Simple Interest', 'Ratio & Proportion', 'Averages',
+            'Time & Work (basic)', 'Time, Speed & Distance', 'Number System basics', 'Simplification (BODMAS)',
+            'Mixtures & Alligations (basic)', 'Pipes & Cisterns (basic)', 'Data Interpretation (tables, bar graphs)',
+            'Basic Probability', 'Basic Permutation & Combination', 'Linear Equations',
+        ],
+        'l2': [
+            'Advanced Percentages (successive change)', 'Profit & Loss with multiple variables',
+            'Compound Interest (CI vs SI, time-based traps)', 'Time & Work with efficiency comparison',
+            'Pipes & Cisterns (leak + fill cases)', 'Advanced Ratio (multi-variable)',
+            'Data Interpretation (caselets, missing data)', 'Probability (conditional probability)',
+            'Permutations & Combinations (arrangements)', 'Number System (remainders, divisibility, cyclicity)',
+            'Algebra word problems', 'Quadratic Equations', 'Logarithms', 'Geometry (mensuration + tricky problems)',
+        ],
+    },
+    'fundamentals': {
+        'l1': [
+            'OOP (Encapsulation, Inheritance, Polymorphism)', 'DBMS basics (ER model, normalization)',
+            'SQL basic queries (SELECT, JOIN)', 'Operating Systems basics', 'Computer Networks basics (OSI model)',
+            'Data Structures intro (array, stack, queue)', 'Basic Complexity (Big-O intro)',
+        ],
+        'l2': [
+            'Advanced SQL (joins, indexing, optimization)', 'DBMS transactions & ACID', 'OS scheduling algorithms',
+            'Deadlocks & concurrency', 'CN protocols (TCP/IP deep dive)', 'Advanced Data Structures (trees, graphs)',
+            'Hashing techniques', 'System design basics', 'Memory management',
+        ],
+    },
+    'coding': {
+        'l1': [
+            'Arrays', 'Strings', 'Linked List basics', 'Stack & Queue', 'Recursion',
+            'Sorting & Searching', 'Hashing basics',
+        ],
+        'l2': [
+            'Trees (DFS, BFS, traversals)', 'Binary Search Trees', 'Graphs (BFS, DFS, shortest path)',
+            'Dynamic Programming', 'Greedy algorithms', 'Backtracking', 'Sliding Window (advanced)',
+            'Two Pointers', 'Heap / Priority Queue', 'Trie', 'Segment Trees (high level)',
+        ],
+    },
+    'basic_coding': {
+        'l1': [
+            'Fibonacci', 'Factorial', 'Prime check', 'Palindrome', 'Number reversal',
+            'Basic patterns (stars, pyramids)', 'Sum of digits', 'GCD/LCM', 'Array basics (sum, max, min)', 'String basics',
+        ],
+        'l2': [
+            'Pattern problems (complex)', 'Sliding window basics', 'Recursion problems',
+            'Sorting (bubble, selection, insertion)', 'Searching (binary search)', 'Basic string manipulation',
+            'Matrix problems', 'Bit manipulation basics',
+        ],
+    },
+}
+
+PLACEMENT_GD_TOPIC_POOL = {
+    'l1': [
+        'Digital literacy in rural schools',
+        'Should college attendance be mandatory?',
+        'Work from home: productivity vs collaboration',
+        'Social media and mental health among students',
+        'Climate action: individual vs government responsibility',
+        'Uniform civil code: need for public debate?',
+        'Is entrepreneurship overrated for fresh graduates?',
+        'Role of sports in holistic education',
+        'Poverty alleviation: cash transfers vs skill programs',
+        'Online exams vs offline integrity',
+    ],
+    'l2': [
+        'AI regulation: innovation vs safety',
+        'Universal Basic Income in a developing economy',
+        'Cryptocurrency: ban, regulate, or embrace?',
+        'Net neutrality and corporate power',
+        'Case: Startup layoffs vs employee rights',
+        'Geoengineering to fight climate change',
+        'Four-day work week for IT sector',
+        'Data localization vs global cloud',
+        'Meritocracy vs reservation: reframing the debate',
+        'Autonomous weapons: ethical red lines',
+    ],
+}
+
+
+def _placement_syllabus_shuffle(module_name, level, user_seed):
+    level = (level or 'l1').lower()
+    mod = (module_name or '').strip().lower()
+    topics = (PLACEMENT_SYLLABUS_TOPICS.get(mod) or {}).get(level) or (PLACEMENT_SYLLABUS_TOPICS.get(mod) or {}).get('l1', [])
+    if not topics:
+        return []
+    seed_int = int(hashlib.sha256(f"{user_seed}|{mod}|{level}".encode('utf-8')).hexdigest()[:14], 16)
+    rng = random.Random(seed_int)
+    out = topics[:]
+    rng.shuffle(out)
+    return out
+
+
+def _placement_style_instruction(module_name, level):
+    level = (level or 'l1').lower()
+    mod = (module_name or '').strip().lower()
+    if mod == 'aptitude':
+        if level == 'l1':
+            return (
+                'Primary task style: "Generate practice questions for [topic] basic level with solutions" — '
+                'treat each syllabus strand below as [topic]; keep stems formula/direct-logic driven.'
+            )
+        return (
+            'Primary task style: "Generate advanced aptitude problems for [topic] with tricks and shortcuts" — '
+            'use the advanced strands below; include traps, successive steps, or data twists where natural.'
+        )
+    if mod == 'fundamentals':
+        if level == 'l1':
+            return (
+                'Primary task style: "Explain [topic] with examples for beginners + MCQs" — '
+                'each item is an MCQ testing recall/definition with a short worked solution.'
+            )
+        return (
+            'Primary task style: "Generate interview-level questions for [topic] with explanations" — '
+            'MCQs should feel like campus tech interviews (trade-offs, behavior of systems, SQL/DBMS depth).'
+        )
+    if mod == 'coding':
+        if level == 'l1':
+            return (
+                'Primary task style: "Generate coding interview questions for [topic] easy level with explanation" — '
+                'subjective stems: concise problem + ideal approach; no FAANG-only killer puzzles.'
+            )
+        return (
+            'Primary task style: "Generate FAANG-level problems for [topic] with optimal solution" — '
+            'subjective: harder multi-step algorithmic prompts with constraints and complexity discussion.'
+        )
+    if mod == 'basic_coding':
+        if level == 'l1':
+            return (
+                'Primary task style: "Generate easy coding problems for [topic] with solution" — '
+                'stdin/stdout coding; map each strand below to [topic].'
+            )
+        return (
+            'Primary task style: "Generate medium-level coding problems focusing on logic for [topic]" — '
+            'combine patterns, constraints, or two-step reasoning per problem.'
+        )
+    return ''
+
+
+def _placement_quiz_display_topic(module, level):
+    level = (level or 'l1').lower()
+    mod = (module or '').strip().lower()
+    labels = {
+        ('aptitude', 'l1'): 'Aptitude L1 — Basic (formulas & direct logic)',
+        ('aptitude', 'l2'): 'Aptitude L2 — Advanced (tricky & logical)',
+        ('fundamentals', 'l1'): 'CS Fundamentals L1 — Core theory + MCQs',
+        ('fundamentals', 'l2'): 'CS Fundamentals L2 — Interview depth',
+        ('basic_coding', 'l1'): 'Basic Coding L1 — Beginner patterns',
+        ('basic_coding', 'l2'): 'Basic Coding L2 — Logic building',
+        ('coding', 'l1'): 'Technical Coding L1 — Foundation DSA (easy)',
+        ('coding', 'l2'): 'Technical Coding L2 — Advanced interview / FAANG-style',
+    }
+    return labels.get((mod, level), 'Placement')
+
 
 def _default_placement_levels():
     levels = {}
@@ -1395,10 +1551,19 @@ def _generate_basic_coding_questions_groq(num_questions=5, level='l1', user_seed
         "L2 strict: Bloom 3-4 only. Each problem must state explicit constraints (bounds, formats) "
         "and require combining 2+ ideas (e.g. prefix + hashmap, two pointers with invariant)."
     )
+    strands = _placement_syllabus_shuffle('basic_coding', level, seed_line)
+    strand_lines = ''
+    if strands:
+        strand_lines = (
+            '\nRotate across these strands (map each to [topic] in the style instruction):\n- '
+            + '\n- '.join(strands[:12])
+        )
+    style_inst = _placement_style_instruction('basic_coding', level)
     prompt = f"""
 Generate exactly {ask_count} distinct coding interview questions.
+{style_inst}
+{strand_lines}
 {level_guidance}
-Topics: fibonacci, factorial, prime check, palindrome, reverse number, patterns, sum/digits loops, basic arrays/strings.
 Randomization seed: {seed_line}
 Avoid repeating questions whose fingerprints match these excluded SHA-256 hashes (question+options/id):
 {json.dumps(excluded_signatures[:200])}
@@ -1525,6 +1690,14 @@ Return strict JSON array with each item:
     level = (level or 'l1').lower()
     seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
     ask_count = min(num_questions + 8, 26)
+    strands = _placement_syllabus_shuffle(module_name, level, seed_line)
+    strand_lines = ''
+    if strands:
+        strand_lines = (
+            '\nSyllabus strands for THIS attempt (distribute questions across them; prefer unused strands first):\n- '
+            + '\n- '.join(strands[:16])
+        )
+    style_inst = _placement_style_instruction(module_name, level)
     if module_name in ('aptitude', 'fundamentals'):
         level_guidance = (
             "L1 Bloom 1-2: single-step recall, short numeric/logic stems (aim under 45 words). "
@@ -1540,6 +1713,10 @@ Return strict JSON array with each item:
             "L2 Bloom 3-4: multi-step reasoning, explicit constraints, trade-offs, and algorithmic nuance."
         )
     prompt = f"""
+Assessment theme: {topic}
+{style_inst}
+{strand_lines}
+
 Generate exactly {ask_count} high-quality {module_prompt} questions for placement preparation.
 {level_guidance}
 Randomization seed: {seed_line}
@@ -3844,9 +4021,7 @@ def placement_start_module(module):
         is_l2 = requested_level == 'l2'
         try:
             generated = _generate_placement_questions_groq(
-                'Placement Aptitude: complex logical reasoning and applied problem solving'
-                if is_l2 else
-                'Placement Aptitude: basics, formulas, and direct logical reasoning',
+                _placement_quiz_display_topic('aptitude', requested_level),
                 'aptitude',
                 10,
                 level=requested_level,
@@ -3885,7 +4060,7 @@ def placement_start_module(module):
         _save_placement_state(state)
         session['current_quiz'] = {
             'questions': questions,
-            'topic': 'Placement Aptitude - Most Asked Questions',
+            'topic': _placement_quiz_display_topic('aptitude', requested_level),
             'bloom_level': 3 if is_l2 else 1,
             'difficulty_level': 'advanced' if is_l2 else 'intermediate',
             'placement_module': 'aptitude',
@@ -3895,11 +4070,7 @@ def placement_start_module(module):
 
     if module == 'fundamentals':
         is_l2 = requested_level == 'l2'
-        topic = (
-            'CS Fundamentals L2: scenario-driven OOPs, CN, DBMS, SQL, DSA reasoning and trade-offs'
-            if is_l2 else
-            'CS Fundamentals L1: OOPs, CN, DBMS, SQL, DSA basics and formula/definition-driven questions'
-        )
+        topic = _placement_quiz_display_topic('fundamentals', requested_level)
         questions = _generate_placement_questions_groq(
             topic, 'fundamentals', 10,
             level=requested_level,
@@ -3923,11 +4094,7 @@ def placement_start_module(module):
 
     if module == 'coding':
         is_l2 = requested_level == 'l2'
-        topic = (
-            'Technical Coding L2: medium/hard interview coding with complexity analysis and optimization'
-            if is_l2 else
-            'Technical Coding L1: easy/medium coding basics for interview preparation'
-        )
+        topic = _placement_quiz_display_topic('coding', requested_level)
         prefer = ('medium', 'hard') if is_l2 else ('easy',)
         questions = _pick_leetcode_mix(excluded_signatures=recent_signatures, prefer=prefer)
         if is_l2:
@@ -3963,11 +4130,7 @@ def placement_start_module(module):
 
     if module == 'basic_coding':
         is_l2 = requested_level == 'l2'
-        topic = (
-            'Basic Coding L2: combined logic and edge-case based coding questions'
-            if is_l2 else
-            'Basic Coding L1: fibonacci, factorial, prime, palindrome, patterns, loops'
-        )
+        topic = _placement_quiz_display_topic('basic_coding', requested_level)
         try:
             questions = _generate_basic_coding_questions_groq(
                 5,
@@ -4016,8 +4179,21 @@ def placement_ai_interview():
             return jsonify({'success': False, 'error': 'GROQ_API_KEY is not configured.'}), 500
         model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
 
+        if level == 'l1':
+            level_rubric = (
+                "Level L1 (beginner GD): Expect clear structure, simple framing (agree/disagree), relevance to the topic, "
+                "basic introduction and intelligible points. Reward communication clarity and confidence; "
+                "do not heavily penalize absence of data citations or deep policy detail."
+            )
+        else:
+            level_rubric = (
+                "Level L2 (advanced GD): Expect nuanced stance, awareness of counterarguments, policy or stakeholder depth "
+                "where appropriate, leadership or conflict-aware reasoning, and examples or data when natural."
+            )
+
         prompt = f"""
 You are an interview evaluator for Group Discussion and communication rounds.
+{level_rubric}
 Evaluate the candidate response for topic "{topic}".
 
 Candidate response:
@@ -4133,14 +4309,28 @@ Return STRICT JSON only in this exact schema:
 @login_required
 def placement_suggest_topic():
     try:
+        level = (request.args.get('level') or 'l1').strip().lower()
+        if level not in ('l1', 'l2'):
+            level = 'l1'
+        pool = PLACEMENT_GD_TOPIC_POOL.get(level) or PLACEMENT_GD_TOPIC_POOL['l1']
+        fallback = random.choice(pool) if pool else "AI in education: opportunity or overdependence?"
+
         groq_key = os.environ.get('GROQ_API_KEY')
         if not groq_key:
-            return jsonify({'success': False, 'error': 'GROQ_API_KEY is not configured.'}), 500
+            return jsonify({'success': True, 'topic': fallback[:140], 'level': level})
         model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
-        prompt = (
-            "Give one random Group Discussion / interview topic suitable for campus placements. "
-            "Return plain text only in less than 12 words."
-        )
+        if level == 'l1':
+            user_prompt = (
+                'Give GD content points for beginners on ONE topic. Output ONLY a short topic title '
+                '(max 12 words, no quotes) suitable for campus placement from themes like: simple current affairs, '
+                'social issues (education, poverty), basic abstract topics, agree/disagree, communication clarity.'
+            )
+        else:
+            user_prompt = (
+                'Simulate a group discussion with arguments and counterarguments: output ONLY one challenging '
+                'topic title (max 12 words, no quotes) for advanced GD: abstract debates, case-based GD, '
+                'policy (AI, economy), leadership, conflict handling, data-backed argument angles.'
+            )
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
@@ -4149,17 +4339,17 @@ def placement_suggest_topic():
             },
             json={
                 "model": model,
-                "temperature": 0.9,
-                "max_tokens": 40,
+                "temperature": 0.88,
+                "max_tokens": 48,
                 "messages": [
-                    {"role": "system", "content": "Return only a short topic title."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "Return only a short plain-text topic title, nothing else."},
+                    {"role": "user", "content": user_prompt}
                 ]
             },
             timeout=20
         )
         if response.status_code >= 400:
-            return jsonify({'success': False, 'error': 'Could not generate topic right now.'}), 500
+            return jsonify({'success': True, 'topic': fallback[:140], 'level': level})
         topic = (
             response.json()
             .get('choices', [{}])[0]
@@ -4169,8 +4359,8 @@ def placement_suggest_topic():
         )
         topic = topic.replace('"', '').replace('\n', ' ').strip()
         if not topic:
-            topic = "AI in education: opportunity or overdependence?"
-        return jsonify({'success': True, 'topic': topic[:140]})
+            topic = fallback
+        return jsonify({'success': True, 'topic': topic[:140], 'level': level})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

@@ -1689,7 +1689,6 @@ Return strict JSON array with each item:
     excluded_signatures = excluded_signatures or []
     level = (level or 'l1').lower()
     seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
-    ask_count = min(num_questions + 8, 26)
     strands = _placement_syllabus_shuffle(module_name, level, seed_line)
     strand_lines = ''
     if strands:
@@ -1704,7 +1703,8 @@ Return strict JSON array with each item:
             "Never use the word 'scenario' (any case). No workplace stories."
             if level == 'l1' else
             "L2 Bloom 3-4: applied judgment. For EVERY item, the question string MUST begin with "
-            "the exact prefix \"Scenario: \" then 2-4 sentences of context, then the MCQ task."
+            "the exact prefix \"Scenario: \" then at most TWO short sentences of context, then one clear MCQ line. "
+            "CRITICAL: Keep each option under 18 words and solutions brief so the JSON stays valid and complete."
         )
     else:
         level_guidance = (
@@ -1712,78 +1712,122 @@ Return strict JSON array with each item:
             if level == 'l1' else
             "L2 Bloom 3-4: multi-step reasoning, explicit constraints, trade-offs, and algorithmic nuance."
         )
-    prompt = f"""
+
+    is_mcq_module = module_name in ('aptitude', 'fundamentals')
+    long_mcq_l2 = is_mcq_module and level == 'l2'
+    # Small batches + accumulation: avoids truncated JSON and yields enough items after level/dedupe filters.
+    batch_cap = 6 if long_mcq_l2 else (7 if is_mcq_module else 6)
+    overshoot = 2 if long_mcq_l2 else 3
+    collected = []
+    sig_seen = set(excluded_signatures)
+    last_error = None
+    temp = 0.52 if level == 'l1' else 0.82
+    outer_cap = 25
+    batch_idx = 0
+
+    while len(collected) < num_questions and batch_idx < outer_cap:
+        batch_idx += 1
+        need = num_questions - len(collected)
+        ask_count = min(need + overshoot, batch_cap)
+        ask_count = max(ask_count, min(4, need + 1))
+        batch_seed = f"{seed_line}-b{batch_idx}"
+
+        prompt = f"""
 Assessment theme: {topic}
 {style_inst}
 {strand_lines}
 
 Generate exactly {ask_count} high-quality {module_prompt} questions for placement preparation.
 {level_guidance}
-Randomization seed: {seed_line}
+Randomization seed: {batch_seed}
 Avoid repeated/ambiguous questions.
 Do not repeat items matching these excluded SHA-256 fingerprints (question text + options):
-{json.dumps(excluded_signatures[:200])}
+{json.dumps(list(sig_seen)[:200])}
 
 {schema_hint}
-Return JSON only, no markdown fences.
+Return JSON only, no markdown fences. Close all strings and brackets; output must be complete valid JSON.
 """
 
-    last_error = None
-    temp = 0.52 if level == 'l1' else 0.82
-    for _ in range(4):
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {groq_key}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": model,
-                "temperature": temp,
-                "top_p": 0.95,
-                "max_tokens": min(4500, 900 + ask_count * 220),
-                "messages": [
-                    {"role": "system", "content": "You are an expert placement test setter. Output strictly valid JSON."},
-                    {"role": "user", "content": prompt}
-                ]
-            },
-            timeout=45
-        )
-        if response.status_code == 429:
-            last_error = Exception('Groq rate limit reached. Please retry in a few seconds.')
-            continue
-        if response.status_code >= 400:
-            last_error = Exception(f"Groq API error ({response.status_code}): {response.text[:220]}")
+        if is_mcq_module:
+            max_tokens = 8192
+        else:
+            max_tokens = min(8192, 1200 + ask_count * 400)
+
+        inner_ok = False
+        for _ in range(3):
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {groq_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": model,
+                    "temperature": temp,
+                    "top_p": 0.95,
+                    "max_tokens": max_tokens,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are an expert placement test setter. Output strictly valid JSON: "
+                                "one array only, properly closed, no trailing commas."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                },
+                timeout=90,
+            )
+            if response.status_code == 429:
+                last_error = Exception('Groq rate limit reached. Please retry in a few seconds.')
+                continue
+            if response.status_code >= 400:
+                last_error = Exception(f"Groq API error ({response.status_code}): {response.text[:220]}")
+                continue
+
+            choice0 = (response.json().get('choices') or [{}])[0]
+            finish = (choice0.get('finish_reason') or '') or ''
+            raw = (choice0.get('message') or {}).get('content', '').strip()
+            cleaned = raw.replace('```json', '').replace('```', '').strip()
+            try:
+                parsed = json.loads(cleaned)
+            except json.JSONDecodeError as exc:
+                last_error = Exception(f'Invalid JSON from question generator ({exc}).')
+                if finish == 'length':
+                    last_error = Exception('Model output was truncated; retrying with a smaller batch.')
+                continue
+            if not isinstance(parsed, list) or not parsed:
+                last_error = Exception('Invalid response format from Groq question generator.')
+                continue
+
+            added_this = 0
+            for q in parsed:
+                if len(collected) >= num_questions:
+                    break
+                if not isinstance(q, dict):
+                    continue
+                sig = _placement_question_signature(q)
+                if sig and sig in sig_seen:
+                    continue
+                if not _placement_level_match(q, level, module_name):
+                    continue
+                if sig:
+                    sig_seen.add(sig)
+                collected.append(q)
+                added_this += 1
+            inner_ok = True
+            if len(collected) >= num_questions:
+                return collected[:num_questions]
+            if added_this == 0:
+                last_error = Exception('Generated set did not satisfy strict level constraints.')
+            break
+
+        if not inner_ok:
             continue
 
-        raw = (
-            response.json()
-            .get('choices', [{}])[0]
-            .get('message', {})
-            .get('content', '')
-            .strip()
-        )
-        cleaned = raw.replace('```json', '').replace('```', '').strip()
-        parsed = json.loads(cleaned)
-        if not isinstance(parsed, list) or not parsed:
-            last_error = Exception('Invalid response format from Groq question generator.')
-            continue
-        unique = []
-        seen = set(excluded_signatures)
-        for q in parsed:
-            if not isinstance(q, dict):
-                continue
-            sig = _placement_question_signature(q)
-            if sig and sig in seen:
-                continue
-            if not _placement_level_match(q, level, module_name):
-                continue
-            if sig:
-                seen.add(sig)
-            unique.append(q)
-        if len(unique) >= num_questions:
-            return unique[:num_questions]
-        last_error = Exception('Generated set did not satisfy strict level constraints.')
+    if len(collected) >= num_questions:
+        return collected[:num_questions]
     raise last_error or Exception('Could not generate level-aligned placement questions.')
 
 @login_manager.user_loader

@@ -80,6 +80,7 @@
 </div>
 
 <script>
+// Last used question index; "+ Add Question" assigns index = last + 1 (so second card is Question 2).
 let questionCount = 0;
 
 document.getElementById('addQuestionBtn').addEventListener('click', function() {
@@ -320,8 +321,8 @@ document.getElementById('quizForm').addEventListener('submit', function(e) {
   this.submit();
 });
 
-// Add first question on page load
 document.addEventListener('DOMContentLoaded', function() {
+  questionCount = 1;
   addQuestion(1);
 });
 </script>

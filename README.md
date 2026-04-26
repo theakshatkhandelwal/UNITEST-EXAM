@@ -97,6 +97,14 @@ GOOGLE_AI_API_KEY=your-google-api-key
 OPENROUTER_API_KEY=your-openrouter-key
 OCR_SPACE_API_KEY=optional-ocr-api-key
 
+# Email (OTP / reset password)
+MAIL_SERVER=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USE_TLS=true
+MAIL_USERNAME=theunitest@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_FROM=theunitest@gmail.com
+
 # Server
 PORT=5000
 ```

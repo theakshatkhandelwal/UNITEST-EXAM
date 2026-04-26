@@ -1332,6 +1332,7 @@ def _send_email_otp(email, otp):
     mail_port = int(os.environ.get('MAIL_PORT', '587'))
     mail_username = os.environ.get('MAIL_USERNAME')
     mail_password = os.environ.get('MAIL_PASSWORD')
+    mail_from = (os.environ.get('MAIL_FROM') or mail_username or '').strip()
     mail_use_tls = str(os.environ.get('MAIL_USE_TLS', 'true')).lower() == 'true'
 
     # Dev fallback when SMTP is not configured.
@@ -1341,7 +1342,7 @@ def _send_email_otp(email, otp):
 
     try:
         msg = MIMEMultipart()
-        msg['From'] = mail_username
+        msg['From'] = mail_from or mail_username
         msg['To'] = email
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain'))
@@ -1367,6 +1368,7 @@ def _send_password_reset_email(email, reset_link):
     mail_port = int(os.environ.get('MAIL_PORT', '587'))
     mail_username = os.environ.get('MAIL_USERNAME')
     mail_password = os.environ.get('MAIL_PASSWORD')
+    mail_from = (os.environ.get('MAIL_FROM') or mail_username or '').strip()
     mail_use_tls = str(os.environ.get('MAIL_USE_TLS', 'true')).lower() == 'true'
 
     if not (mail_server and mail_username and mail_password):
@@ -1375,7 +1377,7 @@ def _send_password_reset_email(email, reset_link):
 
     try:
         msg = MIMEMultipart()
-        msg['From'] = mail_username
+        msg['From'] = mail_from or mail_username
         msg['To'] = email
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'plain'))

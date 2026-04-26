@@ -1055,6 +1055,23 @@ LEETCODE_PRACTICE_POOL = [
     {"leetcode_id": 297, "leetcode_title": "Serialize and Deserialize Binary Tree", "leetcode_url": "https://leetcode.com/problems/serialize-and-deserialize-binary-tree/", "difficulty": "hard"},
 ]
 
+PLACEMENT_L1_PASS = 70.0
+PLACEMENT_L2_PASS = 50.0
+
+
+def _default_placement_levels():
+    levels = {}
+    for module in PLACEMENT_SEQUENCE:
+        levels[module] = {
+            'l1_score': 0.0,
+            'l2_score': 0.0,
+            'l1_passed': False,
+            'l2_passed': False,
+            'active_level': 'l1',
+        }
+    return levels
+
+
 def _default_placement_state():
     return {
         'current_stage': 'aptitude',
@@ -1071,7 +1088,8 @@ def _default_placement_state():
             'fundamentals': False,
             'basic_coding': False,
             'coding': False
-        }
+        },
+        'levels': _default_placement_levels(),
     }
 
 def _get_placement_state():
@@ -1081,9 +1099,18 @@ def _get_placement_state():
     state.setdefault('current_stage', 'aptitude')
     state.setdefault('scores', _default_placement_state()['scores'])
     state.setdefault('completed', _default_placement_state()['completed'])
+    state.setdefault('levels', _default_placement_levels())
     for key in PLACEMENT_SEQUENCE:
         state['scores'].setdefault(key, 0.0)
         state['completed'].setdefault(key, False)
+        lv = state['levels'].setdefault(key, {})
+        lv.setdefault('l1_score', 0.0)
+        lv.setdefault('l2_score', 0.0)
+        lv.setdefault('l1_passed', False)
+        lv.setdefault('l2_passed', False)
+        lv.setdefault('active_level', 'l1')
+        state['completed'][key] = bool(lv.get('l1_passed') and lv.get('l2_passed'))
+        state['scores'][key] = round((float(lv.get('l1_score', 0.0)) + float(lv.get('l2_score', 0.0))) / 2.0, 1)
     return state
 
 def _save_placement_state(state):
@@ -3452,6 +3479,7 @@ def placement_track():
     state = _get_placement_state()
     scores = state.get('scores', {})
     completed = state.get('completed', {})
+    levels = state.get('levels', {})
 
     # Group discussion/interview track.
     gd_attempts = db.session.query(PlacementInterview).filter_by(user_id=current_user.id).order_by(
@@ -3469,12 +3497,19 @@ def placement_track():
     )
 
     module_scores = {
-        'aptitude': round(float(scores.get('aptitude', 0.0)), 1),
-        'group_discussion': round(float(scores.get('group_discussion', 0.0)), 1),
-        'coding': round(float(scores.get('coding', 0.0)), 1),
-        'fundamentals': round(float(scores.get('fundamentals', 0.0)), 1),
-        'basic_coding': round(float(scores.get('basic_coding', 0.0)), 1),
+        key: round(float(scores.get(key, 0.0)), 1)
+        for key in PLACEMENT_SEQUENCE
     }
+    module_levels = {}
+    for key in PLACEMENT_SEQUENCE:
+        lv = levels.get(key, {})
+        module_levels[key] = {
+            'l1_score': round(float(lv.get('l1_score', 0.0)), 1),
+            'l2_score': round(float(lv.get('l2_score', 0.0)), 1),
+            'l1_passed': bool(lv.get('l1_passed', False)),
+            'l2_passed': bool(lv.get('l2_passed', False)),
+            'active_level': lv.get('active_level', 'l1'),
+        }
 
     next_locked = {
         'group_discussion': not completed.get('aptitude', False),
@@ -3490,14 +3525,20 @@ def placement_track():
         total_attempts=total_attempts,
         gd_attempts=gd_attempts,
         completed=completed,
+        module_levels=module_levels,
         current_stage=state.get('current_stage', 'aptitude'),
-        next_locked=next_locked
+        next_locked=next_locked,
+        l1_threshold=PLACEMENT_L1_PASS,
+        l2_threshold=PLACEMENT_L2_PASS,
     )
 
 @app.route('/placement_track/start/<module>')
 @login_required
 def placement_start_module(module):
     module = (module or '').strip().lower()
+    requested_level = (request.args.get('level') or 'l1').strip().lower()
+    if requested_level not in ('l1', 'l2'):
+        requested_level = 'l1'
     if module not in PLACEMENT_SEQUENCE:
         flash('Invalid placement module.', 'error')
         return redirect(url_for('placement_track'))
@@ -3517,13 +3558,26 @@ def placement_start_module(module):
         flash('Complete Basic Coding first to unlock Technical Coding.', 'error')
         return redirect(url_for('placement_track'))
 
+    levels = state.get('levels', {})
+    level_data = levels.get(module, {})
+    l1_passed = bool(level_data.get('l1_passed', False))
+    if requested_level == 'l2' and not l1_passed:
+        flash(f'Pass L1 (>= {PLACEMENT_L1_PASS:.0f}%) first to unlock L2.', 'error')
+        return redirect(url_for('placement_track'))
+    if requested_level == 'l1' and l1_passed:
+        requested_level = 'l2'
+
     state['current_stage'] = module
+    state['levels'][module]['active_level'] = requested_level
     _save_placement_state(state)
 
     if module == 'aptitude':
+        is_l2 = requested_level == 'l2'
         try:
             generated = _generate_placement_questions_groq(
-                'Placement Aptitude: quantitative + logical reasoning',
+                'Placement Aptitude: complex logical reasoning and applied problem solving'
+                if is_l2 else
+                'Placement Aptitude: basics, formulas, and direct logical reasoning',
                 'aptitude',
                 10
             )
@@ -3534,14 +3588,20 @@ def placement_start_module(module):
         session['current_quiz'] = {
             'questions': questions,
             'topic': 'Placement Aptitude - Most Asked Questions',
-            'bloom_level': 1,
-            'difficulty_level': 'intermediate',
-            'placement_module': 'aptitude'
+            'bloom_level': 3 if is_l2 else 1,
+            'difficulty_level': 'advanced' if is_l2 else 'intermediate',
+            'placement_module': 'aptitude',
+            'placement_level': requested_level,
         }
         return redirect(url_for('take_quiz'))
 
     if module == 'fundamentals':
-        topic = 'CS Fundamentals: OOPs, Computer Networks, DBMS, SQL, DSA basics'
+        is_l2 = requested_level == 'l2'
+        topic = (
+            'CS Fundamentals L2: scenario-driven OOPs, CN, DBMS, SQL, DSA reasoning and trade-offs'
+            if is_l2 else
+            'CS Fundamentals L1: OOPs, CN, DBMS, SQL, DSA basics and formula/definition-driven questions'
+        )
         questions = _generate_placement_questions_groq(topic, 'fundamentals', 10)
         if not questions:
             flash('Could not generate fundamentals questions. Please try again.', 'error')
@@ -3549,15 +3609,26 @@ def placement_start_module(module):
         session['current_quiz'] = {
             'questions': questions,
             'topic': topic,
-            'bloom_level': 1,
-            'difficulty_level': 'intermediate',
-            'placement_module': 'fundamentals'
+            'bloom_level': 3 if is_l2 else 1,
+            'difficulty_level': 'advanced' if is_l2 else 'intermediate',
+            'placement_module': 'fundamentals',
+            'placement_level': requested_level,
         }
         return redirect(url_for('take_quiz'))
 
     if module == 'coding':
-        topic = 'Technical Coding: arrays, strings, hash maps, linked list, recursion, DP basics'
+        is_l2 = requested_level == 'l2'
+        topic = (
+            'Technical Coding L2: medium/hard interview coding with complexity analysis and optimization'
+            if is_l2 else
+            'Technical Coding L1: easy/medium coding basics for interview preparation'
+        )
         questions = _pick_leetcode_mix()
+        if is_l2:
+            questions = [q for q in questions if str(q.get('difficulty', '')).lower() in ('medium', 'hard')] or questions
+        else:
+            questions = [q for q in questions if str(q.get('difficulty', '')).lower() in ('easy', 'medium')] or questions
+        questions = questions[:5]
         practice_recommendations = _pick_practice_recommendations(10)
         if not questions:
             questions = _generate_placement_questions_groq(topic, 'coding', 5) or []
@@ -3569,15 +3640,21 @@ def placement_start_module(module):
         session['current_quiz'] = {
             'questions': questions,
             'topic': topic,
-            'bloom_level': 1,
-            'difficulty_level': 'advanced',
+            'bloom_level': 3 if is_l2 else 1,
+            'difficulty_level': 'advanced' if is_l2 else 'intermediate',
             'placement_module': 'coding',
+            'placement_level': requested_level,
             'practice_recommendations': practice_recommendations
         }
         return redirect(url_for('take_quiz'))
 
     if module == 'basic_coding':
-        topic = 'Basic Coding: fibonacci, factorial, prime, palindrome, patterns, loops'
+        is_l2 = requested_level == 'l2'
+        topic = (
+            'Basic Coding L2: combined logic and edge-case based coding questions'
+            if is_l2 else
+            'Basic Coding L1: fibonacci, factorial, prime, palindrome, patterns, loops'
+        )
         try:
             questions = _generate_basic_coding_questions_groq(5)
         except Exception as e:
@@ -3591,9 +3668,10 @@ def placement_start_module(module):
         session['current_quiz'] = {
             'questions': questions,
             'topic': topic,
-            'bloom_level': 1,
-            'difficulty_level': 'beginner',
-            'placement_module': 'basic_coding'
+            'bloom_level': 3 if is_l2 else 1,
+            'difficulty_level': 'intermediate' if is_l2 else 'beginner',
+            'placement_module': 'basic_coding',
+            'placement_level': requested_level,
         }
         return redirect(url_for('take_quiz'))
 
@@ -3605,6 +3683,9 @@ def placement_ai_interview():
     try:
         data = request.get_json(silent=True) or {}
         topic = (data.get('topic') or 'General').strip()[:150]
+        level = (data.get('level') or 'l1').strip().lower()
+        if level not in ('l1', 'l2'):
+            level = 'l1'
         response_text = (data.get('response') or '').strip()
         if not response_text:
             return jsonify({'success': False, 'error': 'Response is required.'}), 400
@@ -3689,9 +3770,21 @@ Return STRICT JSON only in this exact schema:
         db.session.commit()
 
         state = _get_placement_state()
-        state['scores']['group_discussion'] = round(score, 1)
-        if score >= 60:
-            state['completed']['group_discussion'] = True
+        lv = state['levels'].setdefault('group_discussion', _default_placement_levels()['group_discussion'])
+        if level == 'l1':
+            lv['l1_score'] = round(score, 1)
+            lv['l1_passed'] = score >= PLACEMENT_L1_PASS
+            if lv['l1_passed']:
+                lv['active_level'] = 'l2'
+        else:
+            if not lv.get('l1_passed', False):
+                return jsonify({'success': False, 'error': f'Pass L1 first (>= {PLACEMENT_L1_PASS:.0f}%).'}), 400
+            lv['l2_score'] = round(score, 1)
+            lv['l2_passed'] = score >= PLACEMENT_L2_PASS
+            lv['active_level'] = 'l2'
+        state['scores']['group_discussion'] = round((float(lv.get('l1_score', 0.0)) + float(lv.get('l2_score', 0.0))) / 2.0, 1)
+        state['completed']['group_discussion'] = bool(lv.get('l1_passed') and lv.get('l2_passed'))
+        if state['completed']['group_discussion']:
             state['current_stage'] = 'fundamentals'
         _save_placement_state(state)
 
@@ -3705,7 +3798,12 @@ Return STRICT JSON only in this exact schema:
             'feedback': feedback,
             'strengths': strengths,
             'improvements': improvements,
-            'follow_up_question': follow_up_question
+            'follow_up_question': follow_up_question,
+            'level': level,
+            'level_passed': lv['l1_passed'] if level == 'l1' else lv['l2_passed'],
+            'l1_passed': lv.get('l1_passed', False),
+            'l2_passed': lv.get('l2_passed', False),
+            'module_cleared': state['completed']['group_discussion'],
         })
     except Exception as e:
         db.session.rollback()
@@ -5999,11 +6097,25 @@ def submit_quiz():
         final_score = f"{correct_answers}/{len(questions)}"
 
     placement_module = quiz_data.get('placement_module')
+    placement_level = (quiz_data.get('placement_level') or 'l1').strip().lower()
+    if placement_level not in ('l1', 'l2'):
+        placement_level = 'l1'
     if placement_module in PLACEMENT_SEQUENCE:
         state = _get_placement_state()
-        state['scores'][placement_module] = round(float(percentage), 1)
-        if percentage >= 60:
-            state['completed'][placement_module] = True
+        lv = state['levels'].setdefault(placement_module, _default_placement_levels()[placement_module])
+        if placement_level == 'l1':
+            lv['l1_score'] = round(float(percentage), 1)
+            lv['l1_passed'] = percentage >= PLACEMENT_L1_PASS
+            if lv['l1_passed']:
+                lv['active_level'] = 'l2'
+        else:
+            if lv.get('l1_passed', False):
+                lv['l2_score'] = round(float(percentage), 1)
+                lv['l2_passed'] = percentage >= PLACEMENT_L2_PASS
+                lv['active_level'] = 'l2'
+        state['scores'][placement_module] = round((float(lv.get('l1_score', 0.0)) + float(lv.get('l2_score', 0.0))) / 2.0, 1)
+        state['completed'][placement_module] = bool(lv.get('l1_passed') and lv.get('l2_passed'))
+        if state['completed'][placement_module]:
             if placement_module == 'aptitude':
                 state['current_stage'] = 'group_discussion'
             elif placement_module == 'fundamentals':

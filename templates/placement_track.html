@@ -46,9 +46,14 @@
                     <h6>1) Aptitude</h6>
                     <h4>{{ module_scores.aptitude }}%</h4>
                     <small class="text-muted d-block mb-2">Most asked aptitude questions</small>
-                    <a class="btn btn-sm btn-primary" href="{{ url_for('placement_start_module', module='aptitude') }}">
-                        Start / Retry
-                    </a>
+                    <div class="small mb-2">
+                        <div>L1: {{ module_levels.aptitude.l1_score }}% {% if module_levels.aptitude.l1_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                        <div>L2: {{ module_levels.aptitude.l2_score }}% {% if module_levels.aptitude.l2_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                    </div>
+                    <div class="d-flex justify-content-center gap-2">
+                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('placement_start_module', module='aptitude', level='l1') }}">L1</a>
+                        <a class="btn btn-sm btn-primary {% if not module_levels.aptitude.l1_passed %}disabled{% endif %}" href="{{ url_for('placement_start_module', module='aptitude', level='l2') }}">L2</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -59,10 +64,14 @@
                     <h6>2) Group Discussion</h6>
                     <h4>{{ module_scores.group_discussion }}%</h4>
                     <small class="text-muted d-block mb-2">Voice + AI analysis</small>
+                    <div class="small mb-2">
+                        <div>L1: {{ module_levels.group_discussion.l1_score }}% {% if module_levels.group_discussion.l1_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                        <div>L2: {{ module_levels.group_discussion.l2_score }}% {% if module_levels.group_discussion.l2_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                    </div>
                     {% if next_locked.group_discussion %}
                         <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-lock me-1"></i>Locked</button>
                     {% else %}
-                        <a class="btn btn-sm btn-success" href="#gdRound"><i class="fas fa-microphone me-1"></i>Start</a>
+                        <a class="btn btn-sm btn-success" href="#gdRound"><i class="fas fa-microphone me-1"></i>Open</a>
                     {% endif %}
                 </div>
             </div>
@@ -74,10 +83,17 @@
                     <h6>3) CS Fundamentals</h6>
                     <h4>{{ module_scores.fundamentals }}%</h4>
                     <small class="text-muted d-block mb-2">OOPs, CN, DBMS, SQL, DSA</small>
+                    <div class="small mb-2">
+                        <div>L1: {{ module_levels.fundamentals.l1_score }}% {% if module_levels.fundamentals.l1_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                        <div>L2: {{ module_levels.fundamentals.l2_score }}% {% if module_levels.fundamentals.l2_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                    </div>
                     {% if next_locked.fundamentals %}
                         <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-lock me-1"></i>Locked</button>
                     {% else %}
-                        <a class="btn btn-sm btn-info text-white" href="{{ url_for('placement_start_module', module='fundamentals') }}">Start</a>
+                        <div class="d-flex justify-content-center gap-2">
+                            <a class="btn btn-sm btn-outline-info" href="{{ url_for('placement_start_module', module='fundamentals', level='l1') }}">L1</a>
+                            <a class="btn btn-sm btn-info text-white {% if not module_levels.fundamentals.l1_passed %}disabled{% endif %}" href="{{ url_for('placement_start_module', module='fundamentals', level='l2') }}">L2</a>
+                        </div>
                     {% endif %}
                 </div>
             </div>
@@ -89,10 +105,17 @@
                     <h6>4) Basic Coding</h6>
                     <h4>{{ module_scores.basic_coding }}%</h4>
                     <small class="text-muted d-block mb-2">Fibonacci, factorial, prime, patterns</small>
+                    <div class="small mb-2">
+                        <div>L1: {{ module_levels.basic_coding.l1_score }}% {% if module_levels.basic_coding.l1_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                        <div>L2: {{ module_levels.basic_coding.l2_score }}% {% if module_levels.basic_coding.l2_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                    </div>
                     {% if next_locked.basic_coding %}
                         <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-lock me-1"></i>Locked</button>
                     {% else %}
-                        <a class="btn btn-sm btn-secondary text-white" href="{{ url_for('placement_start_module', module='basic_coding') }}">Start</a>
+                        <div class="d-flex justify-content-center gap-2">
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('placement_start_module', module='basic_coding', level='l1') }}">L1</a>
+                            <a class="btn btn-sm btn-secondary text-white {% if not module_levels.basic_coding.l1_passed %}disabled{% endif %}" href="{{ url_for('placement_start_module', module='basic_coding', level='l2') }}">L2</a>
+                        </div>
                     {% endif %}
                 </div>
             </div>
@@ -104,10 +127,17 @@
                     <h6>5) Technical Coding</h6>
                     <h4>{{ module_scores.coding }}%</h4>
                     <small class="text-muted d-block mb-2">Coding interview challenges</small>
+                    <div class="small mb-2">
+                        <div>L1: {{ module_levels.coding.l1_score }}% {% if module_levels.coding.l1_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                        <div>L2: {{ module_levels.coding.l2_score }}% {% if module_levels.coding.l2_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
+                    </div>
                     {% if next_locked.coding %}
                         <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-lock me-1"></i>Locked</button>
                     {% else %}
-                        <a class="btn btn-sm btn-warning text-white" href="{{ url_for('placement_start_module', module='coding') }}">Start</a>
+                        <div class="d-flex justify-content-center gap-2">
+                            <a class="btn btn-sm btn-outline-warning" href="{{ url_for('placement_start_module', module='coding', level='l1') }}">L1</a>
+                            <a class="btn btn-sm btn-warning text-white {% if not module_levels.coding.l1_passed %}disabled{% endif %}" href="{{ url_for('placement_start_module', module='coding', level='l2') }}">L2</a>
+                        </div>
                     {% endif %}
                 </div>
             </div>
@@ -121,11 +151,24 @@
                     <h5 class="mb-0"><i class="fas fa-microphone-alt me-2"></i>Group Discussion Round (Voice + AI)</h5>
                 </div>
                 <div class="card-body">
+                    <div class="alert alert-light border mb-3">
+                        <strong>Pass criteria:</strong> L1 requires >= {{ l1_threshold|int }}%, L2 requires >= {{ l2_threshold|int }}%. You must clear both to unlock next module.
+                    </div>
                     {% if next_locked.group_discussion %}
                     <div class="alert alert-secondary mb-3">
-                        Complete Aptitude module (>=60%) to unlock Group Discussion.
+                        Complete Aptitude (L1 & L2 cleared) to unlock Group Discussion.
                     </div>
                     {% endif %}
+                    <div class="mb-3">
+                        <label class="form-label">GD Level</label>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="gdLevel" id="gdLevelL1" value="l1" autocomplete="off" {% if module_levels.group_discussion.active_level != 'l2' %}checked{% endif %}>
+                            <label class="btn btn-outline-primary btn-sm" for="gdLevelL1">L1</label>
+
+                            <input type="radio" class="btn-check" name="gdLevel" id="gdLevelL2" value="l2" autocomplete="off" {% if module_levels.group_discussion.active_level == 'l2' %}checked{% endif %} {% if not module_levels.group_discussion.l1_passed %}disabled{% endif %}>
+                            <label class="btn btn-outline-primary btn-sm {% if not module_levels.group_discussion.l1_passed %}disabled{% endif %}" for="gdLevelL2">L2</label>
+                        </div>
+                    </div>
                     <div class="mb-3">
                         <label class="form-label">Topic</label>
                         <div class="input-group">
@@ -197,6 +240,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const voiceStatus = document.getElementById('voiceStatus');
     const regenerateTopicBtn = document.getElementById('regenerateTopicBtn');
     const editTopicBtn = document.getElementById('editTopicBtn');
+    const gdLevelL1 = document.getElementById('gdLevelL1');
+    const gdLevelL2 = document.getElementById('gdLevelL2');
     let isEditingTopic = false;
     let recognition = null;
     let mediaRecorder = null;
@@ -342,6 +387,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     btn.addEventListener('click', async function () {
         const topic = (topicInput.value || '').trim() || 'General';
+        const level = gdLevelL2 && gdLevelL2.checked ? 'l2' : 'l1';
         const response = (responseInput.value || '').trim();
         if (!response) {
             resultBox.innerHTML = '<div class="alert alert-warning mb-0">Please write your response first.</div>';
@@ -356,7 +402,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const res = await fetch('/placement_track/ai_interview', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ topic: topic, response: response })
+                body: JSON.stringify({ topic: topic, response: response, level: level })
             });
             const data = await res.json();
             if (!data.success) {
@@ -385,11 +431,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     </div>
                 </div>
             `;
-            if (data.score >= 60) {
-                resultBox.innerHTML += '<div class="alert alert-success mt-2 mb-0">GD round cleared. CS Fundamentals is now unlocked.</div>';
+            if (data.level === 'l1') {
+                if (data.level_passed) {
+                    resultBox.innerHTML += '<div class="alert alert-success mt-2 mb-0">L1 cleared. L2 is now unlocked for Group Discussion.</div>';
+                } else {
+                    resultBox.innerHTML += '<div class="alert alert-warning mt-2 mb-0">L1 not cleared. Score must be >= {{ l1_threshold|int }}%.</div>';
+                }
+            } else if (data.level_passed && data.module_cleared) {
+                resultBox.innerHTML += '<div class="alert alert-success mt-2 mb-0">L2 cleared. Group Discussion module completed; CS Fundamentals is now unlocked.</div>';
                 setTimeout(function () { window.location.reload(); }, 900);
             } else {
-                resultBox.innerHTML += '<div class="alert alert-warning mt-2 mb-0">Score below 60%. Reattempt GD to unlock the next module.</div>';
+                resultBox.innerHTML += '<div class="alert alert-warning mt-2 mb-0">L2 not cleared. Score must be >= {{ l2_threshold|int }}%.</div>';
             }
         } catch (err) {
             resultBox.innerHTML = `<div class="alert alert-danger mb-0">${err.message}</div>`;

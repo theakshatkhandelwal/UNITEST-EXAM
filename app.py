@@ -28,6 +28,7 @@ import tempfile
 import csv
 import smtplib
 import random
+from sqlalchemy.exc import IntegrityError
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from urllib.parse import urlencode
@@ -673,6 +674,24 @@ class MockInterviewState(db.Model):
     user = db.relationship('User', backref='mock_interview_drafts')
 
 
+class PlacementSeenQuestion(db.Model):
+    """Per-user placement question fingerprints so repeats are avoided across sessions/devices."""
+    __tablename__ = 'placement_seen_question'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    module = db.Column(db.String(32), nullable=False)
+    level = db.Column(db.String(8), nullable=False)
+    signature = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user = db.relationship('User', backref='placement_seen_questions')
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'signature', name='uq_placement_seen_user_sig'),
+        db.Index('ix_placement_seen_user_mod_lvl', 'user_id', 'module', 'level'),
+    )
+
+
 class MockInterviewSession(db.Model):
     """Persisted AI mock interview (resume + role based)."""
     id = db.Column(db.Integer, primary_key=True)
@@ -1075,32 +1094,75 @@ def _default_placement_levels():
 def _placement_question_signature(q):
     if not isinstance(q, dict):
         return ''
-    base = str(q.get('question', '')).strip().lower()
-    base = re.sub(r'\s+', ' ', base)
-    return hashlib.sha256(base.encode('utf-8')).hexdigest()[:16] if base else ''
+    parts = [str(q.get('question', '')).strip().lower()]
+    opts = q.get('options')
+    if isinstance(opts, list) and opts:
+        parts.append('|'.join(str(o).strip().lower() for o in opts))
+    lid = q.get('leetcode_id')
+    if lid is not None and str(lid).strip() != '':
+        parts.append(f"id:{lid}")
+    blob = re.sub(r'\s+', ' ', ' '.join(parts)).strip()
+    return hashlib.sha256(blob.encode('utf-8')).hexdigest() if blob else ''
 
 
-def _get_recent_placement_signatures(state, module, level, limit=60):
+def _placement_seen_db_signatures(user_id, module, level, limit=300):
+    if not user_id:
+        return []
+    rows = (
+        PlacementSeenQuestion.query.filter_by(user_id=user_id, module=module, level=level)
+        .order_by(PlacementSeenQuestion.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [r.signature for r in rows if r.signature]
+
+
+def _get_recent_placement_signatures(state, module, level, limit=200):
+    """Session + DB: durable exclusions so questions do not repeat across logins or cookie resets."""
     key = f"{module}:{level}"
     recent = (state.get('recent_questions', {}) or {}).get(key, [])
     if not isinstance(recent, list):
-        return []
-    return [str(x) for x in recent[:limit] if isinstance(x, str)]
+        recent = []
+    session_sigs = [str(x) for x in recent if isinstance(x, str)]
+    uid = getattr(current_user, 'id', None)
+    db_sigs = _placement_seen_db_signatures(uid, module, level, limit=limit)
+    merged = []
+    seen = set()
+    for s in db_sigs + session_sigs:
+        if not s or s in seen:
+            continue
+        seen.add(s)
+        merged.append(s)
+        if len(merged) >= limit:
+            break
+    return merged
 
 
 def _remember_placement_signatures(state, module, level, questions, max_keep=120):
     key = f"{module}:{level}"
     recent_map = state.setdefault('recent_questions', {})
     existing = list(recent_map.get(key, []) or [])
+    uid = getattr(current_user, 'id', None)
+    new_for_db = []
     for q in questions:
         sig = _placement_question_signature(q)
         if sig and sig not in existing:
             existing.insert(0, sig)
+            new_for_db.append(sig)
     recent_map[key] = existing[:max_keep]
+    if uid and new_for_db:
+        for sig in new_for_db:
+            db.session.add(PlacementSeenQuestion(
+                user_id=uid, module=module, level=level, signature=sig,
+            ))
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
 
 
-def _placement_level_match(question_obj, level, module_name):
-    """Heuristic guardrail to enforce practical L1/L2 separation."""
+def _placement_level_match(question_obj, level, module_name, relax_mcq_scenario=False):
+    """Guardrail for L1 (recall/direct) vs L2 (applied/scenario). relax_mcq_scenario: static bank fallback."""
     if not isinstance(question_obj, dict):
         return False
     level = (level or 'l1').lower()
@@ -1110,36 +1172,62 @@ def _placement_level_match(question_obj, level, module_name):
     atxt = str(question_obj.get('answer', '')).strip().lower()
     full = f"{qtxt} {stxt} {atxt}"
     tokens = len(re.findall(r'\w+', qtxt))
+    qtype = str(question_obj.get('type', '')).strip().lower()
 
     advanced_markers = (
-        'scenario', 'case', 'optimize', 'optimization', 'trade-off', 'tradeoff',
+        'scenario', 'case study', 'optimize', 'optimization', 'trade-off', 'tradeoff',
         'edge case', 'edge-case', 'constraint', 'complexity', 'time complexity',
-        'space complexity', 'design', 'reason', 'justify', 'multi-step', 'multistep',
-        'approach', 'strategy'
+        'space complexity', 'design', 'justify', 'multi-step', 'multistep',
+        'which approach', 'best strategy', 'what would you', 'how would you',
     )
     basic_markers = (
-        'formula', 'calculate', 'find', 'simplify', 'identify', 'basic', 'direct',
-        'definition', 'what is', 'compute'
+        'formula', 'calculate', 'find', 'simplify', 'identify', 'definition', 'what is',
+        'compute', 'value of', 'next number', 'ratio', 'average', 'percentage',
+        'hcf', 'lcm', 'gcd', 'select', 'choose the correct',
     )
 
-    is_advanced_text = any(m in full for m in advanced_markers) or tokens >= 28
-    is_basic_text = any(m in full for m in basic_markers) or tokens <= 18
+    is_advanced_text = any(m in full for m in advanced_markers) or tokens >= 30
+    is_basic_text = any(m in full for m in basic_markers) or tokens <= 20
 
     if module_name in ('coding', 'basic_coding'):
         difficulty = str(question_obj.get('difficulty', '')).strip().lower()
         if level == 'l1':
-            if difficulty in ('hard',):
+            if difficulty in ('hard', 'medium'):
                 return False
-            return is_basic_text or difficulty in ('easy', 'medium')
+            if difficulty == 'easy':
+                return True
+            return not is_advanced_text and tokens <= 48
         if difficulty == 'easy':
-            return is_advanced_text
-        return is_advanced_text or difficulty in ('medium', 'hard')
+            return is_advanced_text and tokens >= 22
+        return difficulty in ('medium', 'hard') or (is_advanced_text and tokens >= 24)
+
+    is_mcq = qtype == 'mcq' or (qtype == '' and module_name in ('aptitude', 'fundamentals'))
+
+    if is_mcq and module_name in ('aptitude', 'fundamentals'):
+        if level == 'l1':
+            if 'scenario' in qtxt:
+                return False
+            if tokens > 52 or len(qtxt) > 320:
+                return False
+            if is_advanced_text and not is_basic_text and tokens > 28:
+                return False
+            return True
+        if relax_mcq_scenario:
+            # Static banks rarely use "Scenario:"; use length + reasoning depth instead.
+            return is_advanced_text or tokens >= 20 or len(qtxt) >= 120
+        head = qtxt[:160].strip()
+        has_scenario_prefix = head.lower().startswith('scenario:') or head.lower().startswith('scenario :')
+        if not has_scenario_prefix:
+            return False
+        return tokens >= 18 and len(qtxt) >= 90
 
     if level == 'l1':
-        if is_advanced_text and not is_basic_text:
+        if is_advanced_text and not is_basic_text and tokens > 26:
+            return False
+        if tokens > 60:
             return False
         return True
-    return is_advanced_text
+    return is_advanced_text or tokens >= 26
 
 
 def _default_placement_state(user_id=None):
@@ -1259,26 +1347,23 @@ def _normalize_coding_question(q):
     ]
     return normalized
 
-def _pick_leetcode_mix(excluded_signatures=None, prefer=('easy', 'medium', 'hard')):
+def _pick_leetcode_mix(excluded_signatures=None, prefer=('easy', 'medium', 'hard'), max_count=5):
+    """Shuffle the full preferred pool so users with long exclusion history still get fresh picks."""
     excluded_signatures = set(excluded_signatures or [])
-    easy = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') == 'easy']
-    medium = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') == 'medium']
-    hard = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') == 'hard']
-    selected = []
-    if 'easy' in prefer:
-        selected.extend(random.sample(easy, min(2, len(easy))))
-    if 'medium' in prefer:
-        selected.extend(random.sample(medium, min(2, len(medium))))
-    if 'hard' in prefer:
-        selected.extend(random.sample(hard, min(1, len(hard))))
-    random.shuffle(selected)
+    prefer_set = set(prefer)
+    pool = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') in prefer_set]
+    if not pool:
+        pool = list(PLACEMENT_LEETCODE_BANK)
+    random.shuffle(pool)
     out = []
-    for q in selected:
+    for q in pool:
         nq = _normalize_coding_question(q)
         sig = _placement_question_signature(nq)
         if sig and sig in excluded_signatures:
             continue
         out.append(nq)
+        if len(out) >= max_count:
+            break
     return out
 
 def _pick_practice_recommendations(count=10):
@@ -1301,26 +1386,29 @@ def _generate_basic_coding_questions_groq(num_questions=5, level='l1', user_seed
     excluded_signatures = excluded_signatures or []
     seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
     level = (level or 'l1').lower()
+    ask_count = min(num_questions + 5, 12)
+    diff_line = '"difficulty": "easy"' if level == 'l1' else '"difficulty": "medium"'
     level_guidance = (
-        "L1 strict: Bloom 1-2 only. Use direct/basic/formula-driven coding tasks. "
-        "Do not include optimization/complexity/edge-case heavy reasoning."
+        "L1 strict: Bloom 1-2 only. Single-pass I/O, loops, or simple math on arrays/strings. "
+        "No asymptotic analysis, no optimization proof, no tricky adversarial edge cases."
         if level == 'l1' else
-        "L2 strict: Bloom 3-4 only. Require applied reasoning, constraints, and multi-step logic."
+        "L2 strict: Bloom 3-4 only. Each problem must state explicit constraints (bounds, formats) "
+        "and require combining 2+ ideas (e.g. prefix + hashmap, two pointers with invariant)."
     )
     prompt = f"""
-Generate exactly {num_questions} coding interview questions.
+Generate exactly {ask_count} distinct coding interview questions.
 {level_guidance}
 Topics: fibonacci, factorial, prime check, palindrome, reverse number, patterns, sum/digits loops, basic arrays/strings.
 Randomization seed: {seed_line}
-Avoid repeating questions from excluded signatures:
-{json.dumps(excluded_signatures[:80])}
+Avoid repeating questions whose fingerprints match these excluded SHA-256 hashes (question+options/id):
+{json.dumps(excluded_signatures[:200])}
 
 Return STRICT JSON array only. Each item must be:
 {{
   "question": "clear problem statement",
   "type": "coding",
   "marks": 10,
-  "difficulty": "easy",
+  {diff_line},
   "sample_input": "input text",
   "sample_output": "output text",
   "solution": "short approach",
@@ -1337,7 +1425,8 @@ Rules:
 - Keep language constraints to python/java/cpp/c by default.
 """
     last_error = None
-    for _ in range(2):
+    temp = 0.55 if level == 'l1' else 0.78
+    for _ in range(4):
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
@@ -1346,15 +1435,15 @@ Rules:
             },
             json={
                 "model": model,
-                "temperature": 0.72,
+                "temperature": temp,
                 "top_p": 0.95,
-                "max_tokens": 2600,
+                "max_tokens": 3200,
                 "messages": [
                     {"role": "system", "content": "You are a coding question generator. Output strictly valid JSON array only."},
                     {"role": "user", "content": prompt}
                 ]
             },
-            timeout=35
+            timeout=45
         )
         if response.status_code >= 400:
             last_error = Exception(f"Groq API error ({response.status_code}): {response.text[:200]}")
@@ -1378,6 +1467,10 @@ Rules:
             if not isinstance(q, dict):
                 continue
             nq = _normalize_coding_question(q)
+            if level == 'l1':
+                nq['difficulty'] = 'easy'
+            else:
+                nq['difficulty'] = 'medium'
             sig = _placement_question_signature(nq)
             if sig and sig in seen:
                 continue
@@ -1386,7 +1479,7 @@ Rules:
             if sig:
                 seen.add(sig)
             unique.append(nq)
-        if len(unique) >= max(2, min(num_questions, 3)):
+        if len(unique) >= num_questions:
             return unique[:num_questions]
         last_error = Exception('Generated coding set did not satisfy strict level constraints.')
     raise last_error or Exception('Could not generate level-aligned basic coding questions.')
@@ -1431,26 +1524,36 @@ Return strict JSON array with each item:
     excluded_signatures = excluded_signatures or []
     level = (level or 'l1').lower()
     seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
-    level_guidance = (
-        "L1 strict: Bloom 1-2 only. Keep direct/basic/formula-driven questions. "
-        "Forbid scenario/case-study/optimization/complexity reasoning."
-        if level == 'l1' else
-        "L2 strict: Bloom 3-4 only. Require applied reasoning, scenario/case-based framing, and multi-step thinking."
-    )
+    ask_count = min(num_questions + 8, 26)
+    if module_name in ('aptitude', 'fundamentals'):
+        level_guidance = (
+            "L1 Bloom 1-2: single-step recall, short numeric/logic stems (aim under 45 words). "
+            "Never use the word 'scenario' (any case). No workplace stories."
+            if level == 'l1' else
+            "L2 Bloom 3-4: applied judgment. For EVERY item, the question string MUST begin with "
+            "the exact prefix \"Scenario: \" then 2-4 sentences of context, then the MCQ task."
+        )
+    else:
+        level_guidance = (
+            "L1 Bloom 1-2: compact stems, definition/small-step reasoning, no heavy optimization proofs."
+            if level == 'l1' else
+            "L2 Bloom 3-4: multi-step reasoning, explicit constraints, trade-offs, and algorithmic nuance."
+        )
     prompt = f"""
-Generate exactly {num_questions} high-quality {module_prompt} questions for placement preparation.
+Generate exactly {ask_count} high-quality {module_prompt} questions for placement preparation.
 {level_guidance}
 Randomization seed: {seed_line}
 Avoid repeated/ambiguous questions.
-Do not repeat or paraphrase these excluded question signatures:
-{json.dumps(excluded_signatures[:80])}
+Do not repeat items matching these excluded SHA-256 fingerprints (question text + options):
+{json.dumps(excluded_signatures[:200])}
 
 {schema_hint}
 Return JSON only, no markdown fences.
 """
 
     last_error = None
-    for _ in range(2):
+    temp = 0.52 if level == 'l1' else 0.82
+    for _ in range(4):
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers={
@@ -1459,15 +1562,15 @@ Return JSON only, no markdown fences.
             },
             json={
                 "model": model,
-                "temperature": 0.75,
+                "temperature": temp,
                 "top_p": 0.95,
-                "max_tokens": 2200,
+                "max_tokens": min(4500, 900 + ask_count * 220),
                 "messages": [
                     {"role": "system", "content": "You are an expert placement test setter. Output strictly valid JSON."},
                     {"role": "user", "content": prompt}
                 ]
             },
-            timeout=35
+            timeout=45
         )
         if response.status_code == 429:
             last_error = Exception('Groq rate limit reached. Please retry in a few seconds.')
@@ -1501,8 +1604,8 @@ Return JSON only, no markdown fences.
             if sig:
                 seen.add(sig)
             unique.append(q)
-        if len(unique) >= max(3, min(num_questions, 5)):
-            return unique
+        if len(unique) >= num_questions:
+            return unique[:num_questions]
         last_error = Exception('Generated set did not satisfy strict level constraints.')
     raise last_error or Exception('Could not generate level-aligned placement questions.')
 
@@ -3753,20 +3856,28 @@ def placement_start_module(module):
             questions = generated[:10]
         except Exception as e:
             print(f"Groq aptitude generation failed, using fallback bank: {e}")
-            randomized = random.sample(PLACEMENT_APTITUDE_BANK, min(10, len(PLACEMENT_APTITUDE_BANK)))
+            randomized = list(PLACEMENT_APTITUDE_BANK)
+            random.shuffle(randomized)
             questions = []
             used = set(recent_signatures)
             for q in randomized:
+                if not _placement_level_match(q, requested_level, 'aptitude', relax_mcq_scenario=True):
+                    continue
                 sig = _placement_question_signature(q)
                 if sig and sig in used:
                     continue
                 if sig:
                     used.add(sig)
                 questions.append(q)
+                if len(questions) >= 10:
+                    break
             if len(questions) < 10:
                 for q in randomized:
-                    if q not in questions:
-                        questions.append(q)
+                    if q in questions:
+                        continue
+                    if not _placement_level_match(q, requested_level, 'aptitude', relax_mcq_scenario=True):
+                        continue
+                    questions.append(q)
                     if len(questions) >= 10:
                         break
             questions = questions[:10]
@@ -3817,12 +3928,12 @@ def placement_start_module(module):
             if is_l2 else
             'Technical Coding L1: easy/medium coding basics for interview preparation'
         )
-        prefer = ('medium', 'hard') if is_l2 else ('easy', 'medium')
+        prefer = ('medium', 'hard') if is_l2 else ('easy',)
         questions = _pick_leetcode_mix(excluded_signatures=recent_signatures, prefer=prefer)
         if is_l2:
             questions = [q for q in questions if str(q.get('difficulty', '')).lower() in ('medium', 'hard')] or questions
         else:
-            questions = [q for q in questions if str(q.get('difficulty', '')).lower() in ('easy', 'medium')] or questions
+            questions = [q for q in questions if str(q.get('difficulty', '')).lower() == 'easy'] or questions
         questions = questions[:5]
         practice_recommendations = _pick_practice_recommendations(10)
         if not questions:

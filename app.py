@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -1634,14 +1634,18 @@ def _normalize_coding_question(q):
     ]
     return normalized
 
-def _pick_leetcode_mix(excluded_signatures=None, prefer=('easy', 'medium', 'hard'), max_count=5):
+def _pick_leetcode_mix(excluded_signatures=None, prefer=('easy', 'medium', 'hard'), max_count=5, rng_seed=None):
     """Shuffle the full preferred pool so users with long exclusion history still get fresh picks."""
     excluded_signatures = set(excluded_signatures or [])
     prefer_set = set(prefer)
     pool = [q for q in PLACEMENT_LEETCODE_BANK if q.get('difficulty') in prefer_set]
     if not pool:
         pool = list(PLACEMENT_LEETCODE_BANK)
-    random.shuffle(pool)
+    if rng_seed:
+        rng = random.Random(int(hashlib.sha256(str(rng_seed).encode('utf-8')).hexdigest()[:14], 16))
+        rng.shuffle(pool)
+    else:
+        random.shuffle(pool)
     out = []
     for q in pool:
         nq = _normalize_coding_question(q)
@@ -1665,7 +1669,7 @@ def _pick_practice_recommendations(count=10):
     random.shuffle(picked)
     return picked[:count]
 
-def _generate_basic_coding_questions_groq(num_questions=5, level='l1', user_seed=None, excluded_signatures=None):
+def _generate_basic_coding_questions_groq(num_questions=5, level='l1', user_seed=None, excluded_signatures=None, user_id=None, attempt_nonce=None):
     excluded_signatures = excluded_signatures or []
     seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
     level = (level or 'l1').lower()
@@ -1686,9 +1690,15 @@ def _generate_basic_coding_questions_groq(num_questions=5, level='l1', user_seed
             + '\n- '.join(strands[:12])
         )
     style_inst = _placement_style_instruction('basic_coding', level)
+    uniq = ''
+    if user_id is not None or attempt_nonce:
+        uniq = (
+            f"\nUNIQUE_RUN_ID: user-{user_id or 0}-nonce-{attempt_nonce or 'na'}-t{int(time.time() * 1000) % 1_000_000_000}\n"
+            "Do not reuse boilerplate stems; vary variable names, bounds, and story hooks.\n"
+        )
     prompt = f"""
 Generate exactly {ask_count} distinct coding interview questions.
-{style_inst}
+{uniq}{style_inst}
 {strand_lines}
 {level_guidance}
 Randomization seed: {seed_line}
@@ -1771,7 +1781,7 @@ Rules:
         last_error = Exception('Generated coding set did not satisfy strict level constraints.')
     raise last_error or Exception('Could not generate level-aligned basic coding questions.')
 
-def _generate_placement_questions_groq(topic, module_name, num_questions=10, level='l1', user_seed=None, excluded_signatures=None, max_runtime_sec=None):
+def _generate_placement_questions_groq(topic, module_name, num_questions=10, level='l1', user_seed=None, excluded_signatures=None, max_runtime_sec=None, user_id=None, attempt_nonce=None):
     module_prompt = "placement aptitude"
     if module_name == 'fundamentals':
         module_prompt = "CS fundamentals: OOPs, Computer Networks, DBMS, SQL, DSA basics"
@@ -1851,6 +1861,8 @@ Return strict JSON array with each item:
     sig_seen = set(excluded_signatures)
     last_error = None
     temp = 0.52 if level == 'l1' else 0.82
+    if module_name == 'aptitude':
+        temp = 0.58 if level == 'l1' else 0.86
     if max_runtime_sec is None:
         # Keep aptitude L1 snappy; fall back quickly instead of hanging.
         if module_name == 'aptitude' and level == 'l1':
@@ -1871,9 +1883,17 @@ Return strict JSON array with each item:
         ask_count = max(ask_count, min(4, need + 1))
         batch_seed = f"{seed_line}-b{batch_idx}"
 
+        uniq = ''
+        if user_id is not None or attempt_nonce:
+            uniq = (
+                f"\nUNIQUE_RUN_ID: user-{user_id or 0}-nonce-{attempt_nonce or 'na'}-batch-{batch_idx}-"
+                f"t{int(time.time() * 1000) % 1_000_000_000}\n"
+                "Anti-repeat: vary all numeric constants, names, and contexts vs any default template; "
+                "do not copy famous textbook/diagnostic stems verbatim.\n"
+            )
         prompt = f"""
 Assessment theme: {topic}
-{style_inst}
+{uniq}{style_inst}
 {aptitude_topic_lock}
 {strand_lines}
 
@@ -4165,6 +4185,16 @@ def placement_track():
         l2_threshold=PLACEMENT_L2_PASS,
     )
 
+
+def _placement_redirect_take_quiz():
+    """Placement quizzes must never be cached at the edge or browser (prevents 'same quiz for everyone')."""
+    resp = redirect(url_for('take_quiz'))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+
 @app.route('/placement_track/start/<module>')
 @login_required
 def placement_start_module(module):
@@ -4192,7 +4222,6 @@ def placement_start_module(module):
         return redirect(url_for('placement_track'))
 
     levels = state.get('levels', {})
-    attempt_seed = f"u{current_user.id}-{module}-{requested_level}-{int(time.time())}-{random.randint(100,999)}"
     recent_signatures = _get_recent_placement_signatures(state, module, requested_level)
     level_data = levels.get(module, {})
     l1_passed = bool(level_data.get('l1_passed', False))
@@ -4201,6 +4230,12 @@ def placement_start_module(module):
         return redirect(url_for('placement_track'))
     if requested_level == 'l1' and l1_passed:
         requested_level = 'l2'
+
+    attempt_seed = (
+        f"u{current_user.id}-{module}-{requested_level}-"
+        f"{int(time.time())}-{secrets.randbelow(1_000_000)}-{secrets.token_hex(8)}"
+    )
+    attempt_nonce = secrets.token_hex(12)
 
     state['current_stage'] = module
     state['levels'][module]['active_level'] = requested_level
@@ -4215,13 +4250,16 @@ def placement_start_module(module):
                 10,
                 level=requested_level,
                 user_seed=attempt_seed,
-                excluded_signatures=recent_signatures
+                excluded_signatures=recent_signatures,
+                user_id=current_user.id,
+                attempt_nonce=attempt_nonce,
             )
             questions = generated[:10]
         except Exception as e:
             print(f"Groq aptitude generation failed, using fallback bank: {e}")
             randomized = list(PLACEMENT_APTITUDE_BANK)
-            random.shuffle(randomized)
+            rng_fb = random.Random(int(hashlib.sha256(attempt_seed.encode('utf-8')).hexdigest()[:14], 16))
+            rng_fb.shuffle(randomized)
             questions = []
             used = set(recent_signatures)
             for q in randomized:
@@ -4255,7 +4293,7 @@ def placement_start_module(module):
             'placement_module': 'aptitude',
             'placement_level': requested_level,
         }
-        return redirect(url_for('take_quiz'))
+        return _placement_redirect_take_quiz()
 
     if module == 'fundamentals':
         is_l2 = requested_level == 'l2'
@@ -4264,7 +4302,9 @@ def placement_start_module(module):
             topic, 'fundamentals', 10,
             level=requested_level,
             user_seed=attempt_seed,
-            excluded_signatures=recent_signatures
+            excluded_signatures=recent_signatures,
+            user_id=current_user.id,
+            attempt_nonce=attempt_nonce,
         )
         if not questions:
             flash('Could not generate fundamentals questions. Please try again.', 'error')
@@ -4279,13 +4319,17 @@ def placement_start_module(module):
             'placement_module': 'fundamentals',
             'placement_level': requested_level,
         }
-        return redirect(url_for('take_quiz'))
+        return _placement_redirect_take_quiz()
 
     if module == 'coding':
         is_l2 = requested_level == 'l2'
         topic = _placement_quiz_display_topic('coding', requested_level)
         prefer = ('medium', 'hard') if is_l2 else ('easy',)
-        questions = _pick_leetcode_mix(excluded_signatures=recent_signatures, prefer=prefer)
+        questions = _pick_leetcode_mix(
+            excluded_signatures=recent_signatures,
+            prefer=prefer,
+            rng_seed=f"{attempt_seed}|placement-coding",
+        )
         if is_l2:
             questions = [q for q in questions if str(q.get('difficulty', '')).lower() in ('medium', 'hard')] or questions
         else:
@@ -4297,7 +4341,9 @@ def placement_start_module(module):
                 topic, 'coding', 5,
                 level=requested_level,
                 user_seed=attempt_seed,
-                excluded_signatures=recent_signatures
+                excluded_signatures=recent_signatures,
+                user_id=current_user.id,
+                attempt_nonce=attempt_nonce,
             ) or []
             questions = [_normalize_coding_question(q) for q in questions if isinstance(q, dict)]
             practice_recommendations = _pick_practice_recommendations(10)
@@ -4315,7 +4361,7 @@ def placement_start_module(module):
             'placement_level': requested_level,
             'practice_recommendations': practice_recommendations
         }
-        return redirect(url_for('take_quiz'))
+        return _placement_redirect_take_quiz()
 
     if module == 'basic_coding':
         is_l2 = requested_level == 'l2'
@@ -4325,11 +4371,17 @@ def placement_start_module(module):
                 5,
                 level=requested_level,
                 user_seed=attempt_seed,
-                excluded_signatures=recent_signatures
+                excluded_signatures=recent_signatures,
+                user_id=current_user.id,
+                attempt_nonce=attempt_nonce,
             )
         except Exception as e:
             print(f"Groq basic coding generation failed, fallback to easy technical mix: {e}")
-            questions = _pick_leetcode_mix(excluded_signatures=recent_signatures, prefer=('easy', 'medium'))
+            questions = _pick_leetcode_mix(
+                excluded_signatures=recent_signatures,
+                prefer=('easy', 'medium'),
+                rng_seed=f"{attempt_seed}|placement-basic-fallback",
+            )
             questions = [q for q in questions if str(q.get('difficulty', '')).lower() == 'easy'][:5] or questions[:5]
             questions = [_normalize_coding_question(q) for q in questions]
         if not questions:
@@ -4345,7 +4397,7 @@ def placement_start_module(module):
             'placement_module': 'basic_coding',
             'placement_level': requested_level,
         }
-        return redirect(url_for('take_quiz'))
+        return _placement_redirect_take_quiz()
 
     return redirect(url_for('placement_track'))
 
@@ -6609,7 +6661,12 @@ def take_quiz():
         session['current_quiz'] = quiz_data
         session.modified = True
 
-    return render_template('take_quiz.html', quiz_data=quiz_data)
+    resp = make_response(render_template('take_quiz.html', quiz_data=quiz_data))
+    if quiz_data.get('placement_module'):
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
+    return resp
 
 @app.route('/submit_quiz', methods=['POST'])
 @login_required

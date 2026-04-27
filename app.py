@@ -799,6 +799,115 @@ def _groq_chat_json(system_prompt, user_prompt, max_tokens=900):
         raise
 
 
+class PlacementRateLimitError(Exception):
+    def __init__(self, message, retry_after=None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+def _parse_retry_after_seconds(headers):
+    try:
+        raw = (headers or {}).get('Retry-After')
+        if raw is None:
+            return None
+        val = float(raw)
+        if val < 0:
+            return None
+        return val
+    except (TypeError, ValueError):
+        return None
+
+
+def _placement_chat_completion(messages, temperature=0.7, max_tokens=1200, timeout=45):
+    """
+    Placement-track provider order:
+    1) OpenRouter (primary)
+    2) Groq (fallback)
+    """
+    openrouter_key = os.environ.get('OPENROUTER_API_KEY_PLACEMENT') or os.environ.get('OPENROUTER_API_KEY')
+    openrouter_model = os.environ.get('OPENROUTER_MODEL', 'openai/gpt-4o-mini')
+    groq_key = os.environ.get('GROQ_API_KEY')
+    groq_model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
+
+    providers = []
+    if openrouter_key:
+        providers.append({
+            'name': 'openrouter',
+            'url': 'https://openrouter.ai/api/v1/chat/completions',
+            'key': openrouter_key,
+            'model': openrouter_model,
+            'headers': {
+                'Authorization': f'Bearer {openrouter_key}',
+                'Content-Type': 'application/json',
+                'HTTP-Referer': os.environ.get('OPENROUTER_SITE_URL', 'https://unitest.local'),
+                'X-Title': os.environ.get('OPENROUTER_APP_NAME', 'UNITEST Placement Track'),
+            },
+        })
+    if groq_key:
+        providers.append({
+            'name': 'groq',
+            'url': 'https://api.groq.com/openai/v1/chat/completions',
+            'key': groq_key,
+            'model': groq_model,
+            'headers': {
+                'Authorization': f'Bearer {groq_key}',
+                'Content-Type': 'application/json',
+            },
+        })
+
+    if not providers:
+        raise Exception('Neither OPENROUTER_API_KEY nor GROQ_API_KEY is configured for placement track.')
+
+    errors = []
+    retry_after_s = None
+    for provider in providers:
+        try:
+            response = requests.post(
+                provider['url'],
+                headers=provider['headers'],
+                json={
+                    'model': provider['model'],
+                    'temperature': temperature,
+                    'top_p': 0.95,
+                    'max_tokens': max_tokens,
+                    'messages': messages,
+                },
+                timeout=timeout,
+            )
+        except requests.RequestException as exc:
+            errors.append(f"{provider['name']} request failed: {exc}")
+            continue
+
+        if response.status_code == 429:
+            ra = _parse_retry_after_seconds(response.headers)
+            if ra is not None:
+                retry_after_s = ra if retry_after_s is None else min(retry_after_s, ra)
+            errors.append(f"{provider['name']} rate-limited")
+            continue
+        if response.status_code >= 400:
+            errors.append(f"{provider['name']} API error ({response.status_code}): {response.text[:220]}")
+            continue
+
+        choice0 = (response.json().get('choices') or [{}])[0]
+        content = ((choice0.get('message') or {}).get('content') or '').strip()
+        finish_reason = (choice0.get('finish_reason') or '').strip()
+        if not content:
+            errors.append(f"{provider['name']} returned empty content")
+            continue
+        return {
+            'provider': provider['name'],
+            'content': content,
+            'finish_reason': finish_reason,
+        }
+
+    if retry_after_s is not None:
+        raise PlacementRateLimitError(
+            'Placement providers are rate-limited right now. Please retry in a few seconds.',
+            retry_after=retry_after_s,
+        )
+    raise Exception('; '.join(errors) if errors else 'Placement provider request failed.')
+
+
 def _mock_interview_persona_voice(persona):
     p = (persona or 'alex').lower()
     if p == 'carie':
@@ -1535,10 +1644,6 @@ def _pick_practice_recommendations(count=10):
     return picked[:count]
 
 def _generate_basic_coding_questions_groq(num_questions=5, level='l1', user_seed=None, excluded_signatures=None):
-    groq_key = os.environ.get('GROQ_API_KEY')
-    if not groq_key:
-        raise Exception('GROQ_API_KEY is not configured.')
-    model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
     excluded_signatures = excluded_signatures or []
     seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
     level = (level or 'l1').lower()
@@ -1592,37 +1697,32 @@ Rules:
     last_error = None
     temp = 0.55 if level == 'l1' else 0.78
     for _ in range(4):
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {groq_key}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": model,
-                "temperature": temp,
-                "top_p": 0.95,
-                "max_tokens": 3200,
-                "messages": [
+        try:
+            payload = _placement_chat_completion(
+                messages=[
                     {"role": "system", "content": "You are a coding question generator. Output strictly valid JSON array only."},
-                    {"role": "user", "content": prompt}
-                ]
-            },
-            timeout=45
-        )
-        if response.status_code >= 400:
-            last_error = Exception(f"Groq API error ({response.status_code}): {response.text[:200]}")
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=temp,
+                max_tokens=3200,
+                timeout=50,
+            )
+        except PlacementRateLimitError as exc:
+            wait_s = min(20.0, (exc.retry_after or 2.0) + random.uniform(0.1, 0.7))
+            time.sleep(wait_s)
+            last_error = Exception('OpenRouter/Groq rate-limited while generating basic coding questions.')
+            continue
+        except Exception as exc:
+            last_error = exc
             continue
 
-        raw = (
-            response.json()
-            .get('choices', [{}])[0]
-            .get('message', {})
-            .get('content', '')
-            .strip()
-        )
+        raw = payload.get('content', '').strip()
         cleaned = raw.replace('```json', '').replace('```', '').strip()
-        parsed = json.loads(cleaned)
+        try:
+            parsed = json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            last_error = Exception(f'Invalid JSON from coding question generator ({exc}).')
+            continue
         if not isinstance(parsed, list) or not parsed:
             last_error = Exception('Invalid basic coding response format from Groq.')
             continue
@@ -1650,11 +1750,6 @@ Rules:
     raise last_error or Exception('Could not generate level-aligned basic coding questions.')
 
 def _generate_placement_questions_groq(topic, module_name, num_questions=10, level='l1', user_seed=None, excluded_signatures=None):
-    groq_key = os.environ.get('GROQ_API_KEY')
-    if not groq_key:
-        raise Exception('GROQ_API_KEY is not configured.')
-    model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
-
     module_prompt = "placement aptitude"
     if module_name == 'fundamentals':
         module_prompt = "CS fundamentals: OOPs, Computer Networks, DBMS, SQL, DSA basics"
@@ -1756,18 +1851,9 @@ Return JSON only, no markdown fences. Close all strings and brackets; output mus
         inner_ok = False
         max_groq_attempts = 10
         for groq_attempt in range(max_groq_attempts):
-            response = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": model,
-                    "temperature": temp,
-                    "top_p": 0.95,
-                    "max_tokens": max_tokens,
-                    "messages": [
+            try:
+                payload = _placement_chat_completion(
+                    messages=[
                         {
                             "role": "system",
                             "content": (
@@ -1777,28 +1863,21 @@ Return JSON only, no markdown fences. Close all strings and brackets; output mus
                         },
                         {"role": "user", "content": prompt},
                     ],
-                },
-                timeout=90,
-            )
-            if response.status_code == 429:
-                last_error = Exception('Groq rate limit reached. Backing off and retrying.')
-                ra = (response.headers or {}).get('Retry-After')
-                if ra:
-                    try:
-                        wait_s = min(25.0, float(ra))
-                    except (TypeError, ValueError):
-                        wait_s = min(25.0, 2.0 ** min(groq_attempt, 5) + random.uniform(0.1, 0.6))
-                else:
-                    wait_s = min(25.0, 2.0 ** min(groq_attempt, 5) + random.uniform(0.15, 0.85))
+                    temperature=temp,
+                    max_tokens=max_tokens,
+                    timeout=90,
+                )
+            except PlacementRateLimitError as exc:
+                last_error = Exception('OpenRouter/Groq rate-limited. Backing off and retrying.')
+                wait_s = min(25.0, (exc.retry_after or (2.0 ** min(groq_attempt, 5))) + random.uniform(0.1, 0.7))
                 time.sleep(wait_s)
                 continue
-            if response.status_code >= 400:
-                last_error = Exception(f"Groq API error ({response.status_code}): {response.text[:220]}")
+            except Exception as exc:
+                last_error = exc
                 continue
 
-            choice0 = (response.json().get('choices') or [{}])[0]
-            finish = (choice0.get('finish_reason') or '') or ''
-            raw = (choice0.get('message') or {}).get('content', '').strip()
+            finish = (payload.get('finish_reason') or '') or ''
+            raw = payload.get('content', '').strip()
             cleaned = raw.replace('```json', '').replace('```', '').strip()
             try:
                 parsed = json.loads(cleaned)
@@ -4234,12 +4313,6 @@ def placement_ai_interview():
         if not response_text:
             return jsonify({'success': False, 'error': 'Response is required.'}), 400
 
-        # Use Gemini models with fallback.
-        groq_key = os.environ.get('GROQ_API_KEY')
-        if not groq_key:
-            return jsonify({'success': False, 'error': 'GROQ_API_KEY is not configured.'}), 500
-        model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
-
         if level == 'l1':
             level_rubric = (
                 "Level L1 (beginner GD): Expect clear structure, simple framing (agree/disagree), relevance to the topic, "
@@ -4273,34 +4346,19 @@ Return STRICT JSON only in this exact schema:
   "follow_up_question": "one realistic follow-up GD/interview question"
 }}
 """
-        gd_response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {groq_key}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": model,
-                "temperature": 0.2,
-                "max_tokens": 1200,
-                "messages": [
+        try:
+            payload = _placement_chat_completion(
+                messages=[
                     {"role": "system", "content": "You are an interview evaluator. Output strict JSON only."},
-                    {"role": "user", "content": prompt}
-                ]
-            },
-            timeout=30
-        )
-        if gd_response.status_code == 429:
-            return jsonify({'success': False, 'error': 'Groq rate limit reached. Retry in a few seconds.'}), 429
-        if gd_response.status_code >= 400:
-            return jsonify({'success': False, 'error': f"Groq API error ({gd_response.status_code}): {gd_response.text[:220]}"}), 500
-        raw = (
-            gd_response.json()
-            .get('choices', [{}])[0]
-            .get('message', {})
-            .get('content', '')
-            .strip()
-        )
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
+                max_tokens=1200,
+                timeout=35,
+            )
+        except PlacementRateLimitError:
+            return jsonify({'success': False, 'error': 'OpenRouter/Groq rate-limited. Retry in a few seconds.'}), 429
+        raw = payload.get('content', '').strip()
         cleaned = raw.replace("```json", "").replace("```", "").strip()
         parsed = json.loads(cleaned)
 
@@ -4376,10 +4434,6 @@ def placement_suggest_topic():
         pool = PLACEMENT_GD_TOPIC_POOL.get(level) or PLACEMENT_GD_TOPIC_POOL['l1']
         fallback = random.choice(pool) if pool else "AI in education: opportunity or overdependence?"
 
-        groq_key = os.environ.get('GROQ_API_KEY')
-        if not groq_key:
-            return jsonify({'success': True, 'topic': fallback[:140], 'level': level})
-        model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')
         if level == 'l1':
             user_prompt = (
                 'Give GD content points for beginners on ONE topic. Output ONLY a short topic title '
@@ -4392,32 +4446,19 @@ def placement_suggest_topic():
                 'topic title (max 12 words, no quotes) for advanced GD: abstract debates, case-based GD, '
                 'policy (AI, economy), leadership, conflict handling, data-backed argument angles.'
             )
-        response = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {groq_key}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": model,
-                "temperature": 0.88,
-                "max_tokens": 48,
-                "messages": [
+        try:
+            payload = _placement_chat_completion(
+                messages=[
                     {"role": "system", "content": "Return only a short plain-text topic title, nothing else."},
-                    {"role": "user", "content": user_prompt}
-                ]
-            },
-            timeout=20
-        )
-        if response.status_code >= 400:
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.88,
+                max_tokens=48,
+                timeout=20,
+            )
+        except Exception:
             return jsonify({'success': True, 'topic': fallback[:140], 'level': level})
-        topic = (
-            response.json()
-            .get('choices', [{}])[0]
-            .get('message', {})
-            .get('content', '')
-            .strip()
-        )
+        topic = payload.get('content', '').strip()
         topic = topic.replace('"', '').replace('\n', ' ').strip()
         if not topic:
             topic = fallback

@@ -1749,7 +1749,7 @@ Rules:
         last_error = Exception('Generated coding set did not satisfy strict level constraints.')
     raise last_error or Exception('Could not generate level-aligned basic coding questions.')
 
-def _generate_placement_questions_groq(topic, module_name, num_questions=10, level='l1', user_seed=None, excluded_signatures=None):
+def _generate_placement_questions_groq(topic, module_name, num_questions=10, level='l1', user_seed=None, excluded_signatures=None, max_runtime_sec=None):
     module_prompt = "placement aptitude"
     if module_name == 'fundamentals':
         module_prompt = "CS fundamentals: OOPs, Computer Networks, DBMS, SQL, DSA basics"
@@ -1783,6 +1783,7 @@ Return strict JSON array with each item:
 
     excluded_signatures = excluded_signatures or []
     level = (level or 'l1').lower()
+    module_name = (module_name or '').strip().lower()
     seed_line = user_seed or f"seed-{random.randint(1000, 9999)}"
     strands = _placement_syllabus_shuffle(module_name, level, seed_line)
     strand_lines = ''
@@ -1817,10 +1818,20 @@ Return strict JSON array with each item:
     sig_seen = set(excluded_signatures)
     last_error = None
     temp = 0.52 if level == 'l1' else 0.82
+    if max_runtime_sec is None:
+        # Keep aptitude L1 snappy; fall back quickly instead of hanging.
+        if module_name == 'aptitude' and level == 'l1':
+            max_runtime_sec = float(os.environ.get('PLACEMENT_APT_L1_MAX_RUNTIME_SEC', '20'))
+        else:
+            max_runtime_sec = float(os.environ.get('PLACEMENT_GEN_MAX_RUNTIME_SEC', '40'))
+    started_at = time.time()
     outer_cap = 25
     batch_idx = 0
 
     while len(collected) < num_questions and batch_idx < outer_cap:
+        if (time.time() - started_at) > max_runtime_sec:
+            last_error = Exception('Placement question generation timed out; using fallback where available.')
+            break
         batch_idx += 1
         need = num_questions - len(collected)
         ask_count = min(need + overshoot, batch_cap)
@@ -1851,7 +1862,11 @@ Return JSON only, no markdown fences. Close all strings and brackets; output mus
         inner_ok = False
         max_groq_attempts = 10
         for groq_attempt in range(max_groq_attempts):
+            if (time.time() - started_at) > max_runtime_sec:
+                last_error = Exception('Placement question generation timed out; using fallback where available.')
+                break
             try:
+                call_timeout = 30 if (module_name == 'aptitude' and level == 'l1') else 70
                 payload = _placement_chat_completion(
                     messages=[
                         {
@@ -1865,7 +1880,7 @@ Return JSON only, no markdown fences. Close all strings and brackets; output mus
                     ],
                     temperature=temp,
                     max_tokens=max_tokens,
-                    timeout=90,
+                    timeout=call_timeout,
                 )
             except PlacementRateLimitError as exc:
                 last_error = Exception('OpenRouter/Groq rate-limited. Backing off and retrying.')

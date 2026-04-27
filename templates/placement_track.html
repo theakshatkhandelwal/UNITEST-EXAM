@@ -46,6 +46,7 @@
                     <h6>1) Aptitude</h6>
                     <h4>{{ module_scores.aptitude }}%</h4>
                     <small class="text-muted d-block mb-2">Most asked aptitude questions</small>
+                    <div class="small text-muted mb-2">Pass: L1 ≥ {{ aptitude_l1_pass|int }}%, L2 ≥ {{ aptitude_l2_pass|int }}%</div>
                     <div class="small mb-2">
                         <div>L1: {{ module_levels.aptitude.l1_score }}% {% if module_levels.aptitude.l1_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
                         <div>L2: {{ module_levels.aptitude.l2_score }}% {% if module_levels.aptitude.l2_passed %}<span class="badge bg-success">Pass</span>{% endif %}</div>
@@ -152,7 +153,7 @@
                 </div>
                 <div class="card-body">
                     <div class="alert alert-light border mb-3">
-                        <strong>Pass criteria:</strong> L1 requires >= {{ l1_threshold|int }}%, L2 requires >= {{ l2_threshold|int }}%. You must clear both to unlock next module.
+                        <strong>GD pass criteria:</strong> L1 requires >= {{ gd_l1_threshold|int }}%, L2 requires >= {{ gd_l2_threshold|int }}%. Clear both to finish this round (separate from Aptitude % bars above).
                     </div>
                     {% if next_locked.group_discussion %}
                     <div class="alert alert-secondary mb-3">
@@ -449,13 +450,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (data.level_passed) {
                     resultBox.innerHTML += '<div class="alert alert-success mt-2 mb-0">L1 cleared. L2 is now unlocked for Group Discussion.</div>';
                 } else {
-                    resultBox.innerHTML += '<div class="alert alert-warning mt-2 mb-0">L1 not cleared. Score must be >= {{ l1_threshold|int }}%.</div>';
+                    resultBox.innerHTML += '<div class="alert alert-warning mt-2 mb-0">L1 not cleared. Score must be >= {{ gd_l1_threshold|int }}%.</div>';
                 }
             } else if (data.level_passed && data.module_cleared) {
                 resultBox.innerHTML += '<div class="alert alert-success mt-2 mb-0">L2 cleared. Group Discussion module completed; CS Fundamentals is now unlocked.</div>';
                 setTimeout(function () { window.location.reload(); }, 900);
             } else {
-                resultBox.innerHTML += '<div class="alert alert-warning mt-2 mb-0">L2 not cleared. Score must be >= {{ l2_threshold|int }}%.</div>';
+                    resultBox.innerHTML += '<div class="alert alert-warning mt-2 mb-0">L2 not cleared. Score must be >= {{ gd_l2_threshold|int }}%.</div>';
             }
         } catch (err) {
             resultBox.innerHTML = `<div class="alert alert-danger mb-0">${err.message}</div>`;

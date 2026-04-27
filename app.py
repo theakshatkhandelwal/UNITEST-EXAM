@@ -692,6 +692,22 @@ class PlacementSeenQuestion(db.Model):
     )
 
 
+class PlacementGlobalQuestion(db.Model):
+    """Aptitude L1/L2: global question fingerprints so the same stem is not reused across different users."""
+    __tablename__ = 'placement_global_question'
+
+    id = db.Column(db.Integer, primary_key=True)
+    module = db.Column(db.String(32), nullable=False)
+    level = db.Column(db.String(8), nullable=False)
+    signature = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('module', 'level', 'signature', name='uq_place_global_mod_lvl_sig'),
+        db.Index('ix_place_global_mod_lvl_id', 'module', 'level', 'id'),
+    )
+
+
 class MockInterviewSession(db.Model):
     """Persisted AI mock interview (resume + role based)."""
     id = db.Column(db.Integer, primary_key=True)
@@ -1185,6 +1201,25 @@ LEETCODE_PRACTICE_POOL = [
 
 PLACEMENT_L1_PASS = 70.0
 PLACEMENT_L2_PASS = 50.0
+# Aptitude only — defaults mid requested bands (L1: 60–70%, L2: 40–50%); clamped if set via env.
+try:
+    PLACEMENT_APTITUDE_L1_PASS = max(60.0, min(70.0, float(os.environ.get('PLACEMENT_APTITUDE_L1_PASS', '65'))))
+except ValueError:
+    PLACEMENT_APTITUDE_L1_PASS = 65.0
+try:
+    PLACEMENT_APTITUDE_L2_PASS = max(40.0, min(50.0, float(os.environ.get('PLACEMENT_APTITUDE_L2_PASS', '45'))))
+except ValueError:
+    PLACEMENT_APTITUDE_L2_PASS = 45.0
+
+
+def _placement_pass_threshold(module, level_for_pass):
+    """Min % to pass placement L1 or L2 for a module (aptitude uses its own bars)."""
+    module = (module or '').strip().lower()
+    level_for_pass = (level_for_pass or 'l1').lower()
+    if module == 'aptitude':
+        return PLACEMENT_APTITUDE_L1_PASS if level_for_pass == 'l1' else PLACEMENT_APTITUDE_L2_PASS
+    return PLACEMENT_L1_PASS if level_for_pass == 'l1' else PLACEMENT_L2_PASS
+
 
 # Placement syllabus + generation style (L1 vs L2) — used in Groq prompts.
 PLACEMENT_SYLLABUS_TOPICS = {
@@ -1404,23 +1439,42 @@ def _placement_seen_db_signatures(user_id, module, level, limit=300):
     return [r.signature for r in rows if r.signature]
 
 
+def _placement_global_signatures(module, level, limit=1500):
+    """All aptitude questions ever issued (any user) for this module+level — prevents cross-user duplicates."""
+    mod = (module or '').strip().lower()
+    lvl = (level or 'l1').lower()
+    if mod != 'aptitude':
+        return []
+    rows = (
+        PlacementGlobalQuestion.query.filter_by(module=mod, level=lvl)
+        .order_by(PlacementGlobalQuestion.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [r.signature for r in rows if r.signature]
+
+
 def _get_recent_placement_signatures(state, module, level, limit=200):
-    """Session + DB: durable exclusions so questions do not repeat across logins or cookie resets."""
+    """Session + DB (+ global aptitude registry): durable exclusions so questions do not repeat."""
+    mod = (module or '').strip().lower()
+    lvl = (level or 'l1').lower()
+    eff_limit = max(limit, 500) if mod == 'aptitude' else limit
     key = f"{module}:{level}"
     recent = (state.get('recent_questions', {}) or {}).get(key, [])
     if not isinstance(recent, list):
         recent = []
     session_sigs = [str(x) for x in recent if isinstance(x, str)]
     uid = getattr(current_user, 'id', None)
-    db_sigs = _placement_seen_db_signatures(uid, module, level, limit=limit)
+    db_sigs = _placement_seen_db_signatures(uid, module, level, limit=eff_limit)
+    global_sigs = _placement_global_signatures(module, level, limit=max(1500, eff_limit * 4)) if mod == 'aptitude' else []
     merged = []
     seen = set()
-    for s in db_sigs + session_sigs:
+    for s in global_sigs + db_sigs + session_sigs:
         if not s or s in seen:
             continue
         seen.add(s)
         merged.append(s)
-        if len(merged) >= limit:
+        if len(merged) >= eff_limit:
             break
     return merged
 
@@ -1442,6 +1496,17 @@ def _remember_placement_signatures(state, module, level, questions, max_keep=120
             db.session.add(PlacementSeenQuestion(
                 user_id=uid, module=module, level=level, signature=sig,
             ))
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+    if (module or '').strip().lower() == 'aptitude' and new_for_db:
+        mod = (module or '').strip().lower()
+        lvl = (level or 'l1').lower()
+        for sig in new_for_db:
+            if not sig:
+                continue
+            db.session.add(PlacementGlobalQuestion(module=mod, level=lvl, signature=sig))
             try:
                 db.session.commit()
             except IntegrityError:
@@ -1834,7 +1899,9 @@ Return strict JSON array with each item:
             '\nMANDATORY APTITUDE STRANDS (this level only — every question MUST clearly fit exactly one line below; '
             'do not use any other topic family):\n'
             + '\n'.join(f'- {s}' for s in canon)
-            + '\nWhen generating multiple items, prioritize distinct strands before repeating any strand.'
+            + '\nWhen generating multiple items, prioritize distinct strands before repeating any strand.\n'
+            'GLOBAL UNIQUENESS: excluded fingerprints include questions already assigned to ANY user; '
+            'you must not reproduce or trivially paraphrase those stems.'
         )
     if module_name in ('aptitude', 'fundamentals'):
         level_guidance = (
@@ -4181,8 +4248,10 @@ def placement_track():
         module_levels=module_levels,
         current_stage=state.get('current_stage', 'aptitude'),
         next_locked=next_locked,
-        l1_threshold=PLACEMENT_L1_PASS,
-        l2_threshold=PLACEMENT_L2_PASS,
+        aptitude_l1_pass=PLACEMENT_APTITUDE_L1_PASS,
+        aptitude_l2_pass=PLACEMENT_APTITUDE_L2_PASS,
+        gd_l1_threshold=PLACEMENT_L1_PASS,
+        gd_l2_threshold=PLACEMENT_L2_PASS,
     )
 
 
@@ -4226,7 +4295,10 @@ def placement_start_module(module):
     level_data = levels.get(module, {})
     l1_passed = bool(level_data.get('l1_passed', False))
     if requested_level == 'l2' and not l1_passed:
-        flash(f'Pass L1 (>= {PLACEMENT_L1_PASS:.0f}%) first to unlock L2.', 'error')
+        flash(
+            f'Pass L1 (>= {_placement_pass_threshold(module, "l1"):.0f}%) first to unlock L2.',
+            'error',
+        )
         return redirect(url_for('placement_track'))
     if requested_level == 'l1' and l1_passed:
         requested_level = 'l2'
@@ -6823,14 +6895,18 @@ def submit_quiz():
         lv = state['levels'].setdefault(placement_module, _default_placement_levels()[placement_module])
         if placement_level == 'l1':
             lv['l1_score'] = round(float(percentage), 1)
-            lv['l1_passed'] = percentage >= PLACEMENT_L1_PASS
+            lv['l1_passed'] = percentage >= _placement_pass_threshold(placement_module, 'l1')
             if lv['l1_passed']:
                 lv['active_level'] = 'l2'
+            passed = percentage >= _placement_pass_threshold(placement_module, 'l1')
         else:
             if lv.get('l1_passed', False):
                 lv['l2_score'] = round(float(percentage), 1)
-                lv['l2_passed'] = percentage >= PLACEMENT_L2_PASS
+                lv['l2_passed'] = percentage >= _placement_pass_threshold(placement_module, 'l2')
                 lv['active_level'] = 'l2'
+                passed = percentage >= _placement_pass_threshold(placement_module, 'l2')
+            else:
+                passed = False
         state['scores'][placement_module] = round((float(lv.get('l1_score', 0.0)) + float(lv.get('l2_score', 0.0))) / 2.0, 1)
         state['completed'][placement_module] = bool(lv.get('l1_passed') and lv.get('l2_passed'))
         if state['completed'][placement_module]:

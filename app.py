@@ -1189,19 +1189,39 @@ PLACEMENT_L2_PASS = 50.0
 # Placement syllabus + generation style (L1 vs L2) — used in Groq prompts.
 PLACEMENT_SYLLABUS_TOPICS = {
     'aptitude': {
+        # Canonical lists — placement aptitude MUST stay within these topics only.
         'l1': [
-            'Percentages', 'Profit & Loss', 'Simple Interest', 'Ratio & Proportion', 'Averages',
-            'Time & Work (basic)', 'Time, Speed & Distance', 'Number System basics', 'Simplification (BODMAS)',
-            'Mixtures & Alligations (basic)', 'Pipes & Cisterns (basic)', 'Data Interpretation (tables, bar graphs)',
-            'Basic Probability', 'Basic Permutation & Combination', 'Linear Equations',
+            'Percentages',
+            'Profit & Loss',
+            'Simple Interest',
+            'Ratio & Proportion',
+            'Averages',
+            'Time & Work (basic)',
+            'Time, Speed & Distance',
+            'Number System basics',
+            'Simplification (BODMAS)',
+            'Mixtures & Allegations (basic)',
+            'Pipes & Cisterns (basic)',
+            'Data Interpretation (tables, bar graphs)',
+            'Basic Probability',
+            'Basic Permutation & Combination',
+            'Linear Equations',
         ],
         'l2': [
-            'Advanced Percentages (successive change)', 'Profit & Loss with multiple variables',
-            'Compound Interest (CI vs SI, time-based traps)', 'Time & Work with efficiency comparison',
-            'Pipes & Cisterns (leak + fill cases)', 'Advanced Ratio (multi-variable)',
-            'Data Interpretation (caselets, missing data)', 'Probability (conditional probability)',
-            'Permutations & Combinations (arrangements)', 'Number System (remainders, divisibility, cyclicity)',
-            'Algebra word problems', 'Quadratic Equations', 'Logarithms', 'Geometry (mensuration + tricky problems)',
+            'Advanced Percentages (successive change)',
+            'Profit & Loss with multiple variables',
+            'Compound Interest (CI vs SI, time-based traps)',
+            'Time & Work with efficiency comparison',
+            'Pipes & Cisterns (leak + fill cases)',
+            'Advanced Ratio (multi-variable)',
+            'Data Interpretation (caselets, missing data)',
+            'Probability (conditional probability)',
+            'Permutations & Combinations (arrangements)',
+            'Number System (remainders, divisibility, cyclicity)',
+            'Algebra word problems',
+            'Quadratic Equations',
+            'Logarithms (if included)',
+            'Geometry (mensuration + tricky problems)',
         ],
     },
     'fundamentals': {
@@ -1288,11 +1308,13 @@ def _placement_style_instruction(module_name, level):
         if level == 'l1':
             return (
                 'Primary task style: "Generate practice questions for [topic] basic level with solutions" — '
-                'treat each syllabus strand below as [topic]; keep stems formula/direct-logic driven.'
+                'each [topic] MUST be exactly one of the mandatory L1 aptitude strands listed in the prompt; '
+                'no blood relations, no direction sense, no odd-one-out unless it clearly fits a listed strand.'
             )
         return (
             'Primary task style: "Generate advanced aptitude problems for [topic] with tricks and shortcuts" — '
-            'use the advanced strands below; include traps, successive steps, or data twists where natural.'
+            'each [topic] MUST be exactly one of the mandatory L2 aptitude strands listed in the prompt; '
+            'no unrelated puzzle families.'
         )
     if mod == 'fundamentals':
         if level == 'l1':
@@ -1756,7 +1778,9 @@ def _generate_placement_questions_groq(topic, module_name, num_questions=10, lev
     elif module_name == 'coding':
         module_prompt = "technical coding interview problems (algorithmic thinking, clean logic)"
     elif module_name == 'aptitude':
-        module_prompt = "quantitative aptitude, logical reasoning, number series, coding-decoding, time-work, averages"
+        module_prompt = (
+            'placement quantitative aptitude — MCQs must map strictly to the mandatory L1/L2 strand list in the prompt'
+        )
 
     if module_name in ('fundamentals', 'aptitude'):
         schema_hint = """
@@ -1793,6 +1817,15 @@ Return strict JSON array with each item:
             + '\n- '.join(strands[:16])
         )
     style_inst = _placement_style_instruction(module_name, level)
+    aptitude_topic_lock = ''
+    if module_name == 'aptitude':
+        canon = PLACEMENT_SYLLABUS_TOPICS['aptitude'].get(level) or PLACEMENT_SYLLABUS_TOPICS['aptitude']['l1']
+        aptitude_topic_lock = (
+            '\nMANDATORY APTITUDE STRANDS (this level only — every question MUST clearly fit exactly one line below; '
+            'do not use any other topic family):\n'
+            + '\n'.join(f'- {s}' for s in canon)
+            + '\nWhen generating multiple items, prioritize distinct strands before repeating any strand.'
+        )
     if module_name in ('aptitude', 'fundamentals'):
         level_guidance = (
             "L1 Bloom 1-2: single-step recall, short numeric/logic stems (aim under 45 words). "
@@ -1841,6 +1874,7 @@ Return strict JSON array with each item:
         prompt = f"""
 Assessment theme: {topic}
 {style_inst}
+{aptitude_topic_lock}
 {strand_lines}
 
 Generate exactly {ask_count} high-quality {module_prompt} questions for placement preparation.

@@ -2172,6 +2172,8 @@ def _record_site_activity():
     # Log only meaningful page visits (GET HTML pages), skip assets/internal calls.
     if request.method != 'GET':
         return
+    if os.environ.get('DISABLE_SITE_ACTIVITY_TRACKING', 'false').lower() == 'true':
+        return
     if request.path.startswith('/static'):
         return
     if request.endpoint in {
@@ -2181,6 +2183,9 @@ def _record_site_activity():
     if request.path.startswith('/api'):
         return
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return
+    # Public landing/search pages are high-traffic; skip synchronous DB write to reduce TTFB.
+    if request.path in {'/', '/sitemap.xml', '/robots.txt'}:
         return
 
     ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
@@ -3491,7 +3496,10 @@ def home():
     # Don't initialize database here - it can cause 401 errors if DB fails
     # Database will be initialized when needed (lazy initialization)
     try:
-        return render_template('home.html')
+        resp = make_response(render_template('home.html'))
+        # Public landing page: allow short edge/browser caching for faster first-open from search.
+        resp.headers['Cache-Control'] = 'public, max-age=300, s-maxage=600'
+        return resp
     except Exception as e:
         print(f"Error rendering home template: {e}")
         # Fallback HTML if template fails - ensures home page is always accessible
@@ -8015,6 +8023,9 @@ _db_initialized = False
 def _ensure_db_initialized():
     global _db_initialized
     if _db_initialized:
+        return
+    # Keep first-open public pages fast; defer DB bootstrap until a DB-dependent endpoint is hit.
+    if request.endpoint in {'home', 'favicon', 'robots_txt', 'sitemap_xml'}:
         return
     initialize_on_first_request()
     _db_initialized = True
